@@ -6,6 +6,7 @@
     addDishToPlan,
     app,
     openDishSheet,
+    openEntryNote,
     openPeriods,
     toggleDone,
   } from "./store.svelte";
@@ -106,7 +107,17 @@
           onclick={() => openDishSheet({ dishId: e.dish_id, entryId: e.id })}
         >
           <span>{e.dish.title}</span>
+          {#if e.note}<small class="entry-note">{e.note}</small>{/if}
           {#if e.dish.tags.length}<small class="tags-line">{e.dish.tags.join(" · ")}</small>{/if}
+        </button>
+        <button
+          type="button"
+          class="icon-link note-btn"
+          class:has-note={!!e.note}
+          aria-label={e.note ? `Notiz zu ${e.dish.title} bearbeiten` : `Notiz zu ${e.dish.title} hinzufügen`}
+          onclick={() => openEntryNote(e.id)}
+        >
+          <Icon name="note" size={20} />
         </button>
         {#if e.dish.url}
           <a class="chip" href={e.dish.url} target="_blank" rel="noopener noreferrer">

@@ -11,6 +11,7 @@ export type SheetState =
       addToPlan: boolean; // create mode: also put the new dish into the current plan
       prefill: { title: string; url: string; tags: string[] };
     }
+  | { kind: "entryNote"; entryId: number }
   | { kind: "periods" };
 
 export const app = $state({
@@ -80,6 +81,11 @@ export function openDishSheet(opts: {
   };
 }
 
+export function openEntryNote(entryId: number) {
+  app.error = "";
+  app.sheet = { kind: "entryNote", entryId };
+}
+
 export function openPeriods() {
   app.error = "";
   app.sheet = { kind: "periods" };
@@ -133,6 +139,13 @@ export async function toggleDone(entry: Entry) {
   });
   if (!ok) entry.done = !next;
 }
+
+export const saveEntryNote = (entryId: number, note: string | null) =>
+  guard(async () => {
+    await api.setEntryNote(entryId, note);
+    if (app.plan) await loadPlan(app.plan.id);
+    closeSheet();
+  });
 
 export const removeEntry = (id: number) =>
   guard(async () => {

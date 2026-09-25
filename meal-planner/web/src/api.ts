@@ -42,6 +42,8 @@ export const deletePlan = (id: number) => request<void>("DELETE", `api/plans/${i
 export const addEntry = (planId: number, e: { dish_id: number } | { title: string }) =>
   request<Entry>("POST", `api/plans/${planId}/entries`, e);
 export const setDone = (id: number, done: boolean) => request<Entry>("PATCH", `api/entries/${id}`, { done });
+// null clears the note. It belongs to this list entry only (the dish note is separate).
+export const setEntryNote = (id: number, note: string | null) => request<Entry>("PATCH", `api/entries/${id}`, { note });
 export const deleteEntry = (id: number) => request<void>("DELETE", `api/entries/${id}`);
 
 // The server fetches the page (never the browser: CORS, and the link must not be opened from the phone).
