@@ -1,4 +1,4 @@
-# Essensplanung – Home-Assistant-Add-on
+# Meal-planner – Home-Assistant-Add-on
 
 Wöchentliche Essensplanung für den Haushalt: eine gemeinsame Liste pro Zeitraum (z. B. Sa–Fr), ein Katalog aller
 bisherigen Gerichte mit Rezept-Link, Autocomplete beim Eintragen. Läuft als Add-on hinter Home-Assistant-Ingress,
@@ -22,11 +22,11 @@ Daten liegen in der Add-on-Datenablage (`/data`) und sind in HA-Backups enthalte
 
 ## Updates
 
-In `essensplanung/config.yaml` die `version` erhöhen und pushen. Home Assistant zeigt dann ein Update an.
+In `meal-planner/config.yaml` die `version` erhöhen und pushen. Home Assistant zeigt dann ein Update an.
 
 ## Entwicklung
 
-Alles Weitere liegt in `essensplanung/`:
+Alles Weitere liegt in `meal-planner/`:
 
 ```
 npm install
