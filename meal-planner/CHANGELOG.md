@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0](https://github.com/twostone/meal-planner/compare/v0.4.0...v0.5.0) (2026-09-25)
+
+
+### Neu
+
+* **liste:** Notiz pro Eintrag, die nur für diese Liste gilt (Backend) ([cacbc7a](https://github.com/twostone/meal-planner/commit/cacbc7a9b2591ffe68fb83d44b9487c6290b9a71))
+* **liste:** Notiz-Button und Notiz-Blatt in der Liste, Notiz unter dem Titel ([c4af397](https://github.com/twostone/meal-planner/commit/c4af3970dc1422653ce010ee44cd9d6889c66eb7))
+
 ## [0.4.0](https://github.com/twostone/meal-planner/compare/v0.3.0...v0.4.0) (2026-09-25)
 
 
