@@ -1,7 +1,7 @@
 # https://developers.home-assistant.io/docs/apps/configuration
 name: Essensplanung
 # Bump on every change, otherwise Home Assistant shows no update.
-version: "0.1.0"
+version: "0.2.0"
 slug: essensplanung
 description: Wöchentliche Essensplanung für den Haushalt
 url: "https://github.com/twostone/meal-planner"

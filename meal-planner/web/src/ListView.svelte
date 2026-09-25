@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { imageSrc } from "./api";
   import Icon from "./Icon.svelte";
   import {
     addByTitle,
@@ -96,6 +97,9 @@
         >
           <span class="box">{#if e.done}<Icon name="check" size={16} />{/if}</span>
         </button>
+        {#if e.dish.image}
+          <img class="thumb" src={imageSrc(e.dish.image)} alt="" loading="lazy" decoding="async" />
+        {/if}
         <button
           type="button"
           class="title"

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { imageSrc } from "./api";
   import Icon from "./Icon.svelte";
   import { addDishToPlan, app, openDishSheet } from "./store.svelte";
   import type { Dish } from "./types";
@@ -42,6 +43,9 @@
       <ul class="rows">
         {#each g.dishes as d (d.id)}
           <li class="row">
+            {#if d.image}
+              <img class="thumb" src={imageSrc(d.image)} alt="" loading="lazy" decoding="async" />
+            {/if}
             <button type="button" class="title" onclick={() => openDishSheet({ dishId: d.id })}>{d.title}</button>
             {#if d.url}
               <a class="icon-link" href={d.url} target="_blank" rel="noopener noreferrer" aria-label="Rezept-Link von {d.title} öffnen">
