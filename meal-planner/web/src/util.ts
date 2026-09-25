@@ -13,3 +13,6 @@ export function matchParts(title: string, q: string): [string, string, string] {
   const i = q ? title.toLowerCase().indexOf(q.toLowerCase()) : -1;
   return i < 0 ? [title, "", ""] : [title.slice(0, i), title.slice(i, i + q.length), title.slice(i + q.length)];
 }
+
+// Case-insensitive equality for tags (the server treats "snack" and "Snack" as the same tag).
+export const sameTag = (a: string, b: string) => a.toLocaleLowerCase("de") === b.toLocaleLowerCase("de");

@@ -1,9 +1,10 @@
 <script lang="ts">
   import { onDestroy, onMount, untrack } from "svelte";
   import * as api from "./api";
+  import Icon from "./Icon.svelte";
   import Sheet from "./Sheet.svelte";
   import { app, deleteDish, removeEntry, saveDish, type SheetState } from "./store.svelte";
-  import { isUrl } from "./util";
+  import { isUrl, sameTag } from "./util";
 
   let { sheet }: { sheet: Extract<SheetState, { kind: "dish" }> } = $props();
 
@@ -18,6 +19,7 @@
       url: d?.url ?? sheet.prefill.url,
       note: d?.note ?? "",
       image: d?.image ?? null,
+      tags: d?.tags ?? sheet.prefill.tags,
     };
   });
 
@@ -25,6 +27,8 @@
   let url = $state(start.url);
   let note = $state(start.note);
   let image = $state<string | null>(start.image);
+  let tags = $state<string[]>(start.tags);
+  let newTag = $state("");
   let problem = $state("");
   let confirmDelete = $state(false);
   let busy = $state(false);
@@ -32,6 +36,27 @@
   let hint = $state("");
 
   const creating = start.dishId === null;
+
+  // All tags in use (plus the ones picked here), each once, sorted.
+  const knownTags = $derived.by(() => {
+    const out: string[] = [];
+    for (const t of [...app.dishes.flatMap((d) => d.tags), ...tags]) if (!out.some((x) => sameTag(x, t))) out.push(t);
+    return out.sort((a, b) => a.localeCompare(b, "de"));
+  });
+  const hasTag = (t: string) => tags.some((x) => sameTag(x, t));
+
+  function toggleTag(t: string) {
+    tags = hasTag(t) ? tags.filter((x) => !sameTag(x, t)) : [...tags, t];
+  }
+
+  function addNewTag() {
+    const t = newTag.trim().replace(/\s+/g, " ");
+    if (t && !hasTag(t)) {
+      // Reuse the spelling of an existing tag.
+      tags = [...tags, knownTags.find((k) => sameTag(k, t)) ?? t];
+    }
+    newTag = "";
+  }
 
   // "chefkoch.de/x" -> "https://chefkoch.de/x"
   function normalizeUrl(v: string): string {
@@ -82,9 +107,14 @@
         : "Bitte einen Titel eingeben.");
     }
     if (u && !isUrl(u)) return void (problem = "Der Link muss mit http:// oder https:// beginnen.");
+    addNewTag(); // a tag typed but not confirmed yet must not get lost
     problem = "";
     busy = true;
-    await saveDish(start.dishId, { title: title.trim(), url: u || null, note: note.trim() || null, image }, start.addToPlan);
+    await saveDish(
+      start.dishId,
+      { title: title.trim(), url: u || null, note: note.trim() || null, image, tags },
+      start.addToPlan,
+    );
     busy = false;
   }
 </script>
@@ -123,6 +153,34 @@
       Notiz (optional)
       <input type="text" bind:value={note} autocomplete="off" />
     </label>
+    <fieldset class="tags">
+      <legend>Kategorien (optional)</legend>
+      {#if knownTags.length}
+        <div class="chips">
+          {#each knownTags as t (t)}
+            <button type="button" class="tagchip" aria-pressed={hasTag(t)} onclick={() => toggleTag(t)}>{t}</button>
+          {/each}
+        </div>
+      {/if}
+      <div class="tag-add">
+        <input
+          type="text"
+          aria-label="Neue Kategorie"
+          placeholder="Neue Kategorie, z. B. Snack"
+          maxlength="30"
+          enterkeyhint="done"
+          autocomplete="off"
+          bind:value={newTag}
+          onkeydown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addNewTag();
+            }
+          }}
+        />
+        <button type="button" class="btn outline square" aria-label="Kategorie hinzufügen" disabled={!newTag.trim()} onclick={addNewTag}><Icon name="plus" /></button>
+      </div>
+    </fieldset>
     {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
 
     <div class="actions">

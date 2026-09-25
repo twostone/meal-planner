@@ -132,7 +132,7 @@ test("without an image store the preview and image routes do not exist, and imag
   assert.equal(dish.status, 400);
 });
 
-test("migration v1 -> v2 keeps existing dishes and adds the image column", async () => {
+test("migration from v1 keeps existing dishes and adds the image column and tags", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "mp-mig-"));
   try {
     const file = path.join(dir, "old.db");
@@ -143,9 +143,10 @@ test("migration v1 -> v2 keeps existing dishes and adds the image column", async
     old.close();
 
     const db = openDb(file);
-    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 2);
+    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 3);
     const dishes = createRepo(db).listDishes();
     assert.deepEqual(dishes.map((d) => [d.title, d.url, d.image]), [["Linsensuppe", "https://example.com/l", null]]);
+    assert.deepEqual(dishes[0]!.tags, []);
     db.close();
     openDb(file).close(); // a second start does nothing and does not fail
     assert.match("0123456789abcdef.png", IMAGE_NAME);

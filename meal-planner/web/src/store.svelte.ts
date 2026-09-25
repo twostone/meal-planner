@@ -9,7 +9,7 @@ export type SheetState =
       dishId: number | null; // null = create a new dish
       entryId: number | null; // set when opened from the list (enables "remove from list")
       addToPlan: boolean; // create mode: also put the new dish into the current plan
-      prefill: { title: string; url: string };
+      prefill: { title: string; url: string; tags: string[] };
     }
   | { kind: "periods" };
 
@@ -68,6 +68,7 @@ export function openDishSheet(opts: {
   addToPlan?: boolean;
   title?: string;
   url?: string;
+  tags?: string[];
 }) {
   app.error = "";
   app.sheet = {
@@ -75,7 +76,7 @@ export function openDishSheet(opts: {
     dishId: opts.dishId ?? null,
     entryId: opts.entryId ?? null,
     addToPlan: opts.addToPlan ?? false,
-    prefill: { title: opts.title ?? "", url: opts.url ?? "" },
+    prefill: { title: opts.title ?? "", url: opts.url ?? "", tags: opts.tags ?? [] },
   };
 }
 

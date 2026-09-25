@@ -253,6 +253,12 @@ main {
   font-size: 16px;
   font-weight: 600;
 }
+.tags-line {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
 .chip {
   display: inline-flex;
   align-items: center;
@@ -578,4 +584,59 @@ dialog::backdrop {
 }
 .status:empty {
   display: none;
+}
+
+/* categories (tags) */
+.filters {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin: 0 -16px 12px;
+  padding: 0 16px 4px;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tagchip {
+  flex: none;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 22px;
+  border: 1px solid var(--field);
+  background: var(--surface);
+  font-size: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.tagchip[aria-pressed="true"] {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+  font-weight: 600;
+}
+fieldset.tags {
+  margin: 0;
+  padding: 0;
+  border: none;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+fieldset.tags legend {
+  padding: 0;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.tag-add {
+  display: flex;
+  gap: 8px;
+}
+.tag-add input {
+  flex: 1;
+  min-width: 0;
 }

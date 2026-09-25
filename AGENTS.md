@@ -13,6 +13,7 @@ und Vorschaubild. Grundsatz: **KISS und YAGNI**. Nichts bauen, was nicht ausdrü
 ```
 repository.yaml          HA-Add-on-Repository
 README.md                Installation, Updates, Entwicklung (das Repository ist öffentlich)
+LICENSE                  Apache-2.0
 AGENTS.md                diese Datei
 release-please-config.json, .release-please-manifest.json   Release-Automatik (Version, Changelog)
 .github/workflows/       ci.yml (Tests, Docker-Build, Smoke-Test), release.yml (Release Please, Image)
@@ -52,12 +53,20 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
 
 ## Architektur und bewusste Entscheidungen
 
-- **Datenmodell:** `dish` (Katalog, mit `url`, `note`, `image`), `plan` (Zeitraum, Start/Ende), `plan_entry` (Gericht in
-  Zeitraum, `done`). Bewusst **keine Tageszuordnung** und keine manuelle Reihenfolge per Drag.
+- **Datenmodell:** `dish` (Katalog, mit `url`, `note`, `image`), `dish_tag` (Kategorien), `plan` (Zeitraum, Start/Ende),
+  `plan_entry` (Gericht in Zeitraum, `done`). Bewusst **keine Tageszuordnung** und keine manuelle Reihenfolge per Drag.
 - Ein Gericht kann pro Zeitraum nur einmal vorkommen. Der Titel ist im Katalog eindeutig (ohne Groß-/Kleinschreibung).
   Ein Eintrag per Titel legt das Gericht an oder verwendet ein vorhandenes wieder. Löschen eines Gerichts, das noch
   in einer Liste steht, ist absichtlich gesperrt (409).
+- **Kategorien** sind frei wählbare Tags pro Gericht (höchstens 10, je höchstens 30 Zeichen). Es gibt keine Tag-Tabelle: Die
+  Liste der Kategorien ist die Menge der verwendeten Werte, eine Kategorie verschwindet mit ihrem letzten Gericht. Groß-/
+  Kleinschreibung ist egal, die zuerst verwendete Schreibweise gilt (`setTags` in `repo.ts`). Ein Update ersetzt die Tags,
+  fehlt `tags`, bleiben sie unverändert. Im Katalog filtern Chips nach genau einer Kategorie, ein neues Gericht übernimmt
+  die aktive. Snacks sind normale Einträge (Kategorie „Snack“), keine eigene Art. Umbenennen/Zusammenführen von
+  Kategorien gibt es bewusst nicht.
 - SQLite `NOCASE` gilt nur für ASCII. Für die Anzeige-Sortierung (Umlaute) wird im Frontend `localeCompare("de")` genutzt.
+- `createDish` und `updateDish` sind je eine Transaktion. `addEntry` legt Gerichte über `insertDish` (ohne eigene
+  Transaktion) an, weil es selbst in einer läuft: SQLite kennt keine verschachtelten `BEGIN`.
 - **Anmeldung:** nur über HA-Ingress. Kein OAuth, keine eigene Nutzerverwaltung, keine installierbare PWA und kein
   Web Share Target (beides bräuchte einen eigenen Origin, Ingress läuft im iframe unter dem HA-Origin).
   Der HA-Nutzer (`X-Remote-User-*`) ist rein informativ (`/api/me`), die Liste ist gemeinsam.
@@ -151,7 +160,8 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
 ## Bewusst nicht gebaut (nur auf ausdrücklichen Wunsch)
 
 Einkaufsliste/Zutaten, Anbindung an HA-Todo/Kalender, Tageszuordnung, Drag-and-Drop, OAuth, Instagram-oEmbed,
-Bildverkleinerung, Image-Signatur/SBOM, Renovate/Dependabot für npm (TypeScript ist bewusst gepinnt).
+Bildverkleinerung, Image-Signatur/SBOM, Renovate/Dependabot für npm (TypeScript ist bewusst gepinnt),
+Kategorien umbenennen/zusammenführen, Mehrfachauswahl im Kategorie-Filter.
 
 ## Stand und offene Punkte
 
