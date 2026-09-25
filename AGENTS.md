@@ -12,7 +12,7 @@ und Vorschaubild. Grundsatz: **KISS und YAGNI**. Nichts bauen, was nicht ausdrü
 
 ```
 repository.yaml          HA-Add-on-Repository
-README.md                Installation (privates Repo mit Token-URL), Updates
+README.md                Installation, Updates, Entwicklung (das Repository ist öffentlich)
 AGENTS.md                diese Datei
 release-please-config.json, .release-please-manifest.json   Release-Automatik (Version, Changelog)
 .github/workflows/       ci.yml (Tests, Docker-Build, Smoke-Test), release.yml (Release Please, Image)
@@ -94,6 +94,8 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
 - Bildnamen kommen nur aus dem Bildspeicher (Hash + Endung, geprüft per `IMAGE_NAME`), nie Pfade vom Client.
   Ausgeliefert wird mit `nosniff` und `Content-Security-Policy: default-src 'none'`.
 - Neue Ports oder `host_network` nicht ohne Rückfrage freigeben.
+- **Das Repository ist öffentlich:** keine Zugangsdaten, Tokens, privaten Hostnamen oder Adressen aus dem Heimnetz
+  einchecken (auch nicht in Tests, Kommentaren oder Beispielen).
 - Workflows: keine eigenen Secrets. Veröffentlicht wird nur mit dem `GITHUB_TOKEN` im Job `publish` nach einem Release.
 
 ## CI und Releases
@@ -112,14 +114,14 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
 - **CI** (`ci.yml`, bei Push auf `main`, bei Pull Requests und vor jedem Release): `npm ci`, `tsc`, `svelte-check`,
   Tests, Build. Dazu ein Docker-Build für amd64 mit **Smoke-Test** (Frontend und API antworten, SQLite funktioniert,
   ohne Ingress-Sperre; mit Standard-Konfiguration antwortet der Server Fremden mit 403) und ein Build für amd64 + arm64.
-- **Image:** `ghcr.io/twostone/meal-planner:<version>` und `:latest`, Tag = Version aus `config.yaml`. Das Paket ist beim
-  ersten Push privat. Provenance und SBOM sind aus (KISS).
+- **Image:** `ghcr.io/twostone/meal-planner:<version>` und `:latest`, Tag = Version aus `config.yaml`. Das Paket muss
+  **öffentlich** sein (Package settings → Change visibility), sonst kann Home Assistant es nicht ohne Zugangsdaten laden.
+  Provenance und SBOM sind aus (KISS).
 - **Actions nur mit vollem Commit-SHA pinnen** (Kommentar mit der Version), Dependabot aktualisiert sie wöchentlich.
   Rechte in den Workflows so klein wie möglich lassen (`packages: write` nur im Job `publish`).
-- **Noch nicht umgestellt:** In `config.yaml` steht bewusst kein `image:`, Home Assistant baut weiter lokal. Umstellen
-  erst, wenn (1) das Paket öffentlich ist oder in HA Zugangsdaten für `ghcr.io` hinterlegt sind (klassisches Token mit
-  `read:packages`, im Store-Menü unter Registries) und (2) ein Release das Image veröffentlicht hat. Dann in `config.yaml`
-  `image: ghcr.io/twostone/meal-planner` ergänzen (Commit `feat: ...`, damit ein Release entsteht).
+- **`image:` in `config.yaml`** steht ohne Tag (`ghcr.io/twostone/meal-planner`), Home Assistant hängt `version` als Tag an.
+  Nie einen Tag oder `latest` eintragen. Nach dem Merge eines Release-PR steht die neue Version sofort in `config.yaml`,
+  das Image gibt es aber erst nach dem grünen Publish-Job: erst dann Updates in Home Assistant einspielen.
 
 ## Regeln beim Ändern
 
@@ -129,14 +131,14 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   gibt es keinen Release und HA zeigt kein Update.
 - **Datenbank nur über Migrationen ändern:** in `src/db.ts` einen Eintrag an `MIGRATIONS` **anhängen**, nie ändern oder
   umsortieren (`PRAGMA user_version` zählt sie). Neue Migrationen mit einem Test gegen eine Datenbank im alten Stand.
-- **Add-on-Build:** Kein `build.yaml`, kein `BUILD_FROM` (beides gilt seit Supervisor 2026.04 nicht mehr). Das Dockerfile ist
-  zweistufig: Das Frontend wird auf der Architektur des Builders gebaut (`--platform=$BUILDPLATFORM`, sonst dauert arm64 unter
-  Emulation sehr lange), die Laufzeit-Stufe je Zielarchitektur. Das braucht BuildKit (bei HA und in der CI gegeben).
+- **Add-on-Build:** Kein `build.yaml`, kein `BUILD_FROM` (beides gilt seit Supervisor 2026.04 nicht mehr). HA baut nicht
+  selbst, es lädt das Image aus `image:`. Das Dockerfile ist zweistufig: Das Frontend wird auf der Architektur des Builders
+  gebaut (`--platform=$BUILDPLATFORM`, sonst dauert arm64 unter Emulation sehr lange), die Laufzeit-Stufe je Zielarchitektur.
 - `node:sqlite` ist unter Node 22 noch experimentell. Der gesamte DB-Zugriff bleibt in `src/db.ts` und `src/repo.ts`,
   damit ein Wechsel (z. B. `better-sqlite3`) klein bleibt.
 - **TypeScript 6 ist gepinnt**, weil `svelte-check` TypeScript 7 noch nicht unterstützt. Erst umstellen, wenn es geht.
 - `tsx` ist absichtlich eine Runtime-Dependency (der Server läuft im Container per `node --import tsx`).
-- Neue Abhängigkeiten nur mit Grund: jede ändert `package-lock.json` und damit den Build auf dem HA-Gerät.
+- Neue Abhängigkeiten nur mit Grund: jede ändert `package-lock.json` und damit den Image-Build.
   Die Link-Vorschau kommt bewusst ohne HTML-Parser-Bibliothek und ohne Bildverarbeitung (`sharp`) aus.
 - Sheets nutzen das native `<dialog>`. Kein `alert()`/`confirm()` (in der HA-Companion-App unzuverlässig), stattdessen
   zweistufige Bestätigung im UI.
@@ -154,18 +156,15 @@ Bildverkleinerung, Image-Signatur/SBOM, Renovate/Dependabot für npm (TypeScript
 ## Stand und offene Punkte
 
 - Der Docker-Build lief in der Entwicklungsumgebung nie (Container-Registries dort gesperrt), dort wurden nur die
-  einzelnen Schritte nachgestellt. Das Add-on wurde vom Nutzer aus dem privaten Repository in Home Assistant installiert.
-  Ob es dort wie erwartet startet und angezeigt wird, ist hier nicht festgehalten.
+  einzelnen Schritte nachgestellt. Ob das Add-on mit dem fertigen Image in Home Assistant startet und angezeigt wird,
+  ist hier nicht festgehalten.
 - Die Link-Vorschau ist gegen eine lokale Testseite und im Browser geprüft, **nicht gegen echte Seiten** (Chefkoch & Co.)
   und nicht gegen Instagram. Seiten hinter Cloudflare oder Login liefern keinen Titel (dann trägt der Nutzer ihn ein).
   Das Add-on-Protokoll zeigt pro Abruf eine Zeile `[preview] <host> title=… image=… reason=…` (nur der Host, nie die URL).
 - Ob HA-Ingress die `X-Remote-User-*`-Header wirklich liefert, ist gegen die Doku, aber nicht am echten System geprüft.
-- **CI und Release-Automatik sind noch nie in GitHub gelaufen.** Lokal geprüft: Workflow-Schema, Release-Please-Konfiguration
-  gegen dessen Schema, der Versions-Updater für `config.yaml` und die Dockerfile-Schritte samt Smoke-Test ohne Container.
-  Der echte Docker-Build und der Image-Push laufen zum ersten Mal in GitHub.
-- Voraussetzung im Repository: Einstellungen → Actions → General → „Allow GitHub Actions to create and approve pull requests“.
-- Offen: Sichtbarkeit des Pakets `ghcr.io/twostone/meal-planner` (öffentlich = Quellcode im Image sichtbar; privat = Zugangsdaten in HA)
-  und damit die Umstellung auf `image:`.
+- Release 0.2.1 wurde von Release Please erzeugt. Ob Image-Build, Push und öffentliche Sichtbarkeit des Pakets
+  fehlerfrei waren, ist hier nicht festgehalten.
+- Voraussetzung im Repository (gesetzt): Einstellungen → Actions → General → „Allow GitHub Actions to create and approve pull requests“.
 - Kein Dunkelmodus (HA-Theme dunkel, App bleibt hell).
 
 ## Git
