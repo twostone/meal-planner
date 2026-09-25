@@ -13,7 +13,8 @@ Nichts bauen, was nicht ausdrücklich gebraucht wird.
 ```
 repository.yaml          HA-Add-on-Repository
 README.md                Installation (privates Repo mit Token-URL), Updates
-essensplanung/           das Add-on (Docker-Build-Kontext)
+AGENTS.md                diese Datei
+meal-planner/            das Add-on (Docker-Build-Kontext)
   config.yaml            Add-on-Konfiguration (version!)
   Dockerfile             node:22-alpine, Build läuft auf dem HA-Gerät
   src/                   Backend: Hono + node:sqlite (db.ts, repo.ts, app.ts, server.ts)
@@ -21,7 +22,11 @@ essensplanung/           das Add-on (Docker-Build-Kontext)
   test/                  API-Tests (node:test)
 ```
 
-## Befehle (in `essensplanung/`)
+Der Ordner heißt `meal-planner/`, der **Slug** des Add-ons in `config.yaml` ist weiterhin `essensplanung`. Home Assistant
+identifiziert das Add-on über den Slug, nicht über den Ordnernamen. Den Slug nicht ändern, sonst gilt es als neues Add-on
+und die Daten in `/data` gehen für die neue Installation verloren.
+
+## Befehle (in `meal-planner/`)
 
 ```
 npm ci
@@ -61,7 +66,7 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen.
 
 - **Frontend-URLs immer relativ** (`api/plans`, Vite `base: "./"`), nie `/api/...`. Die App läuft unter einem wechselnden
   Ingress-Präfix.
-- **`version` in `essensplanung/config.yaml` bei jeder auslieferbaren Änderung erhöhen**, sonst zeigt HA kein Update.
+- **`version` in `meal-planner/config.yaml` bei jeder auslieferbaren Änderung erhöhen**, sonst zeigt HA kein Update.
 - **Add-on-Build:** Kein `build.yaml`, kein `BUILD_FROM` (beides gilt seit Supervisor 2026.04 nicht mehr). Es gibt kein
   vorgebautes Image (`image` fehlt in `config.yaml` absichtlich, HA baut lokal).
 - `node:sqlite` ist unter Node 22 noch experimentell. Der gesamte DB-Zugriff bleibt in `src/db.ts` und `src/repo.ts`,
@@ -81,11 +86,12 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen.
 Einkaufsliste/Zutaten, Anbindung an HA-Todo/Kalender, Tageszuordnung, Drag-and-Drop, OAuth, Titel-Scraping,
 Vorschaubilder, vorgebautes Image über GitHub Actions.
 
-## Offen und ungeprüft
+## Stand und offene Punkte
 
-- Der **Docker-Build** wurde nie real ausgeführt (nur die Schritte ohne Container nachgestellt).
+- Der Docker-Build lief in der Entwicklungsumgebung nie (Container-Registries dort gesperrt), dort wurden nur die
+  einzelnen Schritte nachgestellt. Das Add-on wurde vom Nutzer aus dem privaten Repository in Home Assistant installiert.
+  Ob es dort wie erwartet startet und angezeigt wird, ist hier nicht festgehalten.
 - Ob HA-Ingress die `X-Remote-User-*`-Header wirklich liefert, ist gegen die Doku, aber nicht am echten System geprüft.
-- Die Token-URL für ein privates Repository in HA ist nur aus Community-Berichten bekannt.
 - Kein Dunkelmodus (HA-Theme dunkel, App bleibt hell).
 
 ## Git
