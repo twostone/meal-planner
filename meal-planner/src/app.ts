@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { zValidator } from "@hono/zod-validator";
 import * as z from "zod";
+import { IMAGE_NAME, type ImageStore } from "./images.ts";
+import type { PreviewResult } from "./preview.ts";
 import { ConflictError, NotFoundError, type Repo } from "./repo.ts";
 
 const title = z.string().trim().min(1).max(200);
@@ -25,8 +27,11 @@ const id = z.coerce.number().int().positive();
 const optional = <T extends z.ZodType<string>>(s: T) =>
   z.union([s, z.literal("").transform(() => null), z.null()]).optional();
 
-const dishBody = z.object({ title, url: optional(url), note: optional(note) });
-const dishPatch = z.object({ title: title.optional(), url: optional(url), note: optional(note) });
+// Only names produced by the image store (content hash + extension) are accepted, never paths.
+const image = z.string().regex(IMAGE_NAME);
+
+const dishBody = z.object({ title, url: optional(url), note: optional(note), image: optional(image) });
+const dishPatch = z.object({ title: title.optional(), url: optional(url), note: optional(note), image: optional(image) });
 const planBody = z
   .object({ start_date: date, end_date: date })
   .refine((v) => v.end_date >= v.start_date, { message: "end_date before start_date", path: ["end_date"] });
@@ -38,10 +43,22 @@ export type AppOptions = {
   // 172.30.32.2 (Supervisor); everything else on the network must be refused, otherwise
   // the X-Remote-User-* headers could be forged by other containers.
   allowedIp?: string;
+  // Both are optional so the API can run (and be tested) without link previews.
+  images?: ImageStore;
+  preview?: (url: string) => Promise<PreviewResult>;
 };
+
+const MAX_PARALLEL_PREVIEWS = 4;
 
 export function createApp(repo: Repo, opts: AppOptions = {}) {
   const app = new Hono();
+
+  // Removes image files no dish uses any more (fire and forget, never blocks a request).
+  const sweep = () => {
+    if (opts.images) void opts.images.sweep(repo.listImages()).catch(() => {});
+  };
+  const imageMissing = async (name: string | null | undefined) =>
+    !!name && !(await opts.images?.exists(name));
 
   if (opts.allowedIp) {
     app.use("*", async (c, next) => {
@@ -79,14 +96,55 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
   });
 
   app.get("/api/dishes", (c) => c.json(repo.listDishes(c.req.query("q"))));
-  app.post("/api/dishes", zValidator("json", dishBody), (c) => c.json(repo.createDish(c.req.valid("json")), 201));
-  app.patch("/api/dishes/:id", zValidator("param", z.object({ id })), zValidator("json", dishPatch), (c) =>
-    c.json(repo.updateDish(c.req.valid("param").id, c.req.valid("json"))),
-  );
+  app.post("/api/dishes", zValidator("json", dishBody), async (c) => {
+    const body = c.req.valid("json");
+    if (await imageMissing(body.image)) return c.json({ error: "unknown image" }, 400);
+    const dish = repo.createDish(body);
+    sweep();
+    return c.json(dish, 201);
+  });
+  app.patch("/api/dishes/:id", zValidator("param", z.object({ id })), zValidator("json", dishPatch), async (c) => {
+    const body = c.req.valid("json");
+    if (await imageMissing(body.image)) return c.json({ error: "unknown image" }, 400);
+    const dish = repo.updateDish(c.req.valid("param").id, body);
+    sweep();
+    return c.json(dish);
+  });
   app.delete("/api/dishes/:id", zValidator("param", z.object({ id })), (c) => {
     repo.deleteDish(c.req.valid("param").id);
+    sweep();
     return c.body(null, 204);
   });
+
+  if (opts.images) {
+    const images = opts.images;
+    app.get("/api/images/:name", async (c) => {
+      const img = await images.read(c.req.param("name"));
+      if (!img) return c.json({ error: "image not found" }, 404);
+      return c.body(new Uint8Array(img.data), 200, {
+        "Content-Type": img.mime,
+        // The name is a content hash, so the file behind it never changes.
+        "Cache-Control": "private, max-age=31536000, immutable",
+        "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "default-src 'none'",
+      });
+    });
+  }
+
+  if (opts.preview) {
+    const preview = opts.preview;
+    let running = 0;
+    app.post("/api/preview", zValidator("json", z.object({ url })), async (c) => {
+      if (running >= MAX_PARALLEL_PREVIEWS) return c.json({ error: "busy" }, 429);
+      running++;
+      try {
+        return c.json(await preview(c.req.valid("json").url));
+      } finally {
+        running--;
+        sweep();
+      }
+    });
+  }
 
   app.get("/api/plans", (c) => c.json(repo.listPlans()));
   app.post("/api/plans", zValidator("json", planBody), (c) => c.json(repo.createPlan(c.req.valid("json")), 201));
@@ -96,9 +154,11 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
     return c.body(null, 204);
   });
 
-  app.post("/api/plans/:id/entries", zValidator("param", z.object({ id })), zValidator("json", entryBody), (c) =>
-    c.json(repo.addEntry(c.req.valid("param").id, c.req.valid("json") as any), 201),
-  );
+  app.post("/api/plans/:id/entries", zValidator("param", z.object({ id })), zValidator("json", entryBody), async (c) => {
+    const body = c.req.valid("json");
+    if ("image" in body && (await imageMissing(body.image))) return c.json({ error: "unknown image" }, 400);
+    return c.json(repo.addEntry(c.req.valid("param").id, body as any), 201);
+  });
   app.patch("/api/entries/:id", zValidator("param", z.object({ id })), zValidator("json", entryPatch), (c) =>
     c.json(repo.updateEntry(c.req.valid("param").id, c.req.valid("json"))),
   );

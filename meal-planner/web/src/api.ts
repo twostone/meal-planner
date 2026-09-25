@@ -1,4 +1,4 @@
-import type { Dish, DishInput, Entry, PlanDetail, PlanSummary } from "./types";
+import type { Dish, DishInput, Entry, PlanDetail, PlanSummary, Preview } from "./types";
 
 // All URLs are resolved against the document URL (never "/api/..."), so the app
 // keeps working under the HA ingress prefix.
@@ -43,3 +43,8 @@ export const addEntry = (planId: number, e: { dish_id: number } | { title: strin
   request<Entry>("POST", `api/plans/${planId}/entries`, e);
 export const setDone = (id: number, done: boolean) => request<Entry>("PATCH", `api/entries/${id}`, { done });
 export const deleteEntry = (id: number) => request<void>("DELETE", `api/entries/${id}`);
+
+// The server fetches the page (never the browser: CORS, and the link must not be opened from the phone).
+export const previewUrl = (url: string) => request<Preview>("POST", "api/preview", { url });
+// Relative like every other URL, so it works under the ingress prefix.
+export const imageSrc = (name: string) => `api/images/${name}`;

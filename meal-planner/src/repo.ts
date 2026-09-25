@@ -1,7 +1,14 @@
 import type { DatabaseSync } from "node:sqlite";
 import { transaction } from "./db.ts";
 
-export type Dish = { id: number; title: string; url: string | null; note: string | null; created_at: string };
+export type Dish = {
+  id: number;
+  title: string;
+  url: string | null;
+  note: string | null;
+  image: string | null; // file name in the image store
+  created_at: string;
+};
 export type Plan = { id: number; start_date: string; end_date: string; created_at: string };
 export type Entry = { id: number; plan_id: number; dish_id: number; position: number; done: boolean; dish: Dish };
 
@@ -36,11 +43,11 @@ export function createRepo(db: DatabaseSync) {
 
     getDish,
 
-    createDish(input: { title: string; url?: string | null; note?: string | null }): Dish {
+    createDish(input: { title: string; url?: string | null; note?: string | null; image?: string | null }): Dish {
       try {
         const r = db
-          .prepare("INSERT INTO dish (title, url, note) VALUES (?, ?, ?)")
-          .run(input.title.trim(), input.url ?? null, input.note ?? null);
+          .prepare("INSERT INTO dish (title, url, note, image) VALUES (?, ?, ?, ?)")
+          .run(input.title.trim(), input.url ?? null, input.note ?? null, input.image ?? null);
         return getDish(Number(r.lastInsertRowid));
       } catch (e: any) {
         if (String(e?.message).includes("UNIQUE")) throw new ConflictError("dish title exists");
@@ -48,20 +55,35 @@ export function createRepo(db: DatabaseSync) {
       }
     },
 
-    updateDish(id: number, patch: { title?: string; url?: string | null; note?: string | null }): Dish {
+    updateDish(
+      id: number,
+      patch: { title?: string; url?: string | null; note?: string | null; image?: string | null },
+    ): Dish {
       const cur = getDish(id);
       const next = {
         title: patch.title?.trim() ?? cur.title,
         url: patch.url === undefined ? cur.url : patch.url,
         note: patch.note === undefined ? cur.note : patch.note,
+        image: patch.image === undefined ? cur.image : patch.image,
       };
       try {
-        db.prepare("UPDATE dish SET title = ?, url = ?, note = ? WHERE id = ?").run(next.title, next.url, next.note, id);
+        db.prepare("UPDATE dish SET title = ?, url = ?, note = ?, image = ? WHERE id = ?").run(
+          next.title,
+          next.url,
+          next.note,
+          next.image,
+          id,
+        );
       } catch (e: any) {
         if (String(e?.message).includes("UNIQUE")) throw new ConflictError("dish title exists");
         throw e;
       }
       return getDish(id);
+    },
+
+    // Image files any dish still points to (everything else in the store is garbage).
+    listImages(): string[] {
+      return all<{ image: string }>("SELECT DISTINCT image FROM dish WHERE image IS NOT NULL").map((r) => r.image);
     },
 
     deleteDish(id: number): void {
@@ -92,7 +114,7 @@ export function createRepo(db: DatabaseSync) {
       if (!p) throw new NotFoundError("plan");
       const rows = all<any>(
         `SELECT e.id, e.plan_id, e.dish_id, e.position, e.done,
-                d.title AS d_title, d.url AS d_url, d.note AS d_note, d.created_at AS d_created
+                d.title AS d_title, d.url AS d_url, d.note AS d_note, d.image AS d_image, d.created_at AS d_created
          FROM plan_entry e JOIN dish d ON d.id = e.dish_id
          WHERE e.plan_id = ? ORDER BY e.position`,
         id,
@@ -103,7 +125,14 @@ export function createRepo(db: DatabaseSync) {
         dish_id: r.dish_id,
         position: r.position,
         done: !!r.done,
-        dish: { id: r.dish_id, title: r.d_title, url: r.d_url, note: r.d_note, created_at: r.d_created },
+        dish: {
+          id: r.dish_id,
+          title: r.d_title,
+          url: r.d_url,
+          note: r.d_note,
+          image: r.d_image,
+          created_at: r.d_created,
+        },
       }));
       return { ...p, entries };
     },
