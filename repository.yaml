@@ -1,0 +1,4 @@
+# https://developers.home-assistant.io/docs/apps/repository#repository-configuration
+name: meal-planner
+url: "https://github.com/twostone/meal-planner"
+maintainer: Niklas Walter
