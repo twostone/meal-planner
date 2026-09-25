@@ -8,6 +8,8 @@ dieselbe Liste.
 
 - Eine gemeinsame Liste pro Zeitraum (frei wählbar, z. B. Samstag bis Freitag). Gerichte lassen sich abhaken.
 - Ein Katalog aller bisherigen Gerichte mit Rezept-Link. Beim Eintragen schlägt die App passende Gerichte vor.
+- Kategorien: Gerichte lassen sich frei kategorisieren (z. B. Snack, Suppe, Vegan), mehrere pro Gericht. Im Katalog
+  filtern Chips nach einer Kategorie.
 - Aus einem eingefügten Link (Rezeptseite, Instagram, …) holt der Server Titel und Vorschaubild. Klappt das nicht,
   trägt man den Titel selbst ein.
 - Bedienung für das Handy ausgelegt, auch in der Home-Assistant-Companion-App.
@@ -65,3 +67,7 @@ neuer Version und Changelog. **Den PR zu mergen ist der Release:** GitHub taggt 
 (amd64 und arm64) und veröffentlicht es als `ghcr.io/twostone/meal-planner:<version>`. Die Version nie von Hand ändern.
 Nach dem Merge erst abwarten, bis der Workflow „Release“ grün ist: Erst dann existiert das Image, das Home Assistant
 für die neue Version lädt.
+
+## Lizenz
+
+[Apache License 2.0](LICENSE), wie Home Assistant und dessen offizielle Apps.
