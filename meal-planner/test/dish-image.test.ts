@@ -143,7 +143,7 @@ test("migration from v1 keeps existing dishes and adds the image column and tags
     old.close();
 
     const db = openDb(file);
-    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 3);
+    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 4);
     const dishes = createRepo(db).listDishes();
     assert.deepEqual(dishes.map((d) => [d.title, d.url, d.image]), [["Linsensuppe", "https://example.com/l", null]]);
     assert.deepEqual(dishes[0]!.tags, []);

@@ -52,6 +52,8 @@ const MIGRATIONS = [
     PRIMARY KEY (dish_id, tag)
   ) STRICT;
   CREATE INDEX dish_tag_tag ON dish_tag(tag);`,
+  // v4: note that only applies to one dish in one plan (unlike dish.note, which is the same everywhere)
+  "ALTER TABLE plan_entry ADD COLUMN note TEXT",
 ];
 
 function migrate(db: DatabaseSync): void {
