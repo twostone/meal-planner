@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/twostone/meal-planner/compare/v0.3.0...v0.4.0) (2026-09-25)
+
+
+### Neu
+
+* **kategorien:** Gerichte frei kategorisieren, im Katalog nach Kategorie filtern ([e955f89](https://github.com/twostone/meal-planner/commit/e955f8951559eb6d49e05c9c62afc2f1e907fc16))
+
 ## [0.3.0](https://github.com/twostone/meal-planner/compare/v0.2.1...v0.3.0) (2026-09-25)
 
 
