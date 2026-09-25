@@ -105,7 +105,8 @@
           class="title"
           onclick={() => openDishSheet({ dishId: e.dish_id, entryId: e.id })}
         >
-          {e.dish.title}
+          <span>{e.dish.title}</span>
+          {#if e.dish.tags.length}<small class="tags-line">{e.dish.tags.join(" · ")}</small>{/if}
         </button>
         {#if e.dish.url}
           <a class="chip" href={e.dish.url} target="_blank" rel="noopener noreferrer">
@@ -145,7 +146,7 @@
             <button type="button" class="opt" onclick={() => pickDish(d.id)}>
               <span class="grow">
                 <span>{pre}<b>{hit}</b>{post}</span>
-                <small>Aus dem Katalog</small>
+                <small>Aus dem Katalog{d.tags.length ? ` · ${d.tags.join(" · ")}` : ""}</small>
               </span>
               {#if d.url}<span class="chip static"><Icon name="link" size={14} />{domain(d.url)}</span>{/if}
             </button>
