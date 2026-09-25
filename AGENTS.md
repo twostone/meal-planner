@@ -54,10 +54,14 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
 ## Architektur und bewusste Entscheidungen
 
 - **Datenmodell:** `dish` (Katalog, mit `url`, `note`, `image`), `dish_tag` (Kategorien), `plan` (Zeitraum, Start/Ende),
-  `plan_entry` (Gericht in Zeitraum, `done`). Bewusst **keine Tageszuordnung** und keine manuelle Reihenfolge per Drag.
+  `plan_entry` (Gericht in Zeitraum, `done`, `note`). Bewusst **keine Tageszuordnung** und keine manuelle Reihenfolge per Drag.
 - Ein Gericht kann pro Zeitraum nur einmal vorkommen. Der Titel ist im Katalog eindeutig (ohne Groß-/Kleinschreibung).
   Ein Eintrag per Titel legt das Gericht an oder verwendet ein vorhandenes wieder. Löschen eines Gerichts, das noch
   in einer Liste steht, ist absichtlich gesperrt (409).
+- **Zwei Notizen, bewusst getrennt:** `dish.note` gilt für das Gericht überall (nur im Bearbeiten-Blatt sichtbar),
+  `plan_entry.note` nur für dieses Gericht in genau dieser Liste (Button pro Zeile, Anzeige unter dem Titel, auf zwei
+  Zeilen gekürzt). Die Listen-Notiz wird nicht in andere Listen übernommen und verschwindet mit dem Eintrag. Setzen/Löschen
+  per `PATCH /api/entries/:id` (`note`: Text, `""` oder `null` löscht, fehlt = unverändert).
 - **Kategorien** sind frei wählbare Tags pro Gericht (höchstens 10, je höchstens 30 Zeichen). Es gibt keine Tag-Tabelle: Die
   Liste der Kategorien ist die Menge der verwendeten Werte, eine Kategorie verschwindet mit ihrem letzten Gericht. Groß-/
   Kleinschreibung ist egal, die zuerst verwendete Schreibweise gilt (`setTags` in `repo.ts`). Ein Update ersetzt die Tags,
@@ -67,6 +71,8 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
 - SQLite `NOCASE` gilt nur für ASCII. Für die Anzeige-Sortierung (Umlaute) wird im Frontend `localeCompare("de")` genutzt.
 - `createDish` und `updateDish` sind je eine Transaktion. `addEntry` legt Gerichte über `insertDish` (ohne eigene
   Transaktion) an, weil es selbst in einer läuft: SQLite kennt keine verschachtelten `BEGIN`.
+- Optionale Textfelder in der API: `""` und `null` löschen das Feld (`optional()` in `app.ts`, der Zweig für `""` muss
+  vor dem String-Schema stehen, sonst wird `""` selbst akzeptiert).
 - **Anmeldung:** nur über HA-Ingress. Kein OAuth, keine eigene Nutzerverwaltung, keine installierbare PWA und kein
   Web Share Target (beides bräuchte einen eigenen Origin, Ingress läuft im iframe unter dem HA-Origin).
   Der HA-Nutzer (`X-Remote-User-*`) ist rein informativ (`/api/me`), die Liste ist gemeinsam.
@@ -120,6 +126,8 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
 - **Warum alles in einem Workflow:** Was Release Please mit dem eingebauten `GITHUB_TOKEN` erzeugt (PR, Tag, Release),
   löst keine weiteren Workflows aus. Deshalb rufen `ci` und `publish` in `release.yml` erst nach einem Release an.
   Der Release-PR selbst bekommt dadurch keine automatischen Checks. Die Tests laufen auf `main` und beim Release.
+  Release Please baut den Branch des Release-PR nur neu, wenn sich der Release-Inhalt ändert (`chore`/`docs` auf `main`
+  zählen nicht). Ist die CI dort wegen eines inzwischen behobenen Fehlers rot, den Branch mit `main` aktualisieren.
 - **CI** (`ci.yml`, bei Push auf `main`, bei Pull Requests und vor jedem Release): `npm ci`, `tsc`, `svelte-check`,
   Tests, Build. Dazu ein Docker-Build für amd64 mit **Smoke-Test** (Frontend und API antworten, SQLite funktioniert,
   ohne Ingress-Sperre; mit Standard-Konfiguration antwortet der Server Fremden mit 403) und ein Build für amd64 + arm64.
@@ -140,6 +148,7 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   gibt es keinen Release und HA zeigt kein Update.
 - **Datenbank nur über Migrationen ändern:** in `src/db.ts` einen Eintrag an `MIGRATIONS` **anhängen**, nie ändern oder
   umsortieren (`PRAGMA user_version` zählt sie). Neue Migrationen mit einem Test gegen eine Datenbank im alten Stand.
+  Die Tests, die die Schema-Version prüfen (`dish-image`, `tags`, `entry-note`), bei jeder neuen Migration mit anheben.
 - **Add-on-Build:** Kein `build.yaml`, kein `BUILD_FROM` (beides gilt seit Supervisor 2026.04 nicht mehr). HA baut nicht
   selbst, es lädt das Image aus `image:`. Das Dockerfile ist zweistufig: Das Frontend wird auf der Architektur des Builders
   gebaut (`--platform=$BUILDPLATFORM`, sonst dauert arm64 unter Emulation sehr lange), die Laufzeit-Stufe je Zielarchitektur.
@@ -172,11 +181,18 @@ Kategorien umbenennen/zusammenführen, Mehrfachauswahl im Kategorie-Filter.
   und nicht gegen Instagram. Seiten hinter Cloudflare oder Login liefern keinen Titel (dann trägt der Nutzer ihn ein).
   Das Add-on-Protokoll zeigt pro Abruf eine Zeile `[preview] <host> title=… image=… reason=…` (nur der Host, nie die URL).
 - Ob HA-Ingress die `X-Remote-User-*`-Header wirklich liefert, ist gegen die Doku, aber nicht am echten System geprüft.
-- Release 0.2.1 wurde von Release Please erzeugt. Ob Image-Build, Push und öffentliche Sichtbarkeit des Pakets
-  fehlerfrei waren, ist hier nicht festgehalten.
+- Die Releases laufen über Release Please (siehe „CI und Releases“). Der Stand des Pakets auf ghcr.io ist hier nicht
+  festgehalten.
 - Voraussetzung im Repository (gesetzt): Einstellungen → Actions → General → „Allow GitHub Actions to create and approve pull requests“.
 - Kein Dunkelmodus (HA-Theme dunkel, App bleibt hell).
 
-## Git
+## Git und Pull Requests
 
-Conventional Commits mit deutschem Text (siehe „CI und Releases“), das „Warum“ zuerst. Kein Force-Push auf `main`.
+- **Neue Features und größere Änderungen kommen über einen Pull Request**, nicht direkt auf `main`: Branch `feat/<thema>` bzw.
+  `fix/<thema>`, ein PR pro Feature mit Backend, Migration, UI, Tests und angepasster Doku (`AGENTS.md`/`README.md`).
+  Kleine Doku-, CI- und Chore-Änderungen dürfen direkt auf `main`.
+- **Der PR-Titel ist eine Conventional-Commit-Zeile** (`feat(bereich): …`, deutscher Text), weil er beim Squash-Merge zur
+  Commit-Nachricht wird und daraus Version und Changelog entstehen. Empfohlen ist in den Repository-Einstellungen nur
+  Squash-Merge (Standardnachricht: PR-Titel) und „Automatically delete head branches“.
+- Die CI läuft auf dem PR und muss vor dem Merge grün sein. Die UI vorher bei 390 px Breite prüfen.
+- Commit-Nachrichten: das „Warum“ zuerst, kurz, deutsch. Kein Force-Push auf `main`.
