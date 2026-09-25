@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call: # also used by release.yml, so a release only ships when this passes
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests, Typen, Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: meal-planner
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22 # same major as the image (node:22-alpine); node:sqlite needs >= 22.13
+          cache: npm
+          cache-dependency-path: meal-planner/package-lock.json
+
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm run check
+      - run: npm test
+      - run: npm run build
+
+  docker:
+    name: Docker-Build (amd64, arm64) und Smoke-Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: QEMU (für arm64)
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
+
+      - name: Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build (amd64) für den Smoke-Test
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ./meal-planner
+          load: true
+          tags: meal-planner:smoke
+          provenance: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke-Test des Images
+        run: |
+          set -euo pipefail
+          dump() { echo "--- container log ($1)"; docker logs "$1" || true; }
+
+          # 1) Ingress guard switched off: frontend and API are served and SQLite works inside the image.
+          docker run -d --name smoke -p 8099:8099 -e INGRESS_ONLY_IP= meal-planner:smoke
+          for _ in $(seq 1 30); do
+            curl -fsS http://localhost:8099/api/plans >/dev/null 2>&1 && break
+            sleep 1
+          done
+          curl -fsS http://localhost:8099/api/plans | grep -q '^\[\]$' || { dump smoke; exit 1; }
+          curl -fsS http://localhost:8099/ | grep -q '<title>Essensplanung</title>' || { dump smoke; exit 1; }
+          curl -fsS -X POST http://localhost:8099/api/plans -H 'Content-Type: application/json' \
+            -d '{"start_date":"2026-10-03","end_date":"2026-10-09"}' | grep -q '"id":1' || { dump smoke; exit 1; }
+          docker rm -f smoke
+
+          # 2) Default configuration: only Supervisor's ingress address may connect, everyone else gets 403.
+          docker run -d --name guarded -p 8100:8099 meal-planner:smoke
+          code=000
+          for _ in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8100/api/plans || true)
+            [ "$code" != "000" ] && break
+            sleep 1
+          done
+          [ "$code" = "403" ] || { echo "expected 403 from the ingress guard, got $code"; dump guarded; exit 1; }
+          docker rm -f guarded
+
+      - name: Build (amd64, arm64)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ./meal-planner
+          platforms: linux/amd64,linux/arm64
+          push: false
+          provenance: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
