@@ -3,7 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 // Thin wrapper: node:sqlite is still experimental on Node 22, so all DB access
 // goes through this module and can be swapped (e.g. for better-sqlite3) later.
 
-const SCHEMA_V1 = `
+export const SCHEMA_V1 = `
 CREATE TABLE dish (
   id INTEGER PRIMARY KEY,
   title TEXT NOT NULL COLLATE NOCASE UNIQUE CHECK (length(trim(title)) > 0),
@@ -40,13 +40,20 @@ export function openDb(path: string): DatabaseSync {
   return db;
 }
 
+// One entry per schema version; PRAGMA user_version says how many are applied. Only ever append.
+const MIGRATIONS = [
+  SCHEMA_V1,
+  // v2: preview image of a dish (file name in the image store, see images.ts)
+  "ALTER TABLE dish ADD COLUMN image TEXT",
+];
+
 function migrate(db: DatabaseSync): void {
   const row = db.prepare("PRAGMA user_version").get() as { user_version: number };
-  if (row.user_version < 1) {
+  for (let v = row.user_version; v < MIGRATIONS.length; v++) {
     db.exec("BEGIN");
     try {
-      db.exec(SCHEMA_V1);
-      db.exec("PRAGMA user_version = 1");
+      db.exec(MIGRATIONS[v]!);
+      db.exec(`PRAGMA user_version = ${v + 1}`);
       db.exec("COMMIT");
     } catch (e) {
       db.exec("ROLLBACK");
