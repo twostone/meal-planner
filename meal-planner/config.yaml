@@ -10,7 +10,7 @@ arch:
   - amd64
 # No "image" yet: Home Assistant builds the Dockerfile on the device.
 # Once the release workflow has published ghcr.io/twostone/meal-planner, add
-#   image: ghcr.io/twostone/meal-planner
+image: ghcr.io/twostone/meal-planner
 # (the tag is this version; HA then pulls instead of building).
 ingress: true
 ingress_port: 8099
