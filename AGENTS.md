@@ -14,9 +14,13 @@ und Vorschaubild. Grundsatz: **KISS und YAGNI**. Nichts bauen, was nicht ausdrü
 repository.yaml          HA-Add-on-Repository
 README.md                Installation (privates Repo mit Token-URL), Updates
 AGENTS.md                diese Datei
+release-please-config.json, .release-please-manifest.json   Release-Automatik (Version, Changelog)
+.github/workflows/       ci.yml (Tests, Docker-Build, Smoke-Test), release.yml (Release Please, Image)
+.github/dependabot.yml   hält die festgepinnten Actions aktuell
 meal-planner/            das Add-on (Docker-Build-Kontext)
-  config.yaml            Add-on-Konfiguration (version!)
-  Dockerfile             node:22-alpine, Build läuft auf dem HA-Gerät
+  config.yaml            Add-on-Konfiguration (Version pflegt Release Please)
+  CHANGELOG.md           entsteht und wächst durch Release Please, nicht von Hand ändern
+  Dockerfile             zweistufig, node:22-alpine
   src/                   Backend: Hono + node:sqlite
     db.ts, repo.ts         Datenbank (Migrationen) und Zugriff
     app.ts, server.ts      API, Ingress-Sperre, Start
@@ -44,7 +48,7 @@ DB_PATH=./data/dev.db PORT=8099 npm start
 npm run dev:web                   # Vite-Dev-Server, /api geht per Proxy an :8099
 ```
 
-Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen.
+Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (genau das prüft auch die CI).
 
 ## Architektur und bewusste Entscheidungen
 
@@ -90,16 +94,44 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen.
 - Bildnamen kommen nur aus dem Bildspeicher (Hash + Endung, geprüft per `IMAGE_NAME`), nie Pfade vom Client.
   Ausgeliefert wird mit `nosniff` und `Content-Security-Policy: default-src 'none'`.
 - Neue Ports oder `host_network` nicht ohne Rückfrage freigeben.
+- Workflows: keine eigenen Secrets. Veröffentlicht wird nur mit dem `GITHUB_TOKEN` im Job `publish` nach einem Release.
+
+## CI und Releases
+
+- **Commits nach Conventional Commits:** `typ(bereich): Beschreibung`, deutscher Text. Nur `feat` (Minor), `fix` und `perf`
+  (Patch) sowie `feat!:`/`BREAKING CHANGE:` lösen einen Release aus. `docs`, `ci`, `chore`, `refactor`, `test`, `build`
+  erscheinen nicht im Changelog und lösen nichts aus. Vor 1.0 erhöht ein Breaking Change nur die Minor-Version.
+- **Release Please** (`release.yml`) sammelt die Commits seit dem letzten Release in einem Release-PR
+  („chore(main): release x.y.z“). Der PR ändert `meal-planner/config.yaml` (Zeile mit `# x-release-please-version`),
+  `package.json`, `package-lock.json` und `CHANGELOG.md`. **Mergen des PR ist der Release:** Tag `vX.Y.Z`, GitHub-Release,
+  dann im selben Workflow-Lauf Tests und Bau des Images. Version, Tag und Changelog nie von Hand ändern, die Annotation
+  in `config.yaml` nicht entfernen.
+- **Warum alles in einem Workflow:** Was Release Please mit dem eingebauten `GITHUB_TOKEN` erzeugt (PR, Tag, Release),
+  löst keine weiteren Workflows aus. Deshalb rufen `ci` und `publish` in `release.yml` erst nach einem Release an.
+  Der Release-PR selbst bekommt dadurch keine automatischen Checks. Die Tests laufen auf `main` und beim Release.
+- **CI** (`ci.yml`, bei Push auf `main`, bei Pull Requests und vor jedem Release): `npm ci`, `tsc`, `svelte-check`,
+  Tests, Build. Dazu ein Docker-Build für amd64 mit **Smoke-Test** (Frontend und API antworten, SQLite funktioniert,
+  ohne Ingress-Sperre; mit Standard-Konfiguration antwortet der Server Fremden mit 403) und ein Build für amd64 + arm64.
+- **Image:** `ghcr.io/twostone/meal-planner:<version>` und `:latest`, Tag = Version aus `config.yaml`. Das Paket ist beim
+  ersten Push privat. Provenance und SBOM sind aus (KISS).
+- **Actions nur mit vollem Commit-SHA pinnen** (Kommentar mit der Version), Dependabot aktualisiert sie wöchentlich.
+  Rechte in den Workflows so klein wie möglich lassen (`packages: write` nur im Job `publish`).
+- **Noch nicht umgestellt:** In `config.yaml` steht bewusst kein `image:`, Home Assistant baut weiter lokal. Umstellen
+  erst, wenn (1) das Paket öffentlich ist oder in HA Zugangsdaten für `ghcr.io` hinterlegt sind (klassisches Token mit
+  `read:packages`, im Store-Menü unter Registries) und (2) ein Release das Image veröffentlicht hat. Dann in `config.yaml`
+  `image: ghcr.io/twostone/meal-planner` ergänzen (Commit `feat: ...`, damit ein Release entsteht).
 
 ## Regeln beim Ändern
 
 - **Frontend-URLs immer relativ** (`api/plans`, `api/images/...`, Vite `base: "./"`), nie `/api/...`. Die App läuft unter
   einem wechselnden Ingress-Präfix.
-- **`version` in `meal-planner/config.yaml` bei jeder auslieferbaren Änderung erhöhen**, sonst zeigt HA kein Update.
+- **Die Version nicht von Hand erhöhen:** sie kommt aus dem Release-PR (siehe „CI und Releases“). Ohne Commit mit `feat`/`fix`/`perf`
+  gibt es keinen Release und HA zeigt kein Update.
 - **Datenbank nur über Migrationen ändern:** in `src/db.ts` einen Eintrag an `MIGRATIONS` **anhängen**, nie ändern oder
   umsortieren (`PRAGMA user_version` zählt sie). Neue Migrationen mit einem Test gegen eine Datenbank im alten Stand.
-- **Add-on-Build:** Kein `build.yaml`, kein `BUILD_FROM` (beides gilt seit Supervisor 2026.04 nicht mehr). Es gibt kein
-  vorgebautes Image (`image` fehlt in `config.yaml` absichtlich, HA baut lokal).
+- **Add-on-Build:** Kein `build.yaml`, kein `BUILD_FROM` (beides gilt seit Supervisor 2026.04 nicht mehr). Das Dockerfile ist
+  zweistufig: Das Frontend wird auf der Architektur des Builders gebaut (`--platform=$BUILDPLATFORM`, sonst dauert arm64 unter
+  Emulation sehr lange), die Laufzeit-Stufe je Zielarchitektur. Das braucht BuildKit (bei HA und in der CI gegeben).
 - `node:sqlite` ist unter Node 22 noch experimentell. Der gesamte DB-Zugriff bleibt in `src/db.ts` und `src/repo.ts`,
   damit ein Wechsel (z. B. `better-sqlite3`) klein bleibt.
 - **TypeScript 6 ist gepinnt**, weil `svelte-check` TypeScript 7 noch nicht unterstützt. Erst umstellen, wenn es geht.
@@ -117,7 +149,7 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen.
 ## Bewusst nicht gebaut (nur auf ausdrücklichen Wunsch)
 
 Einkaufsliste/Zutaten, Anbindung an HA-Todo/Kalender, Tageszuordnung, Drag-and-Drop, OAuth, Instagram-oEmbed,
-Bildverkleinerung, vorgebautes Image über GitHub Actions.
+Bildverkleinerung, Image-Signatur/SBOM, Renovate/Dependabot für npm (TypeScript ist bewusst gepinnt).
 
 ## Stand und offene Punkte
 
@@ -128,8 +160,14 @@ Bildverkleinerung, vorgebautes Image über GitHub Actions.
   und nicht gegen Instagram. Seiten hinter Cloudflare oder Login liefern keinen Titel (dann trägt der Nutzer ihn ein).
   Das Add-on-Protokoll zeigt pro Abruf eine Zeile `[preview] <host> title=… image=… reason=…` (nur der Host, nie die URL).
 - Ob HA-Ingress die `X-Remote-User-*`-Header wirklich liefert, ist gegen die Doku, aber nicht am echten System geprüft.
+- **CI und Release-Automatik sind noch nie in GitHub gelaufen.** Lokal geprüft: Workflow-Schema, Release-Please-Konfiguration
+  gegen dessen Schema, der Versions-Updater für `config.yaml` und die Dockerfile-Schritte samt Smoke-Test ohne Container.
+  Der echte Docker-Build und der Image-Push laufen zum ersten Mal in GitHub.
+- Voraussetzung im Repository: Einstellungen → Actions → General → „Allow GitHub Actions to create and approve pull requests“.
+- Offen: Sichtbarkeit des Pakets `ghcr.io/twostone/meal-planner` (öffentlich = Quellcode im Image sichtbar; privat = Zugangsdaten in HA)
+  und damit die Umstellung auf `image:`.
 - Kein Dunkelmodus (HA-Theme dunkel, App bleibt hell).
 
 ## Git
 
-Kurze deutsche Commit-Nachrichten, das „Warum“ zuerst. Kein Force-Push auf `main`.
+Conventional Commits mit deutschem Text (siehe „CI und Releases“), das „Warum“ zuerst. Kein Force-Push auf `main`.
