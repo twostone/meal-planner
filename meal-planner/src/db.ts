@@ -45,6 +45,13 @@ const MIGRATIONS = [
   SCHEMA_V1,
   // v2: preview image of a dish (file name in the image store, see images.ts)
   "ALTER TABLE dish ADD COLUMN image TEXT",
+  // v3: free-form tags per dish (no tag table: the list of tags is simply the distinct values in use)
+  `CREATE TABLE dish_tag (
+    dish_id INTEGER NOT NULL REFERENCES dish(id) ON DELETE CASCADE,
+    tag TEXT NOT NULL COLLATE NOCASE CHECK (length(trim(tag)) > 0),
+    PRIMARY KEY (dish_id, tag)
+  ) STRICT;
+  CREATE INDEX dish_tag_tag ON dish_tag(tag);`,
 ];
 
 function migrate(db: DatabaseSync): void {

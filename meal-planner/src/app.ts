@@ -30,8 +30,17 @@ const optional = <T extends z.ZodType<string>>(s: T) =>
 // Only names produced by the image store (content hash + extension) are accepted, never paths.
 const image = z.string().regex(IMAGE_NAME);
 
-const dishBody = z.object({ title, url: optional(url), note: optional(note), image: optional(image) });
-const dishPatch = z.object({ title: title.optional(), url: optional(url), note: optional(note), image: optional(image) });
+// Free-form categories. Duplicates (any case) are merged by the repo, so only size limits are checked here.
+const tags = z.array(z.string().trim().min(1).max(30)).max(10);
+
+const dishBody = z.object({ title, url: optional(url), note: optional(note), image: optional(image), tags: tags.optional() });
+const dishPatch = z.object({
+  title: title.optional(),
+  url: optional(url),
+  note: optional(note),
+  image: optional(image),
+  tags: tags.optional(),
+});
 const planBody = z
   .object({ start_date: date, end_date: date })
   .refine((v) => v.end_date >= v.start_date, { message: "end_date before start_date", path: ["end_date"] });
