@@ -12,7 +12,15 @@ export type Dish = {
 };
 type DishRow = Omit<Dish, "tags">;
 export type Plan = { id: number; start_date: string; end_date: string; created_at: string };
-export type Entry = { id: number; plan_id: number; dish_id: number; position: number; done: boolean; dish: Dish };
+export type Entry = {
+  id: number;
+  plan_id: number;
+  dish_id: number;
+  position: number;
+  done: boolean;
+  note: string | null; // only for this dish in this plan
+  dish: Dish;
+};
 
 export type DishInput = {
   title: string;
@@ -65,7 +73,7 @@ export function createRepo(db: DatabaseSync) {
 
   function getEntry(id: number): Entry {
     const r = one<any>(
-      `SELECT e.id, e.plan_id, e.dish_id, e.position, e.done FROM plan_entry e WHERE e.id = ?`,
+      `SELECT e.id, e.plan_id, e.dish_id, e.position, e.done, e.note FROM plan_entry e WHERE e.id = ?`,
       id,
     );
     if (!r) throw new NotFoundError("entry");
@@ -161,7 +169,7 @@ export function createRepo(db: DatabaseSync) {
       const p = one<Plan>("SELECT * FROM plan WHERE id = ?", id);
       if (!p) throw new NotFoundError("plan");
       const rows = all<any>(
-        `SELECT e.id, e.plan_id, e.dish_id, e.position, e.done,
+        `SELECT e.id, e.plan_id, e.dish_id, e.position, e.done, e.note,
                 d.title AS d_title, d.url AS d_url, d.note AS d_note, d.image AS d_image, d.created_at AS d_created
          FROM plan_entry e JOIN dish d ON d.id = e.dish_id
          WHERE e.plan_id = ? ORDER BY e.position`,
@@ -174,6 +182,7 @@ export function createRepo(db: DatabaseSync) {
         dish_id: r.dish_id,
         position: r.position,
         done: !!r.done,
+        note: r.note,
         dish: {
           id: r.dish_id,
           title: r.d_title,
@@ -228,10 +237,11 @@ export function createRepo(db: DatabaseSync) {
       });
     },
 
-    updateEntry(id: number, patch: { done?: boolean; position?: number }): Entry {
+    updateEntry(id: number, patch: { done?: boolean; position?: number; note?: string | null }): Entry {
       return transaction(db, () => {
         const cur = getEntry(id);
         if (patch.done !== undefined) db.prepare("UPDATE plan_entry SET done = ? WHERE id = ?").run(patch.done ? 1 : 0, id);
+        if (patch.note !== undefined) db.prepare("UPDATE plan_entry SET note = ? WHERE id = ?").run(patch.note, id);
         if (patch.position !== undefined) {
           const ids = all<{ id: number }>("SELECT id FROM plan_entry WHERE plan_id = ? ORDER BY position", cur.plan_id).map((r) => r.id);
           ids.splice(ids.indexOf(id), 1);

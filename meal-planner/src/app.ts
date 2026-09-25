@@ -23,9 +23,9 @@ const note = z.string().trim().max(1000);
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((v) => !Number.isNaN(Date.parse(v)), "invalid date");
 const id = z.coerce.number().int().positive();
 
-// Empty string clears the optional field.
+// Empty string clears the optional field. The "" branch must come first: a plain z.string() would accept "" itself.
 const optional = <T extends z.ZodType<string>>(s: T) =>
-  z.union([s, z.literal("").transform(() => null), z.null()]).optional();
+  z.union([z.literal("").transform(() => null), s, z.null()]).optional();
 
 // Only names produced by the image store (content hash + extension) are accepted, never paths.
 const image = z.string().regex(IMAGE_NAME);
@@ -45,7 +45,12 @@ const planBody = z
   .object({ start_date: date, end_date: date })
   .refine((v) => v.end_date >= v.start_date, { message: "end_date before start_date", path: ["end_date"] });
 const entryBody = z.union([z.object({ dish_id: id }), dishBody]);
-const entryPatch = z.object({ done: z.boolean().optional(), position: z.number().int().min(0).optional() });
+// note: only for this entry (dish in one plan); "" or null clears it
+const entryPatch = z.object({
+  done: z.boolean().optional(),
+  position: z.number().int().min(0).optional(),
+  note: optional(note),
+});
 
 export type AppOptions = {
   // If set, only connections from this IP are served. HA ingress always connects from
