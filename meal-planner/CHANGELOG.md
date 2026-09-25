@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/twostone/meal-planner/compare/v0.2.1...v0.3.0) (2026-09-25)
+
+
+### Neu
+
+* **config:** set image ([1ed33ae](https://github.com/twostone/meal-planner/commit/1ed33aef62e71f495847f7187ed6374ea7ce7731))
+
 ## [0.2.1](https://github.com/twostone/meal-planner/compare/v0.2.0...v0.2.1) (2026-09-25)
 
 
