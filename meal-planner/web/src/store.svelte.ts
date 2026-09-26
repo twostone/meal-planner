@@ -60,7 +60,32 @@ export async function init() {
   app.ready = true;
 }
 
-export const closeSheet = () => void (app.sheet = { kind: "none" });
+// Back button: an open sheet owns one history entry, so "back" (Android button or gesture) closes the sheet
+// instead of leaving the app for the previous Home Assistant page. The app runs in an iframe, where the
+// iframe's entries share the tab's history, so the entry is popped first. The URL is not changed.
+let sheetEntry = false;
+
+function pushSheetEntry() {
+  if (sheetEntry) return;
+  history.pushState({ sheet: true }, "");
+  sheetEntry = true;
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("popstate", () => {
+    if (!sheetEntry) return;
+    sheetEntry = false; // the entry is already gone, so closing must not go back again
+    app.sheet = { kind: "none" };
+  });
+}
+
+export function closeSheet() {
+  app.sheet = { kind: "none" };
+  if (sheetEntry) {
+    sheetEntry = false;
+    history.back(); // remove our entry; the resulting popstate finds nothing left to do
+  }
+}
 export const dismissError = () => void (app.error = "");
 
 export function openDishSheet(opts: {
@@ -72,6 +97,7 @@ export function openDishSheet(opts: {
   tags?: string[];
 }) {
   app.error = "";
+  pushSheetEntry();
   app.sheet = {
     kind: "dish",
     dishId: opts.dishId ?? null,
@@ -83,11 +109,13 @@ export function openDishSheet(opts: {
 
 export function openEntryNote(entryId: number) {
   app.error = "";
+  pushSheetEntry();
   app.sheet = { kind: "entryNote", entryId };
 }
 
 export function openPeriods() {
   app.error = "";
+  pushSheetEntry();
   app.sheet = { kind: "periods" };
 }
 
