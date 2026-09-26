@@ -58,10 +58,15 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
 - Ein Gericht kann pro Zeitraum nur einmal vorkommen. Der Titel ist im Katalog eindeutig (ohne Groß-/Kleinschreibung).
   Ein Eintrag per Titel legt das Gericht an oder verwendet ein vorhandenes wieder. Löschen eines Gerichts, das noch
   in einer Liste steht, ist absichtlich gesperrt (409).
-- **Zwei Notizen, bewusst getrennt:** `dish.note` gilt für das Gericht überall (nur im Bearbeiten-Blatt sichtbar),
-  `plan_entry.note` nur für dieses Gericht in genau dieser Liste (Button pro Zeile, Anzeige unter dem Titel, auf zwei
-  Zeilen gekürzt). Die Listen-Notiz wird nicht in andere Listen übernommen und verschwindet mit dem Eintrag. Setzen/Löschen
-  per `PATCH /api/entries/:id` (`note`: Text, `""` oder `null` löscht, fehlt = unverändert).
+- **Zwei Notizen, bewusst getrennt:** `dish.note` gilt für das Gericht überall (im Bearbeiten-Blatt, dort „Notiz zum
+  Gericht (gilt überall)“), `plan_entry.note` nur für dieses Gericht in genau dieser Liste. Die Listen-Notiz hat ein eigenes
+  Feld „Notiz für diese Liste“ im Bearbeiten-Blatt (nur wenn das Blatt aus der Liste geöffnet wurde, nicht aus dem Katalog)
+  und steht in der Liste unter dem Titel, auf zwei Zeilen gekürzt. Sie wird nicht in andere Listen übernommen und
+  verschwindet mit dem Eintrag. Setzen/Löschen per `PATCH /api/entries/:id` (`note`: Text, `""` oder `null` löscht, fehlt =
+  unverändert); das Blatt schickt das nur, wenn sich die Notiz geändert hat.
+- **Zeilen in der Liste bleiben schlank** (auf 360 px Breite ist es sonst zu eng): Checkbox, Vorschaubild, Titel mit Notiz und
+  Kategorien darunter, am Ende nur ein Link-Symbol ohne Domainnamen. Keine weiteren Buttons in der Zeile, Bearbeiten läuft
+  über Tippen auf den Titel. Lange Wörter im Titel brechen um (`overflow-wrap: anywhere`).
 - **Kategorien** sind frei wählbare Tags pro Gericht (höchstens 10, je höchstens 30 Zeichen). Es gibt keine Tag-Tabelle: Die
   Liste der Kategorien ist die Menge der verwendeten Werte, eine Kategorie verschwindet mit ihrem letzten Gericht. Groß-/
   Kleinschreibung ist egal, die zuerst verwendete Schreibweise gilt (`setTags` in `repo.ts`). Ein Update ersetzt die Tags,
@@ -161,7 +166,7 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
 - Sheets nutzen das native `<dialog>`. Kein `alert()`/`confirm()` (in der HA-Companion-App unzuverlässig), stattdessen
   zweistufige Bestätigung im UI.
 - **Zurück-Taste:** Ein offenes Blatt belegt einen History-Eintrag (`pushSheetEntry`/`closeSheet` in `store.svelte.ts`), damit
-  „Zurück“ das Blatt schließt statt die App zu verlassen. Blätter nur über `openDishSheet`/`openEntryNote`/`openPeriods` öffnen
+  „Zurück“ das Blatt schließt statt die App zu verlassen. Blätter nur über `openDishSheet`/`openPeriods` öffnen
   und über `closeSheet` schließen, nie `app.sheet` direkt setzen. Getestet im Browser mit der App in einem iframe, in der
   HA-Companion-App auf dem Handy noch nicht.
 - **APIs und Schnittstellen vor der Nutzung gegen die aktuelle Dokumentation prüfen** (HA-Add-on-Konfiguration, Hono,
