@@ -3,7 +3,6 @@
   import CatalogView from "./CatalogView.svelte";
   import { fmtRange } from "./dates";
   import DishSheet from "./DishSheet.svelte";
-  import EntryNoteSheet from "./EntryNoteSheet.svelte";
   import Icon from "./Icon.svelte";
   import ListView from "./ListView.svelte";
   import PeriodSheet from "./PeriodSheet.svelte";
@@ -59,8 +58,6 @@
 
   {#if app.sheet.kind === "dish"}
     <DishSheet sheet={app.sheet} />
-  {:else if app.sheet.kind === "entryNote"}
-    <EntryNoteSheet sheet={app.sheet} />
   {:else if app.sheet.kind === "periods"}
     <PeriodSheet />
   {/if}

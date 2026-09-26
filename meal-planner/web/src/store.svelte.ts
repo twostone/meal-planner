@@ -11,7 +11,6 @@ export type SheetState =
       addToPlan: boolean; // create mode: also put the new dish into the current plan
       prefill: { title: string; url: string; tags: string[] };
     }
-  | { kind: "entryNote"; entryId: number }
   | { kind: "periods" };
 
 export const app = $state({
@@ -107,12 +106,6 @@ export function openDishSheet(opts: {
   };
 }
 
-export function openEntryNote(entryId: number) {
-  app.error = "";
-  pushSheetEntry();
-  app.sheet = { kind: "entryNote", entryId };
-}
-
 export function openPeriods() {
   app.error = "";
   pushSheetEntry();
@@ -168,13 +161,6 @@ export async function toggleDone(entry: Entry) {
   if (!ok) entry.done = !next;
 }
 
-export const saveEntryNote = (entryId: number, note: string | null) =>
-  guard(async () => {
-    await api.setEntryNote(entryId, note);
-    if (app.plan) await loadPlan(app.plan.id);
-    closeSheet();
-  });
-
 export const removeEntry = (id: number) =>
   guard(async () => {
     await api.deleteEntry(id);
@@ -182,13 +168,20 @@ export const removeEntry = (id: number) =>
     closeSheet();
   });
 
-export const saveDish = (dishId: number | null, input: DishInput, addToPlan: boolean) =>
+// entry: the list note, when the sheet was opened from a list entry and the note changed.
+export const saveDish = (
+  dishId: number | null,
+  input: DishInput,
+  addToPlan: boolean,
+  entry?: { id: number; note: string | null },
+) =>
   guard(async () => {
     if (dishId === null) {
       const d = await api.createDish(input);
       if (addToPlan && app.plan) await api.addEntry(app.plan.id, { dish_id: d.id });
     } else {
       await api.updateDish(dishId, input);
+      if (entry) await api.setEntryNote(entry.id, entry.note);
     }
     await reload();
     closeSheet();
