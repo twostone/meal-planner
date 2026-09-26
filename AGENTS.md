@@ -160,6 +160,10 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   Die Link-Vorschau kommt bewusst ohne HTML-Parser-Bibliothek und ohne Bildverarbeitung (`sharp`) aus.
 - Sheets nutzen das native `<dialog>`. Kein `alert()`/`confirm()` (in der HA-Companion-App unzuverlässig), stattdessen
   zweistufige Bestätigung im UI.
+- **Zurück-Taste:** Ein offenes Blatt belegt einen History-Eintrag (`pushSheetEntry`/`closeSheet` in `store.svelte.ts`), damit
+  „Zurück“ das Blatt schließt statt die App zu verlassen. Blätter nur über `openDishSheet`/`openEntryNote`/`openPeriods` öffnen
+  und über `closeSheet` schließen, nie `app.sheet` direkt setzen. Getestet im Browser mit der App in einem iframe, in der
+  HA-Companion-App auf dem Handy noch nicht.
 - **APIs und Schnittstellen vor der Nutzung gegen die aktuelle Dokumentation prüfen** (HA-Add-on-Konfiguration, Hono,
   Svelte, Vite, Node). HA nennt Add-ons inzwischen „Apps“.
 - Neue Backend-Logik bekommt Tests in `test/` (`app.request(...)` mit `node:test`). Für Netzwerkcode gilt: gegen einen
