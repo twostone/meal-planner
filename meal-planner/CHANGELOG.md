@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.1](https://github.com/twostone/meal-planner/compare/v0.5.0...v0.5.1) (2026-09-26)
+
+
+### Behoben
+
+* **liste:** Zeilen entlasten, Listen-Notiz im Bearbeiten-Blatt ([#9](https://github.com/twostone/meal-planner/issues/9)) ([ab9698c](https://github.com/twostone/meal-planner/commit/ab9698c6a5614c4cc7eacf4510605db0aaa1053f))
+* **ui:** Zurück-Taste schließt ein offenes Blatt statt die App zu verlassen ([732bdba](https://github.com/twostone/meal-planner/commit/732bdba291a1a56a6d7e9ce19c1776f0efbd8f91))
+
 ## [0.5.0](https://github.com/twostone/meal-planner/compare/v0.4.0...v0.5.0) (2026-09-25)
 
 
