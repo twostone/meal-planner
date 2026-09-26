@@ -11,6 +11,7 @@
   // The sheet is mounted fresh on every open, so the initial values are all we need.
   const start = untrack(() => {
     const d = sheet.dishId !== null ? app.dishes.find((x) => x.id === sheet.dishId) : undefined;
+    const e = sheet.entryId !== null ? app.plan?.entries.find((x) => x.id === sheet.entryId) : undefined;
     return {
       dishId: sheet.dishId,
       entryId: sheet.entryId,
@@ -20,6 +21,7 @@
       note: d?.note ?? "",
       image: d?.image ?? null,
       tags: d?.tags ?? sheet.prefill.tags,
+      entryNote: e?.note ?? "", // the note of the list entry (only when opened from a list)
     };
   });
 
@@ -28,6 +30,7 @@
   let note = $state(start.note);
   let image = $state<string | null>(start.image);
   let tags = $state<string[]>(start.tags);
+  let entryNote = $state(start.entryNote);
   let newTag = $state("");
   let problem = $state("");
   let confirmDelete = $state(false);
@@ -110,10 +113,12 @@
     addNewTag(); // a tag typed but not confirmed yet must not get lost
     problem = "";
     busy = true;
+    const listNote = entryNote.trim();
     await saveDish(
       start.dishId,
       { title: title.trim(), url: u || null, note: note.trim() || null, image, tags },
       start.addToPlan,
+      start.entryId !== null && listNote !== start.entryNote.trim() ? { id: start.entryId, note: listNote || null } : undefined,
     );
     busy = false;
   }
@@ -128,6 +133,13 @@
       Titel
       <input type="text" bind:value={title} autocomplete="off" />
     </label>
+    {#if start.entryId !== null}
+      <label>
+        Notiz für diese Liste
+        <textarea rows="2" maxlength="1000" bind:value={entryNote} placeholder="z. B. doppelte Portion, ohne Käse"></textarea>
+        <small class="field-hint">Gilt nur für diesen Eintrag in dieser Liste.</small>
+      </label>
+    {/if}
     <label>
       Link (optional)
       <input
@@ -150,7 +162,7 @@
       <button type="button" class="btn ghost-danger" onclick={() => (image = null)}>Bild entfernen</button>
     {/if}
     <label>
-      Notiz (optional)
+      {start.entryId !== null ? "Notiz zum Gericht (gilt überall)" : "Notiz (optional)"}
       <input type="text" bind:value={note} autocomplete="off" />
     </label>
     <fieldset class="tags">
