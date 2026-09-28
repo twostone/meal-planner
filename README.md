@@ -35,6 +35,12 @@ liegen im Datenspeicher der App (`/data`) und sind in Home-Assistant-Backups ent
 Sobald eine neue Version veröffentlicht ist, zeigt der App-Store ein Update an. Was sich geändert hat, steht in
 [`meal-planner/CHANGELOG.md`](meal-planner/CHANGELOG.md).
 
+## Home Assistant Dashboard
+
+Die aktuelle Liste lässt sich zusätzlich im Home-Assistant-Dashboard anzeigen (Entitäten + Lovelace-Karte) und für
+Automatisierungen nutzen (Events bei neuer Liste/neuem Eintrag): siehe
+[twostone/ha-meal-planner](https://github.com/twostone/ha-meal-planner), per HACS installierbar.
+
 ## Datenschutz und Sicherheit
 
 - Die App ist nur über Home-Assistant-Ingress erreichbar. Der Server nimmt ausschließlich Verbindungen von Supervisor
