@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0](https://github.com/twostone/meal-planner/compare/v0.5.1...v0.6.0) (2026-09-28)
+
+
+### Neu
+
+* **ha:** Add-on pusht aktuelle Liste per Webhook an Home Assistant ([e81cdc5](https://github.com/twostone/meal-planner/commit/e81cdc506c7160194add1fbe2c41154a3a661fcc))
+* **vorschau:** mehrere Titel-Vorschläge aus Link-Captions ([#10](https://github.com/twostone/meal-planner/issues/10)) ([4da551c](https://github.com/twostone/meal-planner/commit/4da551c407b3efe92dd08a54885f9d79ec37d084))
+
 ## [0.5.1](https://github.com/twostone/meal-planner/compare/v0.5.0...v0.5.1) (2026-09-26)
 
 
