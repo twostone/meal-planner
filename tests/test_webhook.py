@@ -2,7 +2,6 @@
 
 import pytest
 from homeassistant.components.frontend import DATA_EXTRA_MODULE_URL
-from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.meal_planner.const import DOMAIN, EVENT_ENTRY_ADDED, EVENT_PLAN_CREATED
@@ -32,11 +31,11 @@ SAMPLE_PLAN = {
 
 @pytest.fixture
 async def config_entry(hass):
-    # async_setup_entry registers a static path on hass.http (needs the http component) and an
-    # extra JS module on the frontend's registry. Loading the real "frontend" component here
-    # would need the separate, heavy home-assistant-frontend PyPI package just for its data key
-    # to exist, so the registry set is seeded directly instead.
-    await async_setup_component(hass, "http", {})
+    # async_setup_entry registers a static path on hass.http; "http" is a declared dependency
+    # (manifest.json), so hass.config_entries.async_setup below loads it automatically. It also
+    # registers an extra JS module on the frontend's registry, but loading the real "frontend"
+    # component would need the separate, heavy home-assistant-frontend PyPI package just for its
+    # data key to exist, so that registry set is seeded directly instead.
     hass.data.setdefault(DATA_EXTRA_MODULE_URL, set())
     entry = MockConfigEntry(domain=DOMAIN, data={"webhook_id": WEBHOOK_ID})
     entry.add_to_hass(hass)

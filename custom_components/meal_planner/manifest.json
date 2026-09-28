@@ -2,7 +2,7 @@
   "domain": "meal_planner",
   "name": "Meal Planner",
   "config_flow": true,
-  "dependencies": ["webhook"],
+  "dependencies": ["http", "webhook"],
   "iot_class": "local_push",
   "codeowners": ["@twostone"],
   "documentation": "https://github.com/twostone/ha-meal-planner",
