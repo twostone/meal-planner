@@ -208,9 +208,12 @@ Kategorien umbenennen/zusammenführen, Mehrfachauswahl im Kategorie-Filter.
   festgehalten.
 - Voraussetzung im Repository (gesetzt): Einstellungen → Actions → General → „Allow GitHub Actions to create and approve pull requests“.
 - Kein Dunkelmodus (HA-Theme dunkel, App bleibt hell).
-- Die HA-Integration + Lovelace-Karte, die `ha-notify.ts` konsumiert, lebt in einem eigenen Repository (nicht hier) und
+- Die HA-Integration + Lovelace-Karte, die `ha-notify.ts` konsumiert, lebt in
+  [twostone/ha-meal-planner](https://github.com/twostone/ha-meal-planner) (eigenes Repo, per HACS installierbar) und
   ist nicht von diesem Repo/dieser CI abgedeckt. Der Webhook-Push selbst (`ha-notify.ts`) ist nur hier getestet, gegen
-  einen lokalen Test-Server, nicht gegen eine echte Home-Assistant-Instanz.
+  einen lokalen Test-Server; die Integration ist gegen `pytest-homeassistant-custom-component` getestet, aber noch
+  nicht gegen eine echte Home-Assistant-Instanz durchgespielt. Die Lovelace-Karte zeigt bewusst keine Bilder (die
+  Vorschaubilder liegen hinter der Ingress-only-API des Add-ons, für das HA-Frontend unerreichbar).
 
 ## Git und Pull Requests
 
