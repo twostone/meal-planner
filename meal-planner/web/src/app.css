@@ -669,3 +669,44 @@ fieldset.tags legend {
   flex: 1;
   min-width: 0;
 }
+
+/* title suggestions from a link */
+fieldset.suggestions {
+  margin: 0;
+  padding: 0;
+  border: none;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+fieldset.suggestions legend {
+  padding: 0;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.suggestion {
+  min-height: 44px;
+  padding: 8px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--field);
+  background: var(--surface);
+  text-align: left;
+  font-size: 15px;
+  font-weight: 500;
+}
+.suggestion span {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.suggestion[aria-pressed="true"] {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+  font-weight: 600;
+}

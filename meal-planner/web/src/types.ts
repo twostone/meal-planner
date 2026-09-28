@@ -26,4 +26,4 @@ export type Entry = {
 };
 export type PlanDetail = { id: number; start_date: string; end_date: string; created_at: string; entries: Entry[] };
 export type DishInput = { title: string; url: string | null; note: string | null; image: string | null; tags: string[] };
-export type Preview = { title: string | null; image: string | null; reason: string | null };
+export type Preview = { title: string | null; image: string | null; titleSuggestions: string[]; reason: string | null };

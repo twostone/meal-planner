@@ -168,3 +168,34 @@ test("preview service: honours the page's charset (ISO-8859-1 umlauts)", async (
     await done();
   }
 });
+
+test("preview service: a caption title yields short candidates plus the original; a recipe name stays alone", async () => {
+  const { store, done } = await tmpStore();
+  try {
+    // Instagram-style: quotes and line breaks arrive as entities inside the attribute
+    const caption = await service(
+      { "https://example.com/c": html('<meta property="og:title" content="Kim auf Instagram: &quot;Schnelles Curry 🍛&#10;&#10;Zutaten&quot;">') },
+      store,
+    )("https://example.com/c");
+    assert.equal(caption.title, 'Kim auf Instagram: "Schnelles Curry 🍛 Zutaten"');
+    assert.deepEqual(caption.titleSuggestions, ["Schnelles Curry", 'Kim auf Instagram: "Schnelles Curry 🍛 Zutaten"']);
+
+    const recipe = await service(
+      {
+        "https://example.com/r": html(
+          `<meta property="og:title" content="Käsespätzle&#10;Rezept"><script type="application/ld+json">{"@type":"Recipe","name":"Käsespätzle"}</script>`,
+        ),
+      },
+      store,
+    )("https://example.com/r");
+    assert.deepEqual(recipe.titleSuggestions, ["Käsespätzle"]);
+
+    const plain = await service({ "https://example.com/p": html("<title>Linsensuppe</title>") }, store)("https://example.com/p");
+    assert.deepEqual(plain.titleSuggestions, ["Linsensuppe"]);
+
+    const none = await service({ "https://example.com/n": html("<title>Instagram</title>") }, store)("https://example.com/n");
+    assert.deepEqual(none.titleSuggestions, []);
+  } finally {
+    await done();
+  }
+});
