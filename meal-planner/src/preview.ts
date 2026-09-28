@@ -1,9 +1,16 @@
 import type { ImageStore } from "./images.ts";
 import { FetchError, type FetchFailure } from "./net-guard.ts";
 import { fetchLimited, type Fetched } from "./safe-fetch.ts";
+import { suggestTitles } from "./title-suggest.ts";
 
 export type Parsed = { title: string | null; imageUrl: string | null };
-export type PreviewResult = { title: string | null; image: string | null; reason: FetchFailure | "no_metadata" | null };
+// titleSuggestions: best first, the page's own title always among them (empty when there is no title).
+export type PreviewResult = {
+  title: string | null;
+  image: string | null;
+  titleSuggestions: string[];
+  reason: FetchFailure | "no_metadata" | null;
+};
 
 const NAMED: Record<string, string> = {
   amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ",
@@ -108,9 +115,15 @@ function resolveImage(raw: string | null | undefined, base: URL): string | null 
   }
 }
 
+// The page's own title stays a candidate, whatever else is derived from it.
+function withOriginal(candidates: string[], original: string): string[] {
+  return candidates.some((c) => c.toLowerCase() === original.toLowerCase()) ? candidates : [...candidates, original];
+}
+
 // Title: the schema.org recipe name is the cleanest source (no "| Site" suffix), then og:title, then <title>.
+// Only the fallback can be a long social-media caption; for that one, shorter candidates are derived as well.
 // Image: og:image first (usually a landscape photo), then the recipe image.
-export function parsePreview(html: string, base: URL): Parsed {
+function analyze(html: string, base: URL): Parsed & { titleSuggestions: string[] } {
   const meta = new Map<string, string>();
   for (const m of html.matchAll(META_TAG)) {
     const a = attrs(m[0]);
@@ -123,7 +136,13 @@ export function parsePreview(html: string, base: URL): Parsed {
   const site = meta.get("og:site_name");
   const fallback = meta.get("og:title") ?? meta.get("twitter:title") ?? pageTitle ?? null;
 
-  const title = cleanTitle(recipeName) ?? cleanTitle(fallback === null ? null : stripSiteName(fallback, site));
+  const recipeTitle = cleanTitle(recipeName);
+  const title = recipeTitle ?? cleanTitle(fallback === null ? null : stripSiteName(fallback, site));
+  const titleSuggestions = !title
+    ? []
+    : recipeTitle
+      ? [recipeTitle]
+      : withOriginal(suggestTitles(decodeEntities(fallback ?? "")), title);
   const imageUrl = resolveImage(
     meta.get("og:image") ??
       meta.get("og:image:secure_url") ??
@@ -132,6 +151,11 @@ export function parsePreview(html: string, base: URL): Parsed {
       firstImage(recipe?.image),
     base,
   );
+  return { title, imageUrl, titleSuggestions };
+}
+
+export function parsePreview(html: string, base: URL): Parsed {
+  const { title, imageUrl } = analyze(html, base);
   return { title, imageUrl };
 }
 
@@ -152,7 +176,7 @@ export const MAX_IMAGE_BYTES = 3_000_000;
 
 type Deps = { images: ImageStore; fetcher?: typeof fetchLimited; log?: (line: string) => void };
 
-// Never throws: a preview is a convenience, so every failure becomes { title: null, image: null, reason }.
+// Never throws: a preview is a convenience, so every failure becomes { title: null, image: null, titleSuggestions: [], reason }.
 export function createPreviewService({ images, fetcher = fetchLimited, log = console.log }: Deps) {
   return async function preview(rawUrl: string): Promise<PreviewResult> {
     const host = (() => {
@@ -173,11 +197,11 @@ export function createPreviewService({ images, fetcher = fetchLimited, log = con
     try {
       page = await fetcher(rawUrl, { maxBytes: MAX_PAGE_BYTES, accept: HTML_ACCEPT });
     } catch (e) {
-      return { title: null, image: null, reason: e instanceof FetchError ? e.reason : "network" };
+      return { title: null, image: null, titleSuggestions: [], reason: e instanceof FetchError ? e.reason : "network" };
     }
-    if (!/html|xml/.test(page.contentType)) return { title: null, image: null, reason: "type" };
+    if (!/html|xml/.test(page.contentType)) return { title: null, image: null, titleSuggestions: [], reason: "type" };
 
-    const parsed = parsePreview(decodeBody(page), page.url);
+    const parsed = analyze(decodeBody(page), page.url);
     let image: string | null = null;
     if (parsed.imageUrl) {
       try {
@@ -187,7 +211,7 @@ export function createPreviewService({ images, fetcher = fetchLimited, log = con
         // title alone is still useful
       }
     }
-    return { title: parsed.title, image, reason: parsed.title || image ? null : "no_metadata" };
+    return { title: parsed.title, image, titleSuggestions: parsed.titleSuggestions, reason: parsed.title || image ? null : "no_metadata" };
   }
 }
 
