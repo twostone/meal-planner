@@ -37,6 +37,7 @@
   let busy = $state(false);
   let loading = $state(false);
   let hint = $state("");
+  let suggestions = $state<string[]>([]); // title candidates from the link, best first
 
   const creating = start.dishId === null;
 
@@ -80,10 +81,13 @@
     lastUrl = u;
     loading = true;
     hint = "";
+    suggestions = [];
     try {
       const r = await api.previewUrl(u);
       if (!alive) return;
-      if (r.title && !title.trim()) title = r.title; // never overwrite what the user typed
+      suggestions = r.titleSuggestions;
+      const best = r.titleSuggestions[0] ?? r.title;
+      if (best && !title.trim()) title = best; // never overwrite what the user typed
       if (r.image) image = r.image;
       hint = r.title || r.image ? "" : "Keine Vorschau verfügbar. Titel bitte selbst eintragen.";
     } catch {
@@ -133,6 +137,14 @@
       Titel
       <input type="text" bind:value={title} autocomplete="off" />
     </label>
+    {#if suggestions.length > 1}
+      <fieldset class="suggestions">
+        <legend>Vorschläge vom Link</legend>
+        {#each suggestions as s (s)}
+          <button type="button" class="suggestion" aria-pressed={title === s} onclick={() => (title = s)}><span>{s}</span></button>
+        {/each}
+      </fieldset>
+    {/if}
     {#if start.entryId !== null}
       <label>
         Notiz für diese Liste
