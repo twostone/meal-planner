@@ -1,0 +1,20 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "description": "Diese URL in die Add-on-Option „Home Assistant Webhook URL“ (`ha_webhook_url`) eintragen:\n\n`{webhook_url}`\n\nDanach hier bestätigen.",
+        "data": {}
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Es kann nur eine Meal-Planner-Integration eingerichtet werden."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "current_list": { "name": "Aktuelle Liste" },
+      "open_count": { "name": "Offen" },
+      "done_count": { "name": "Erledigt" }
+    }
+  }
+}

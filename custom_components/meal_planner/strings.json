@@ -1,0 +1,20 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "description": "Paste this URL into the meal-planner add-on's \"Home Assistant Webhook URL\" option (`ha_webhook_url`):\n\n`{webhook_url}`\n\nSubmit once you've saved it there.",
+        "data": {}
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Only one Meal Planner integration can be set up."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "current_list": { "name": "Current list" },
+      "open_count": { "name": "Open count" },
+      "done_count": { "name": "Done count" }
+    }
+  }
+}
