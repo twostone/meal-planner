@@ -1,7 +1,8 @@
 # Two stages. The frontend is built once on the builder's own architecture (BUILDPLATFORM): the result is static
 # files, identical for every target, and building it under QEMU emulation for arm64 would only be slow.
 # The runtime stage is built per target architecture. Plain Node image instead of the HA base image: no
-# s6/bashio needed (the app has no options), and Node >= 22.13 is guaranteed, which node:sqlite needs.
+# s6/bashio needed (the one option, ha_webhook_url, is read straight from /data/options.json in server.ts;
+# not worth pulling in bashio for a single string field), and Node >= 22.13 is guaranteed, which node:sqlite needs.
 
 FROM --platform=$BUILDPLATFORM node:22-alpine AS web
 WORKDIR /app

@@ -29,6 +29,7 @@ meal-planner/            das Add-on (Docker-Build-Kontext)
     safe-fetch.ts          der einzige Weg, fremde URLs abzurufen
     preview.ts             Titel und Bild aus HTML (og:-Tags, schema.org-Rezept)
     images.ts              Bildspeicher (/data/images, Dateiname = Hash)
+    ha-notify.ts            Push der aktuellen Liste an Home Assistant (Webhook)
   web/                   Frontend: Svelte 5 + Vite (Runes, TypeScript)
   test/                  Tests (node:test)
 ```
@@ -96,6 +97,15 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   Metadaten. Vor einem Einbau am echten Gerät testen und die Bedingungen erneut lesen.
 - **Keine externen Anfragen aus dem Browser:** Schriften sind lokal eingebunden (`@fontsource-variable`), Bilder kommen
   vom eigenen Server. Extern ruft nur der Server ab, und nur Links, die der Nutzer eingegeben hat.
+- **Home-Assistant-Push (`ha-notify.ts`):** Für eine begleitende HA-Integration/Lovelace-Karte (separates Repo, per HACS
+  installierbar) pusht das Add-on die aktuelle Liste per Webhook. Option `ha_webhook_url` in `config.yaml` (leer = aus).
+  Nach jeder Änderung der aktuellen Liste (Liste anlegen/löschen, Eintrag anlegen/ändern/löschen) und einmal beim Start
+  wird ein voller Snapshot der *aktuellen* Liste gepusht (`repo.getCurrentPlan()`, spiegelt `pickInitial` im Frontend,
+  siehe `store.svelte.ts`). Nur `POST /api/plans` und `POST /api/plans/:id/entries` tragen zusätzlich ein Event
+  (`plan_created`/`entry_added`), aus dem die HA-Integration Bus-Events feuert; alle anderen Pushes tragen `event: null`
+  und aktualisieren dort nur still den Anzeigezustand. `POST/PATCH/DELETE /api/dishes/:id` lösen bewusst **keinen** Push
+  aus (Katalog-Änderung, nicht Listen-Änderung) – eine spätere Listen-Mutation holt den Stand nach. Push ist
+  Fire-and-forget wie `sweep()`: ein Fehler wird geloggt und blockiert nie die auslösende Anfrage.
 
 ## Sicherheit
 
@@ -109,6 +119,10 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   Größenlimit nach dem Entpacken (gegen Zip-Bomben). Nicht lockern.
 - `allowPrivate` in `fetchLimited` ist **nur für Tests** (lokaler Testserver auf 127.0.0.1). Nie im Produktivcode setzen,
   nie über eine Umgebungsvariable oder Konfiguration erreichbar machen.
+- **`ha-notify.ts` ist bewusst die eine Ausnahme von der SSRF-Regel oben:** Es nutzt einfaches `fetch`, nicht
+  `fetchLimited`. Das Ziel (Home Assistant) ist admin-konfiguriert (`ha_webhook_url` aus `/data/options.json`), kein
+  Nutzer-Input, und liegt erwartungsgemäß selbst im Heimnetz – genau die Adressen, die `net-guard.ts` für Rezept-Links
+  zu Recht sperrt. Diese beiden Pfade nicht vermischen.
 - Änderungen an `net-guard.ts` mit Vorsicht: Node prüft IPv4-Adressen als IPv4-gemappte IPv6-Adressen, eine Regel für
   `::ffff:0:0/96` würde daher **jede** IPv4-Adresse sperren (der Test `isPublicIp` fängt das).
 - Bildnamen kommen nur aus dem Bildspeicher (Hash + Endung, geprüft per `IMAGE_NAME`), nie Pfade vom Client.
@@ -194,6 +208,9 @@ Kategorien umbenennen/zusammenführen, Mehrfachauswahl im Kategorie-Filter.
   festgehalten.
 - Voraussetzung im Repository (gesetzt): Einstellungen → Actions → General → „Allow GitHub Actions to create and approve pull requests“.
 - Kein Dunkelmodus (HA-Theme dunkel, App bleibt hell).
+- Die HA-Integration + Lovelace-Karte, die `ha-notify.ts` konsumiert, lebt in einem eigenen Repository (nicht hier) und
+  ist nicht von diesem Repo/dieser CI abgedeckt. Der Webhook-Push selbst (`ha-notify.ts`) ist nur hier getestet, gegen
+  einen lokalen Test-Server, nicht gegen eine echte Home-Assistant-Instanz.
 
 ## Git und Pull Requests
 

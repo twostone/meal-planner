@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { zValidator } from "@hono/zod-validator";
 import * as z from "zod";
+import type { HaEvent } from "./ha-notify.ts";
 import { IMAGE_NAME, type ImageStore } from "./images.ts";
 import type { PreviewResult } from "./preview.ts";
 import { ConflictError, NotFoundError, type Repo } from "./repo.ts";
@@ -60,6 +61,9 @@ export type AppOptions = {
   // Both are optional so the API can run (and be tested) without link previews.
   images?: ImageStore;
   preview?: (url: string) => Promise<PreviewResult>;
+  // Pushes the current plan to Home Assistant after a mutation (see ha-notify.ts). Optional so
+  // the API runs without it when no HA webhook is configured.
+  notify?: (event: HaEvent) => Promise<void>;
 };
 
 const MAX_PARALLEL_PREVIEWS = 4;
@@ -73,6 +77,10 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
   };
   const imageMissing = async (name: string | null | undefined) =>
     !!name && !(await opts.images?.exists(name));
+  // Fire and forget, like sweep(): a failed/slow push to HA must never delay or fail the request.
+  const notifyHa = (event: HaEvent) => {
+    if (opts.notify) void opts.notify(event).catch(() => {});
+  };
 
   if (opts.allowedIp) {
     app.use("*", async (c, next) => {
@@ -161,23 +169,33 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
   }
 
   app.get("/api/plans", (c) => c.json(repo.listPlans()));
-  app.post("/api/plans", zValidator("json", planBody), (c) => c.json(repo.createPlan(c.req.valid("json")), 201));
+  app.post("/api/plans", zValidator("json", planBody), (c) => {
+    const plan = repo.createPlan(c.req.valid("json"));
+    notifyHa("plan_created");
+    return c.json(plan, 201);
+  });
   app.get("/api/plans/:id", zValidator("param", z.object({ id })), (c) => c.json(repo.getPlan(c.req.valid("param").id)));
   app.delete("/api/plans/:id", zValidator("param", z.object({ id })), (c) => {
     repo.deletePlan(c.req.valid("param").id);
+    notifyHa(null);
     return c.body(null, 204);
   });
 
   app.post("/api/plans/:id/entries", zValidator("param", z.object({ id })), zValidator("json", entryBody), async (c) => {
     const body = c.req.valid("json");
     if ("image" in body && (await imageMissing(body.image))) return c.json({ error: "unknown image" }, 400);
-    return c.json(repo.addEntry(c.req.valid("param").id, body as any), 201);
+    const entry = repo.addEntry(c.req.valid("param").id, body as any);
+    notifyHa("entry_added");
+    return c.json(entry, 201);
   });
-  app.patch("/api/entries/:id", zValidator("param", z.object({ id })), zValidator("json", entryPatch), (c) =>
-    c.json(repo.updateEntry(c.req.valid("param").id, c.req.valid("json"))),
-  );
+  app.patch("/api/entries/:id", zValidator("param", z.object({ id })), zValidator("json", entryPatch), (c) => {
+    const entry = repo.updateEntry(c.req.valid("param").id, c.req.valid("json"));
+    notifyHa(null);
+    return c.json(entry);
+  });
   app.delete("/api/entries/:id", zValidator("param", z.object({ id })), (c) => {
     repo.deleteEntry(c.req.valid("param").id);
+    notifyHa(null);
     return c.body(null, 204);
   });
 
