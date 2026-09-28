@@ -1,5 +1,9 @@
 # Essensplanung – Home-Assistant-App
 
+[![CI](https://github.com/twostone/meal-planner/actions/workflows/ci.yml/badge.svg)](https://github.com/twostone/meal-planner/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/twostone/meal-planner.svg)](https://github.com/twostone/meal-planner/releases)
+[![License](https://img.shields.io/github/license/twostone/meal-planner.svg)](LICENSE)
+
 Eine kleine App für die wöchentliche Essensplanung im Haushalt. Sie läuft als App (früher „Add-on“) direkt in Home
 Assistant, erscheint in der Seitenleiste und braucht keine eigene Anmeldung: Wer Home Assistant nutzen darf, sieht
 dieselbe Liste.
