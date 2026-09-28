@@ -1,11 +1,11 @@
 {
   "domain": "meal_planner",
   "name": "Meal Planner",
+  "codeowners": ["@twostone"],
   "config_flow": true,
   "dependencies": ["http", "webhook"],
-  "iot_class": "local_push",
-  "codeowners": ["@twostone"],
   "documentation": "https://github.com/twostone/ha-meal-planner",
+  "iot_class": "local_push",
   "issue_tracker": "https://github.com/twostone/ha-meal-planner/issues",
   "requirements": [],
   "version": "0.1.0"
