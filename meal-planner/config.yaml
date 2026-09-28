@@ -16,3 +16,9 @@ panel_icon: mdi:silverware-fork-knife
 panel_title: Essensplanung
 # Default is admin-only; the whole household should see it.
 panel_admin: false
+# Empty = disabled. Pushes the current list to a Home Assistant webhook (see src/ha-notify.ts)
+# after every change, for the companion "Meal Planner" HA integration/Lovelace card.
+options:
+  ha_webhook_url: ""
+schema:
+  ha_webhook_url: "str"

@@ -200,6 +200,18 @@ export function createRepo(db: DatabaseSync) {
       if (db.prepare("DELETE FROM plan WHERE id = ?").run(id).changes === 0) throw new NotFoundError("plan");
     },
 
+    // Mirrors the frontend's pickInitial (web/src/store.svelte.ts): the plan containing today,
+    // else the next upcoming one, else the newest. There is no stored "current" concept (by
+    // design), so callers that need one server-side (the HA push) re-derive it the same way.
+    getCurrentPlan(): (Plan & { entries: Entry[] }) | null {
+      const plans = self.listPlans(); // start_date DESC
+      if (!plans.length) return null;
+      const today = new Date().toISOString().slice(0, 10);
+      const current = plans.find((p) => p.start_date <= today && today <= p.end_date);
+      const upcoming = plans.filter((p) => p.start_date > today).sort((a, b) => a.start_date.localeCompare(b.start_date))[0];
+      return self.getPlan((current ?? upcoming ?? plans[0]!).id);
+    },
+
     // Adds a dish to a plan. Either an existing dish_id, or a title (reuses a
     // dish with the same title, case-insensitive, otherwise creates it).
     addEntry(
