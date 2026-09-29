@@ -1,15 +1,18 @@
-// Read-only Lovelace card for the Meal Planner integration. Renders
-// sensor.meal_planner_current_list's attributes (start_date, end_date, entries[]). No write-back
-// to the add-on: this integration only ever receives webhook pushes, it never calls back in
-// (see the add-on's AGENTS.md / ha-notify.ts) — so there is nothing here to click that changes
-// anything. Intentionally no images: entry.image is only a filename the add-on serves behind its
+// Read-only Lovelace card for the Meal Planner integration. Renders the attributes (start_date,
+// end_date, entries[]) of sensor.meal_planner_current_list and, below it, sensor.meal_planner_next_list.
+// No write-back to the add-on: this integration only ever reads its state, it never writes back
+// (see the add-on's AGENTS.md) — so there is nothing here to click that changes anything. Intentionally no images: entry.image is only a filename the add-on serves behind its
 // Ingress-only API, which this card (served from HA core's own frontend) cannot reach without a
 // Supervisor-side ingress session this integration has no access to. Title/note/tags/done only.
 
 class MealPlannerCard extends HTMLElement {
   setConfig(config) {
     if (!config) throw new Error("Invalid configuration");
-    this._config = { entity: "sensor.meal_planner_current_list", ...config };
+    this._config = {
+      entity: "sensor.meal_planner_current_list",
+      next_entity: "sensor.meal_planner_next_list",
+      ...config,
+    };
   }
 
   set hass(hass) {
@@ -56,18 +59,28 @@ class MealPlannerCard extends HTMLElement {
       return;
     }
     const { start_date, end_date, entries } = state.attributes;
-    if (!Array.isArray(entries) || entries.length === 0) {
-      content.innerHTML = `<h2>Essensplanung</h2><div class="empty">Keine aktuelle Liste.</div>`;
-      return;
+    let html = `<h2>Essensplanung</h2>`;
+    if (!start_date) {
+      html += `<div class="empty">Keine aktuelle Liste.</div>`;
+    } else {
+      const list = Array.isArray(entries) ? entries : [];
+      const open = list.filter((e) => !e.done);
+      const done = list.filter((e) => e.done);
+      html += `<div class="range">${escapeHtml(start_date)} – ${escapeHtml(end_date)}</div>`;
+      if (!list.length) html += `<div class="empty">Noch keine Gerichte.</div>`;
+      if (open.length) html += `<div class="group-title">Offen</div>${renderList(open)}`;
+      if (done.length) html += `<div class="group-title">Gekocht</div>${renderList(done)}`;
     }
-    const open = entries.filter((e) => !e.done);
-    const done = entries.filter((e) => e.done);
-    content.innerHTML = `
-      <h2>Essensplanung</h2>
-      <div class="range">${escapeHtml(start_date)} – ${escapeHtml(end_date)}</div>
-      ${open.length ? `<div class="group-title">Offen</div>${renderList(open)}` : ""}
-      ${done.length ? `<div class="group-title">Gekocht</div>${renderList(done)}` : ""}
-    `;
+    // The next list is optional: hidden when its entity is missing or there is none.
+    const next = this._hass.states[this._config.next_entity];
+    if (next && next.attributes.start_date) {
+      const { start_date: ns, end_date: ne, entries: nextEntries } = next.attributes;
+      html += `<div class="group-title">Nächste Liste · ${escapeHtml(ns)} – ${escapeHtml(ne)}</div>`;
+      html += Array.isArray(nextEntries) && nextEntries.length
+        ? renderList(nextEntries)
+        : `<div class="empty">Noch keine Gerichte.</div>`;
+    }
+    content.innerHTML = html;
   }
 }
 
@@ -105,5 +118,5 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: "meal-planner-card",
   name: "Meal Planner",
-  description: "Zeigt die aktuelle Essensplanungs-Liste an (nur Anzeige, keine Bearbeitung).",
+  description: "Zeigt die aktuelle und die nächste Essensplanungs-Liste an (nur Anzeige, keine Bearbeitung).",
 });

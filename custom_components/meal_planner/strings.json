@@ -2,19 +2,47 @@
   "config": {
     "step": {
       "user": {
-        "description": "Paste this URL into the meal-planner add-on's \"Home Assistant Webhook URL\" option (`ha_webhook_url`):\n\n`{webhook_url}`\n\nSubmit once you've saved it there.",
-        "data": {}
+        "description": "The token is in the add-on's `/data/ha-token` file. Normally the add-on is discovered automatically.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "token": "Token"
+        }
+      },
+      "hassio_confirm": {
+        "description": "The Meal Planner add-on was discovered. Set it up?"
+      },
+      "reauth_confirm": {
+        "description": "The add-on rejected the token. Enter the new one (contents of `/data/ha-token`).",
+        "data": {
+          "token": "Token"
+        }
       }
     },
+    "error": {
+      "cannot_connect": "Cannot reach the add-on.",
+      "invalid_auth": "The token is invalid."
+    },
     "abort": {
-      "single_instance_allowed": "Only one Meal Planner integration can be set up."
+      "single_instance_allowed": "Only one Meal Planner integration can be set up.",
+      "already_configured": "Meal Planner is already set up.",
+      "reauth_successful": "The token was updated."
     }
   },
   "entity": {
     "sensor": {
-      "current_list": { "name": "Current list" },
-      "open_count": { "name": "Open count" },
-      "done_count": { "name": "Done count" }
+      "current_list": {
+        "name": "Current list"
+      },
+      "next_list": {
+        "name": "Next list"
+      },
+      "open_count": {
+        "name": "Open count"
+      },
+      "done_count": {
+        "name": "Done count"
+      }
     }
   }
 }
