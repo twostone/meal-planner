@@ -42,7 +42,11 @@ class MealPlannerCard extends HTMLElement {
 
   _render() {
     if (!this._hass) return;
-    const state = this._config.demo ? DEMO.current : this._hass.states[this._config.entity];
+    // `demo` may end up saved in the config (added from the picker before the sensors existed), so it
+    // only applies while the entity is actually missing; real data always wins.
+    const live = this._hass.states[this._config.entity];
+    const demo = this._config.demo && !live;
+    const state = demo ? DEMO.current : live;
     if (!this._root) {
       this.attachShadow({ mode: "open" });
       this._root = this.shadowRoot;
@@ -89,7 +93,7 @@ class MealPlannerCard extends HTMLElement {
       if (done.length && this._config.show_done) html += `<div class="group-title">Gekocht</div>${renderList(done)}`;
     }
     // The next list is optional: hidden when its entity is missing or there is none.
-    const next = this._config.demo ? DEMO.next : this._hass.states[this._config.next_entity];
+    const next = demo ? DEMO.next : this._hass.states[this._config.next_entity];
     if (this._config.show_next && next && next.attributes.start_date) {
       const { start_date: ns, end_date: ne, entries: nextEntries } = next.attributes;
       html += `<div class="group-title">Nächste Liste · ${escapeHtml(ns)} – ${escapeHtml(ne)}</div>`;
