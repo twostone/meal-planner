@@ -1,11 +1,11 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { zValidator } from "@hono/zod-validator";
 import * as z from "zod";
-import type { HaEvent } from "./ha-notify.ts";
+import type { HaEventInput, HaUser } from "./ha-notify.ts";
 import { IMAGE_NAME, type ImageStore } from "./images.ts";
 import type { PreviewResult } from "./preview.ts";
-import { ConflictError, NotFoundError, type Repo } from "./repo.ts";
+import { ConflictError, NotFoundError, type Entry, type Repo } from "./repo.ts";
 
 const title = z.string().trim().min(1).max(200);
 // Only http(s): links are rendered as <a href>, so javascript: etc. must never get in.
@@ -61,9 +61,9 @@ export type AppOptions = {
   // Both are optional so the API can run (and be tested) without link previews.
   images?: ImageStore;
   preview?: (url: string) => Promise<PreviewResult>;
-  // Pushes the current plan to Home Assistant after a mutation (see ha-notify.ts). Optional so
-  // the API runs without it when no HA webhook is configured.
-  notify?: (event: HaEvent) => Promise<void>;
+  // Fires a Home Assistant bus event after a mutation (see ha-notify.ts). Optional so the API
+  // runs without it outside the add-on.
+  notify?: (event: HaEventInput) => Promise<void>;
 };
 
 const MAX_PARALLEL_PREVIEWS = 4;
@@ -77,9 +77,14 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
   };
   const imageMissing = async (name: string | null | undefined) =>
     !!name && !(await opts.images?.exists(name));
-  // Fire and forget, like sweep(): a failed/slow push to HA must never delay or fail the request.
-  const notifyHa = (event: HaEvent) => {
+  // Fire and forget, like sweep(): a failed/slow event to HA must never delay or fail the request.
+  const notifyHa = (event: HaEventInput) => {
     if (opts.notify) void opts.notify(event).catch(() => {});
+  };
+  const entryEvent = (type: "entry_added" | "entry_removed" | "entry_done" | "entry_undone", e: Entry, user: HaUser | null) => {
+    if (!opts.notify) return;
+    const { id, start_date, end_date } = repo.getPlan(e.plan_id);
+    notifyHa({ type, plan: { id, start_date, end_date }, entry: { id: e.id, dish_id: e.dish_id, title: e.dish.title }, user });
   };
 
   if (opts.allowedIp) {
@@ -103,19 +108,19 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
   });
 
   // HA ingress passes the logged-in HA user in these headers (Supervisor PR #4152).
-  // Purely informational: the list is shared, so nothing depends on it.
-  app.get("/api/me", (c) => {
-    const uid = c.req.header("X-Remote-User-Id");
-    return c.json({
-      user: uid
-        ? {
-            id: uid,
-            name: c.req.header("X-Remote-User-Name") ?? null,
-            display_name: c.req.header("X-Remote-User-Display-Name") ?? null,
-          }
-        : null,
-    });
-  });
+  // Purely informational: the list is shared, so nothing depends on it. Trustworthy only because
+  // the Ingress guard above lets nobody else in.
+  const haUser = (c: Context): HaUser | null => {
+    const id = c.req.header("X-Remote-User-Id");
+    return id
+      ? {
+          id,
+          name: c.req.header("X-Remote-User-Name") ?? null,
+          display_name: c.req.header("X-Remote-User-Display-Name") ?? null,
+        }
+      : null;
+  };
+  app.get("/api/me", (c) => c.json({ user: haUser(c) }));
 
   app.get("/api/dishes", (c) => c.json(repo.listDishes(c.req.query("q"))));
   app.post("/api/dishes", zValidator("json", dishBody), async (c) => {
@@ -171,13 +176,12 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
   app.get("/api/plans", (c) => c.json(repo.listPlans()));
   app.post("/api/plans", zValidator("json", planBody), (c) => {
     const plan = repo.createPlan(c.req.valid("json"));
-    notifyHa("plan_created");
+    notifyHa({ type: "plan_created", plan: { id: plan.id, start_date: plan.start_date, end_date: plan.end_date }, user: haUser(c) });
     return c.json(plan, 201);
   });
   app.get("/api/plans/:id", zValidator("param", z.object({ id })), (c) => c.json(repo.getPlan(c.req.valid("param").id)));
   app.delete("/api/plans/:id", zValidator("param", z.object({ id })), (c) => {
     repo.deletePlan(c.req.valid("param").id);
-    notifyHa(null);
     return c.body(null, 204);
   });
 
@@ -185,17 +189,20 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
     const body = c.req.valid("json");
     if ("image" in body && (await imageMissing(body.image))) return c.json({ error: "unknown image" }, 400);
     const entry = repo.addEntry(c.req.valid("param").id, body as any);
-    notifyHa("entry_added");
+    entryEvent("entry_added", entry, haUser(c));
     return c.json(entry, 201);
   });
   app.patch("/api/entries/:id", zValidator("param", z.object({ id })), zValidator("json", entryPatch), (c) => {
-    const entry = repo.updateEntry(c.req.valid("param").id, c.req.valid("json"));
-    notifyHa(null);
+    const id = c.req.valid("param").id;
+    const before = repo.getEntry(id);
+    const entry = repo.updateEntry(id, c.req.valid("json"));
+    if (entry.done !== before.done) entryEvent(entry.done ? "entry_done" : "entry_undone", entry, haUser(c));
     return c.json(entry);
   });
   app.delete("/api/entries/:id", zValidator("param", z.object({ id })), (c) => {
-    repo.deleteEntry(c.req.valid("param").id);
-    notifyHa(null);
+    const before = repo.getEntry(c.req.valid("param").id);
+    repo.deleteEntry(before.id);
+    entryEvent("entry_removed", before, haUser(c));
     return c.body(null, 204);
   });
 

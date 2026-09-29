@@ -106,6 +106,7 @@ export function createRepo(db: DatabaseSync) {
     },
 
     getDish,
+    getEntry,
 
     createDish(input: DishInput): Dish {
       return transaction(db, () => insertDish(input));
@@ -200,16 +201,21 @@ export function createRepo(db: DatabaseSync) {
       if (db.prepare("DELETE FROM plan WHERE id = ?").run(id).changes === 0) throw new NotFoundError("plan");
     },
 
-    // Mirrors the frontend's pickInitial (web/src/store.svelte.ts): the plan containing today,
-    // else the next upcoming one, else the newest. There is no stored "current" concept (by
-    // design), so callers that need one server-side (the HA push) re-derive it the same way.
-    getCurrentPlan(): (Plan & { entries: Entry[] }) | null {
-      const plans = self.listPlans(); // start_date DESC
-      if (!plans.length) return null;
-      const today = new Date().toISOString().slice(0, 10);
-      const current = plans.find((p) => p.start_date <= today && today <= p.end_date);
-      const upcoming = plans.filter((p) => p.start_date > today).sort((a, b) => a.start_date.localeCompare(b.start_date))[0];
-      return self.getPlan((current ?? upcoming ?? plans[0]!).id);
+    // The plan containing `today` (YYYY-MM-DD), else null. Unlike the frontend's pickInitial there is no
+    // fallback: in a gap between plans nothing is "current" (used for the Home Assistant state).
+    getPlanOn(today: string): (Plan & { entries: Entry[] }) | null {
+      const p = one<Plan>(
+        "SELECT * FROM plan WHERE start_date <= ? AND ? <= end_date ORDER BY start_date DESC, id DESC LIMIT 1",
+        today,
+        today,
+      );
+      return p ? self.getPlan(p.id) : null;
+    },
+
+    // The earliest plan starting after `today`, else null.
+    getNextPlan(today: string): (Plan & { entries: Entry[] }) | null {
+      const p = one<Plan>("SELECT * FROM plan WHERE start_date > ? ORDER BY start_date, id LIMIT 1", today);
+      return p ? self.getPlan(p.id) : null;
     },
 
     // Adds a dish to a plan. Either an existing dish_id, or a title (reuses a
