@@ -1,3 +1,16 @@
+[project]
+name = "ha-meal-planner"
+version = "0.0.0"  # Platzhalter, Release-Version steht in manifest.json
+requires-python = ">=3.13"
+dependencies = []
+
+[dependency-groups]
+test = ["pytest-homeassistant-custom-component"]
+
+[tool.uv]
+package = false
+default-groups = ["test"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 pythonpath = ["."]
