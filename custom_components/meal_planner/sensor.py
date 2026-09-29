@@ -47,11 +47,11 @@ class _MealPlannerSensor(CoordinatorEntity[MealPlannerCoordinator], SensorEntity
         self._attr_unique_id = f"{entry.entry_id}_{key}"
         # Ingress path of the add-on UI, only known when set up through discovery (manual setup has no slug).
         slug = entry.data.get(CONF_SLUG)
-        self._app_url = f"/hassio/ingress/{slug}" if slug else None
+        self._app_url = f"/{slug}" if slug else None
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name="Meal Planner",
-            configuration_url=f"homeassistant://hassio/ingress/{slug}" if slug else None,
+            configuration_url=f"homeassistant://{slug}" if slug else None,
         )
 
     @property

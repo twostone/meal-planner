@@ -40,9 +40,9 @@ async def test_app_link_comes_from_the_discovered_slug(hass, aioclient_mock):
     entry.add_to_hass(hass)
     await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
-    assert hass.states.get("sensor.meal_planner_current_list").attributes["app_url"] == "/hassio/ingress/abc_meal_planner"
+    assert hass.states.get("sensor.meal_planner_current_list").attributes["app_url"] == "/abc_meal_planner"
     device = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, entry.entry_id)})
-    assert device.configuration_url == "homeassistant://hassio/ingress/abc_meal_planner"
+    assert device.configuration_url == "homeassistant://abc_meal_planner"
 
 
 async def test_no_app_link_without_slug(hass, aioclient_mock):
