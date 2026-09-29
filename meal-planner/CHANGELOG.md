@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.7.0](https://github.com/twostone/meal-planner/compare/v0.6.0...v0.7.0) (2026-09-29)
+
+
+### ⚠ BREAKING CHANGES
+
+* **ha:** Die Option ha_webhook_url entfällt. Die Integration muss auf die Version mit Discovery und Abruf umgestellt werden.
+
+### Neu
+
+* **app:** Favicon aus dem App-Icon einbauen ([ed51fb1](https://github.com/twostone/meal-planner/commit/ed51fb1d3254add8266e6181677a1d6c1aa56c70))
+* **app:** icon.png für den Add-on-Store ergänzen ([804edff](https://github.com/twostone/meal-planner/commit/804edffd4c91f6f3514cbb18ef01779b2fccaf03))
+* **ha:** Abruf per Token-Port, Events über den Supervisor, Discovery ([de69b67](https://github.com/twostone/meal-planner/commit/de69b67eb66abed58d98dad449f43345badf5ef2))
+
 ## [0.6.0](https://github.com/twostone/meal-planner/compare/v0.5.1...v0.6.0) (2026-09-28)
 
 
