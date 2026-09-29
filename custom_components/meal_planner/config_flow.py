@@ -16,7 +16,7 @@ from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResu
 from homeassistant.helpers.service_info.hassio import HassioServiceInfo
 
 from .api import CannotConnect, InvalidAuth, async_fetch_state
-from .const import CONF_HOST, CONF_PORT, CONF_TOKEN, DEFAULT_PORT, DOMAIN
+from .const import CONF_HOST, CONF_PORT, CONF_SLUG, CONF_TOKEN, DEFAULT_PORT, DOMAIN
 
 TITLE = "Meal Planner"
 
@@ -64,7 +64,12 @@ class MealPlannerConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_hassio(self, discovery_info: HassioServiceInfo) -> ConfigFlowResult:
         """The add-on announced itself through the Supervisor."""
         config = discovery_info.config
-        data = {CONF_HOST: config[CONF_HOST], CONF_PORT: config[CONF_PORT], CONF_TOKEN: config[CONF_TOKEN]}
+        data = {
+            CONF_HOST: config[CONF_HOST],
+            CONF_PORT: config[CONF_PORT],
+            CONF_TOKEN: config[CONF_TOKEN],
+            CONF_SLUG: discovery_info.slug,
+        }
 
         # Already set up (also by hand): keep the entry, follow the add-on's current address and token.
         if entries := self._async_current_entries(include_ignore=False):

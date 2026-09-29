@@ -3,10 +3,11 @@
 from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntryState
+from homeassistant.helpers import device_registry as dr
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
-from custom_components.meal_planner.const import EVENT_PREFIX, EVENT_TYPES, UPDATE_INTERVAL
+from custom_components.meal_planner.const import DOMAIN, EVENT_PREFIX, EVENT_TYPES, UPDATE_INTERVAL
 
 from .conftest import CURRENT, NEXT, STATE, STATE_URL, make_entry
 
@@ -31,6 +32,23 @@ async def test_sensors_show_current_and_next_list(hass, aioclient_mock):
     assert nxt.attributes["entries"] == NEXT["entries"]
     assert hass.states.get("sensor.meal_planner_open_count").state == "1"
     assert hass.states.get("sensor.meal_planner_done_count").state == "1"
+
+
+async def test_app_link_comes_from_the_discovered_slug(hass, aioclient_mock):
+    aioclient_mock.get(STATE_URL, json=STATE)
+    entry = make_entry(slug="abc_meal_planner")
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.states.get("sensor.meal_planner_current_list").attributes["app_url"] == "/hassio/ingress/abc_meal_planner"
+    device = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, entry.entry_id)})
+    assert device.configuration_url == "homeassistant://hassio/ingress/abc_meal_planner"
+
+
+async def test_no_app_link_without_slug(hass, aioclient_mock):
+    entry = await _setup(hass, aioclient_mock)
+    assert "app_url" not in hass.states.get("sensor.meal_planner_current_list").attributes
+    assert dr.async_get(hass).async_get_device(identifiers={(DOMAIN, entry.entry_id)}).configuration_url is None
 
 
 async def test_no_lists_is_a_neutral_state(hass, aioclient_mock):

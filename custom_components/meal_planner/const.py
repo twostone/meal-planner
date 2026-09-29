@@ -10,6 +10,7 @@ PLATFORMS = ["sensor"]
 CONF_HOST = "host"
 CONF_PORT = "port"
 CONF_TOKEN = "token"
+CONF_SLUG = "slug"  # add-on slug from Supervisor discovery, builds the Ingress path (optional)
 DEFAULT_PORT = 8100
 
 # Safety net only: the add-on fires a bus event on every relevant change, which triggers an
