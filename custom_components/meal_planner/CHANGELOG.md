@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/twostone/ha-meal-planner/compare/v1.2.0...v1.2.1) (2026-09-29)
+
+
+### Bug Fixes
+
+* Sidebar-Pfad /&lt;slug&gt; statt /hassio/ingress/&lt;slug&gt; ([#12](https://github.com/twostone/ha-meal-planner/issues/12)) ([59cda32](https://github.com/twostone/ha-meal-planner/commit/59cda327891144eee0c45e5f83ff43b68c307f28))
+
 ## [1.2.0](https://github.com/twostone/ha-meal-planner/compare/v1.1.0...v1.2.0) (2026-09-29)
 
 
