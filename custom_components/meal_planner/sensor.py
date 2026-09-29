@@ -16,7 +16,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import MealPlannerConfigEntry
-from .const import DOMAIN
+from .const import CONF_SLUG, DOMAIN
 from .coordinator import MealPlannerCoordinator
 
 
@@ -45,7 +45,14 @@ class _MealPlannerSensor(CoordinatorEntity[MealPlannerCoordinator], SensorEntity
         super().__init__(coordinator)
         self._attr_translation_key = key
         self._attr_unique_id = f"{entry.entry_id}_{key}"
-        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, entry.entry_id)}, name="Meal Planner")
+        # Ingress path of the add-on UI, only known when set up through discovery (manual setup has no slug).
+        slug = entry.data.get(CONF_SLUG)
+        self._app_url = f"/hassio/ingress/{slug}" if slug else None
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id)},
+            name="Meal Planner",
+            configuration_url=f"homeassistant://hassio/ingress/{slug}" if slug else None,
+        )
 
     @property
     def _plan(self) -> dict[str, Any] | None:
@@ -55,14 +62,14 @@ class _MealPlannerSensor(CoordinatorEntity[MealPlannerCoordinator], SensorEntity
 class _ListSensor(_MealPlannerSensor):
     """A list as attributes. `entries` can be long, so it is kept out of the recorder database."""
 
-    _unrecorded_attributes = frozenset({"entries"})
+    _unrecorded_attributes = frozenset({"entries", "app_url"})
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        plan = self._plan
-        if not plan:
-            return {}
-        return {"start_date": plan["start_date"], "end_date": plan["end_date"], "entries": plan["entries"]}
+        attrs: dict[str, Any] = {"app_url": self._app_url} if self._app_url else {}
+        if plan := self._plan:
+            attrs |= {"start_date": plan["start_date"], "end_date": plan["end_date"], "entries": plan["entries"]}
+        return attrs
 
 
 class CurrentListSensor(_ListSensor):

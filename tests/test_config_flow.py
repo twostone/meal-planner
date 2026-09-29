@@ -32,7 +32,7 @@ async def test_discovery_confirm_creates_entry(hass: HomeAssistant, aioclient_mo
     done = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     assert done["type"] == "create_entry"
     assert done["title"] == "Meal Planner"
-    assert done["data"] == DATA  # only host, port, token: the add-on name is not stored
+    assert done["data"] == {**DATA, "slug": "essensplanung"}  # the add-on name is not stored
     assert done["result"].unique_id == "uuid-1"
     assert aioclient_mock.mock_calls[0][3]["Authorization"] == f"Bearer {TOKEN}"
 
@@ -56,6 +56,7 @@ async def test_discovery_again_updates_the_existing_entry(hass: HomeAssistant, a
     assert result["type"] == "abort"
     assert result["reason"] == "already_configured"
     assert entry.data[CONF_TOKEN] == "rotated"
+    assert entry.data["slug"] == "essensplanung"
     assert entry.unique_id == "uuid-2"  # a reinstalled add-on gets a new discovery uuid
 
 

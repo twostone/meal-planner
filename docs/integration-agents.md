@@ -19,7 +19,9 @@ und liefert eine Lovelace-Karte mit aus. Grundsatz wie im Add-on-Repo: **KISS un
   statt `fetchLimited`) stehen in dessen [`AGENTS.md`](https://github.com/twostone/meal-planner/blob/main/AGENTS.md).
 - **Einrichtung per Supervisor-Discovery:** Das Add-on meldet `{host, port, token}` unter dem Dienstnamen
   `meal_planner` (= Domain dieser Integration, das ist Voraussetzung: Core startet den Flow mit `service` als
-  Handler). `async_step_hassio` fragt nur nach Bestätigung. Gibt es schon einen Eintrag (auch einen manuell
+  Handler). `async_step_hassio` fragt nur nach Bestätigung und speichert zusätzlich `discovery_info.slug` (Slug der App, nicht Teil
+  der Add-on-Payload): daraus entsteht der Ingress-Pfad `/hassio/ingress/<slug>` als Sensor-Attribut `app_url` (für den
+  „App öffnen“-Link der Karte) und als `configuration_url` (`homeassistant://hassio/ingress/<slug>`) des Geräts. Gibt es schon einen Eintrag (auch einen manuell
   angelegten), wird er aktualisiert (Host, Port, Token, `unique_id` = neue Discovery-UUID) statt einen zweiten
   anzulegen; `reload_even_if_entry_is_unchanged=False`, weil die Meldung bei jedem Start des Add-ons kommt.
   Fallback: Schritt `user` mit Host, Port, Token und Verbindungstest. Ein abgelehntes Token (401) startet Reauth.

@@ -77,7 +77,12 @@ next_entity: sensor.meal_planner_next_list   # optional, das ist der Standard
 title: Essensplanung                          # optional
 show_next: true                               # optional: nächste Liste anzeigen
 show_done: true                               # optional: gekochte Gerichte anzeigen
+app_url: /hassio/ingress/<slug>               # optional: überschreibt den automatischen Link
 ```
+
+Die Karte zeigt oben rechts „App öffnen ↗“ zur Oberfläche der App. Der Link kommt automatisch aus der
+Einrichtung per Discovery (auch als „Besuchen“-Link am Gerät); bei manueller Einrichtung gibt es ihn nur,
+wenn `app_url` gesetzt ist.
 
 Die Karte lässt sich auch ohne YAML im Dashboard-Editor konfigurieren; im „Karte hinzufügen“-Dialog
 erscheint sie mit Vorschau (mit Beispieldaten, solange die Sensoren noch fehlen).
