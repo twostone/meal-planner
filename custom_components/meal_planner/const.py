@@ -1,13 +1,21 @@
 """Constants for the Meal Planner integration."""
 
+from datetime import timedelta
+
 DOMAIN = "meal_planner"
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 PLATFORMS = ["sensor"]
 
-# Dispatcher signal fired (per config entry) whenever a webhook push updates the stored plan.
-SIGNAL_UPDATE = f"{DOMAIN}_update"
+CONF_HOST = "host"
+CONF_PORT = "port"
+CONF_TOKEN = "token"
+DEFAULT_PORT = 8100
 
-# Bus events, fired only when the add-on's webhook payload carries that event name.
-EVENT_PLAN_CREATED = "meal_planner_plan_created"
-EVENT_ENTRY_ADDED = "meal_planner_entry_added"
+# Safety net only: the add-on fires a bus event on every relevant change, which triggers an
+# immediate refresh. The interval also covers the date rolling over at midnight and a restarted add-on.
+UPDATE_INTERVAL = timedelta(minutes=5)
+
+# Bus events fired by the add-on (through the Supervisor's Core API proxy), not by this integration.
+EVENT_TYPES = ("plan_created", "entry_added", "entry_removed", "entry_done", "entry_undone")
+EVENT_PREFIX = f"{DOMAIN}_"
