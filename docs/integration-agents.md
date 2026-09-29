@@ -30,6 +30,11 @@ und liefert eine Lovelace-Karte mit aus. Grundsatz wie im Add-on-Repo: **KISS un
   `plan_created`), `user {id, name, display_name}` oder `null`. `logbook.py` beschreibt sie
   („Anna hat „Pasta“ abgehakt“, Rückfall auf Benutzername, dann „Jemand“). Ein verlorenes Event wird nicht
   nachgeholt, der Zustand kommt beim nächsten Abruf.
+- **Karte wird als Lovelace-Resource geladen (Storage-Modus), nicht nur per `add_extra_js_url`:** Letzteres
+  lädt parallel zum Dashboard; die Companion App rendert die Karte dann teils vor der Definition von
+  `meal-planner-card` („Konfigurationsfehler“ nach jedem Neuladen, am echten System bestätigt: mit manueller
+  Resource weg). `__init__.py` legt die Resource selbst an bzw. zieht eine bestehende (auch manuelle) auf die
+  aktuelle `?v=` nach. Im YAML-Modus (Resources nutzergepflegt) bleibt `add_extra_js_url` als Rückfall.
 - **Karte ohne Bilder, bewusst:** `entry.image` ist nur ein Dateiname, den das Add-on hinter seiner
   Ingress-only-API ausliefert (`api/images/<name>`). Der Browser, der die Lovelace-Karte zeigt, läuft
   im HA-Frontend, nicht im Ingress-Iframe des Add-ons, und kann diese API nicht erreichen. Ein Weg

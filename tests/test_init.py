@@ -1,13 +1,19 @@
 """Tests for setup, the coordinator, the sensors and the event-driven refresh."""
 
 from datetime import timedelta
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
+from homeassistant.components.frontend import DATA_EXTRA_MODULE_URL
+from homeassistant.components.lovelace.const import LOVELACE_DATA, MODE_STORAGE
+from homeassistant.components.lovelace.resources import ResourceStorageCollection
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.helpers import device_registry as dr
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
-from custom_components.meal_planner.const import DOMAIN, EVENT_PREFIX, EVENT_TYPES, UPDATE_INTERVAL
+from custom_components.meal_planner import CARD_URL_PATH
+from custom_components.meal_planner.const import DOMAIN, EVENT_PREFIX, EVENT_TYPES, UPDATE_INTERVAL, VERSION
 
 from .conftest import CURRENT, NEXT, STATE, STATE_URL, make_entry
 
@@ -108,6 +114,46 @@ async def test_every_event_type_triggers_a_refresh(hass, aioclient_mock):
         async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=15))  # debouncer cooldown
         await hass.async_block_till_done()
         assert aioclient_mock.call_count >= 1, kind
+
+
+def _fake_lovelace(hass, items, mode=MODE_STORAGE):
+    resources = ResourceStorageCollection(hass, None)
+    resources.loaded = True
+    resources.data = {}
+    for item in items:
+        resources.data[item["id"]] = item
+    resources.store.async_save = AsyncMock()
+    hass.data[LOVELACE_DATA] = SimpleNamespace(resource_mode=mode, resources=resources)
+    return resources
+
+
+async def test_card_registered_as_lovelace_resource_in_storage_mode(hass, aioclient_mock):
+    resources = _fake_lovelace(hass, [])
+    await _setup(hass, aioclient_mock)
+    [item] = resources.async_items()
+    assert item["type"] == "module"
+    assert item["url"] == f"{CARD_URL_PATH}?v={VERSION}"
+    assert not hass.data[DATA_EXTRA_MODULE_URL]
+
+
+async def test_existing_resource_is_updated_not_duplicated(hass, aioclient_mock):
+    resources = _fake_lovelace(hass, [{"id": "a", "type": "js", "url": f"{CARD_URL_PATH}?v=1"}])
+    await _setup(hass, aioclient_mock)
+    [item] = resources.async_items()
+    assert item["id"] == "a"
+    assert item["type"] == "module"
+    assert item["url"] == f"{CARD_URL_PATH}?v={VERSION}"
+
+
+async def test_yaml_mode_falls_back_to_extra_module_url(hass, aioclient_mock):
+    _fake_lovelace(hass, [], mode="yaml")
+    await _setup(hass, aioclient_mock)
+    assert hass.data[DATA_EXTRA_MODULE_URL] == {f"{CARD_URL_PATH}?v={VERSION}"}
+
+
+async def test_no_lovelace_falls_back_to_extra_module_url(hass, aioclient_mock):
+    await _setup(hass, aioclient_mock)
+    assert hass.data[DATA_EXTRA_MODULE_URL] == {f"{CARD_URL_PATH}?v={VERSION}"}
 
 
 async def test_unload_and_reload_keep_working(hass, aioclient_mock):
