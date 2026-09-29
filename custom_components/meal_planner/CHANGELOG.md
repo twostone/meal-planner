@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.0](https://github.com/twostone/ha-meal-planner/compare/v1.1.0...v1.2.0) (2026-09-29)
+
+
+### Features
+
+* Link zur App-Oberfläche in Karte und Gerät ([#11](https://github.com/twostone/ha-meal-planner/issues/11)) ([8f94683](https://github.com/twostone/ha-meal-planner/commit/8f946838e224adc283279311e68b287ba9c2f73a))
+
+
+### Bug Fixes
+
+* Karte zeigt echte Daten statt Demo, wenn die Entität existiert ([#9](https://github.com/twostone/ha-meal-planner/issues/9)) ([e1d06b2](https://github.com/twostone/ha-meal-planner/commit/e1d06b21d2fa909eec67ec36abd0df1351ecfb54))
+
 ## [1.1.0](https://github.com/twostone/ha-meal-planner/compare/v1.0.0...v1.1.0) (2026-09-29)
 
 
