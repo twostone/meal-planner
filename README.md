@@ -1,5 +1,7 @@
 # Essensplanung – Home-Assistant-App
 
+<img src="meal-planner/web/public/favicon.svg" alt="Essensplanung" width="96" align="right">
+
 [![CI](https://github.com/twostone/meal-planner/actions/workflows/ci.yml/badge.svg)](https://github.com/twostone/meal-planner/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/twostone/meal-planner.svg)](https://github.com/twostone/meal-planner/releases)
 [![License](https://img.shields.io/github/license/twostone/meal-planner.svg)](LICENSE)
