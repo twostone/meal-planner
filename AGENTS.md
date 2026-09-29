@@ -20,6 +20,7 @@ release-please-config.json, .release-please-manifest.json   Release-Automatik (V
 .github/dependabot.yml   hält die festgepinnten Actions aktuell
 meal-planner/            das Add-on (Docker-Build-Kontext)
   config.yaml            Add-on-Konfiguration (Version pflegt Release Please)
+  icon.png               Icon im App-Store (128×128 PNG, aus web/public/favicon.svg erzeugt)
   CHANGELOG.md           entsteht und wächst durch Release Please, nicht von Hand ändern
   Dockerfile             zweistufig, node:22-alpine
   src/                   Backend: Hono + node:sqlite
@@ -33,6 +34,7 @@ meal-planner/            das Add-on (Docker-Build-Kontext)
     ha-notify.ts            Bus-Events an Home Assistant (über den Supervisor)
     ha-discovery.ts         Meldung von Host, Port und Token per Supervisor-Discovery
   web/                   Frontend: Svelte 5 + Vite (Runes, TypeScript)
+    public/favicon.svg     Favicon der App, Vorlage für icon.png
   test/                  Tests (node:test)
 ```
 
@@ -172,7 +174,11 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
 ## Regeln beim Ändern
 
 - **Frontend-URLs immer relativ** (`api/plans`, `api/images/...`, Vite `base: "./"`), nie `/api/...`. Die App läuft unter
-  einem wechselnden Ingress-Präfix.
+  einem wechselnden Ingress-Präfix. Ausnahme: Dateien aus `web/public/` (Favicon) werden in `index.html` mit `/name` verlinkt,
+  Vite schreibt das beim Build auf `./name` um.
+- **App-Icon:** `web/public/favicon.svg` ist die Quelle. `meal-planner/icon.png` (128×128, Dateiname von Home Assistant
+  vorgegeben) ist daraus abgeleitet und muss bei jeder Änderung am SVG neu erzeugt und mit eingecheckt werden. Ein `logo.png`
+  ist optional und bewusst nicht vorhanden.
 - **Die Version nicht von Hand erhöhen:** sie kommt aus dem Release-PR (siehe „CI und Releases“). Ohne Commit mit `feat`/`fix`/`perf`
   gibt es keinen Release und HA zeigt kein Update.
 - **Datenbank nur über Migrationen ändern:** in `src/db.ts` einen Eintrag an `MIGRATIONS` **anhängen**, nie ändern oder
