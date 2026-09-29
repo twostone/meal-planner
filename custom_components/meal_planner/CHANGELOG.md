@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.2](https://github.com/twostone/ha-meal-planner/compare/v1.2.1...v1.2.2) (2026-09-29)
+
+
+### Bug Fixes
+
+* Karte als Lovelace-Resource registrieren, damit die Companion App sie zuverlässig lädt ([#14](https://github.com/twostone/ha-meal-planner/issues/14)) ([d8ad35b](https://github.com/twostone/ha-meal-planner/commit/d8ad35b86579cde8729b82583b4a8f4dfee00471))
+
 ## [1.2.1](https://github.com/twostone/ha-meal-planner/compare/v1.2.0...v1.2.1) (2026-09-29)
 
 
