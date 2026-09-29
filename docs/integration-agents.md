@@ -62,8 +62,7 @@ tests/                pytest + pytest-homeassistant-custom-component
 ## Entwickeln und Testen
 
 ```
-python3 -m venv .venv && .venv/bin/pip install -r requirements_test.txt
-.venv/bin/python -m pytest tests -q
+uv run pytest tests -q
 ```
 
 Stolpersteine, gegen die die Tests schon mal gelaufen sind (bei Änderungen im Hinterkopf behalten):

@@ -88,8 +88,7 @@ Karte heraus) und ohne Vorschaubilder.
 ## Entwicklung
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install -r requirements_test.txt
-.venv/bin/python -m pytest tests -q
+uv run pytest tests -q
 ```
 
 Architektur und bewusste Entscheidungen stehen in [`AGENTS.md`](AGENTS.md).
