@@ -11,8 +11,24 @@ class MealPlannerCard extends HTMLElement {
     this._config = {
       entity: "sensor.meal_planner_current_list",
       next_entity: "sensor.meal_planner_next_list",
+      title: "Essensplanung",
+      show_next: true,
+      show_done: true,
       ...config,
     };
+    if (this._root) this._render();
+  }
+
+  static getConfigElement() {
+    return document.createElement("meal-planner-card-editor");
+  }
+
+  // Used by the card picker's preview. Without the integration's sensors (e.g. before setup)
+  // `demo` renders sample data instead of an error, so the preview is never empty.
+  static getStubConfig(hass) {
+    const config = { entity: "sensor.meal_planner_current_list" };
+    if (!hass?.states?.[config.entity]) config.demo = true;
+    return config;
   }
 
   set hass(hass) {
@@ -25,7 +41,8 @@ class MealPlannerCard extends HTMLElement {
   }
 
   _render() {
-    const state = this._hass.states[this._config.entity];
+    if (!this._hass) return;
+    const state = this._config.demo ? DEMO.current : this._hass.states[this._config.entity];
     if (!this._root) {
       this.attachShadow({ mode: "open" });
       this._root = this.shadowRoot;
@@ -59,7 +76,7 @@ class MealPlannerCard extends HTMLElement {
       return;
     }
     const { start_date, end_date, entries } = state.attributes;
-    let html = `<h2>Essensplanung</h2>`;
+    let html = `<h2>${escapeHtml(this._config.title)}</h2>`;
     if (!start_date) {
       html += `<div class="empty">Keine aktuelle Liste.</div>`;
     } else {
@@ -69,11 +86,11 @@ class MealPlannerCard extends HTMLElement {
       html += `<div class="range">${escapeHtml(start_date)} – ${escapeHtml(end_date)}</div>`;
       if (!list.length) html += `<div class="empty">Noch keine Gerichte.</div>`;
       if (open.length) html += `<div class="group-title">Offen</div>${renderList(open)}`;
-      if (done.length) html += `<div class="group-title">Gekocht</div>${renderList(done)}`;
+      if (done.length && this._config.show_done) html += `<div class="group-title">Gekocht</div>${renderList(done)}`;
     }
     // The next list is optional: hidden when its entity is missing or there is none.
-    const next = this._hass.states[this._config.next_entity];
-    if (next && next.attributes.start_date) {
+    const next = this._config.demo ? DEMO.next : this._hass.states[this._config.next_entity];
+    if (this._config.show_next && next && next.attributes.start_date) {
       const { start_date: ns, end_date: ne, entries: nextEntries } = next.attributes;
       html += `<div class="group-title">Nächste Liste · ${escapeHtml(ns)} – ${escapeHtml(ne)}</div>`;
       html += Array.isArray(nextEntries) && nextEntries.length
@@ -81,6 +98,79 @@ class MealPlannerCard extends HTMLElement {
         : `<div class="empty">Noch keine Gerichte.</div>`;
     }
     content.innerHTML = html;
+  }
+}
+
+const DEMO = {
+  current: {
+    attributes: {
+      start_date: "2026-09-28",
+      end_date: "2026-10-04",
+      entries: [
+        { title: "Spaghetti Bolognese", note: "Mit frischem Basilikum", tags: ["Pasta"], done: false },
+        { title: "Gemüsecurry", tags: ["Vegetarisch"], done: false },
+        { title: "Pizza", done: true },
+      ],
+    },
+  },
+  next: {
+    attributes: {
+      start_date: "2026-10-05",
+      end_date: "2026-10-11",
+      entries: [{ title: "Linsensuppe", done: false }],
+    },
+  },
+};
+
+const EDITOR_SCHEMA = [
+  { name: "title", selector: { text: {} } },
+  { name: "entity", selector: { entity: { domain: "sensor" } } },
+  { name: "next_entity", selector: { entity: { domain: "sensor" } } },
+  { name: "show_next", selector: { boolean: {} } },
+  { name: "show_done", selector: { boolean: {} } },
+];
+const EDITOR_LABELS = {
+  title: "Titel",
+  entity: "Aktuelle Liste",
+  next_entity: "Nächste Liste",
+  show_next: "Nächste Liste anzeigen",
+  show_done: "Gekochte Gerichte anzeigen",
+};
+
+class MealPlannerCardEditor extends HTMLElement {
+  setConfig(config) {
+    this._config = config;
+    this._update();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    this._update();
+  }
+
+  _update() {
+    if (!this._hass || !this._config) return;
+    if (!this._form) {
+      this._form = document.createElement("ha-form");
+      this._form.computeLabel = (schema) => EDITOR_LABELS[schema.name] || schema.name;
+      this._form.addEventListener("value-changed", (ev) => {
+        this._config = ev.detail.value;
+        this.dispatchEvent(
+          new CustomEvent("config-changed", { detail: { config: this._config }, bubbles: true, composed: true }),
+        );
+      });
+      this.appendChild(this._form);
+    }
+    this._form.hass = this._hass;
+    this._form.schema = EDITOR_SCHEMA;
+    this._form.data = {
+      title: "Essensplanung",
+      entity: "sensor.meal_planner_current_list",
+      next_entity: "sensor.meal_planner_next_list",
+      show_next: true,
+      show_done: true,
+      ...this._config,
+    };
   }
 }
 
@@ -113,10 +203,14 @@ function escapeAttr(s) {
 if (!customElements.get("meal-planner-card")) {
   customElements.define("meal-planner-card", MealPlannerCard);
 }
+if (!customElements.get("meal-planner-card-editor")) {
+  customElements.define("meal-planner-card-editor", MealPlannerCardEditor);
+}
 
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: "meal-planner-card",
   name: "Meal Planner",
   description: "Zeigt die aktuelle und die nächste Essensplanungs-Liste an (nur Anzeige, keine Bearbeitung).",
+  preview: true,
 });

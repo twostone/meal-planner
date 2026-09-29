@@ -74,7 +74,13 @@ Wird automatisch als Dashboard-Ressource registriert, kein manueller Eintrag nö
 type: custom:meal-planner-card
 entity: sensor.meal_planner_current_list
 next_entity: sensor.meal_planner_next_list   # optional, das ist der Standard
+title: Essensplanung                          # optional
+show_next: true                               # optional: nächste Liste anzeigen
+show_done: true                               # optional: gekochte Gerichte anzeigen
 ```
+
+Die Karte lässt sich auch ohne YAML im Dashboard-Editor konfigurieren; im „Karte hinzufügen“-Dialog
+erscheint sie mit Vorschau (mit Beispieldaten, solange die Sensoren noch fehlen).
 
 Zeigt Titel, Notiz, Kategorien, Link sowie offen/erledigt der aktuellen Liste und darunter die nächste Liste an. Reine Anzeige (kein Abhaken aus der
 Karte heraus) und ohne Vorschaubilder.
