@@ -3,7 +3,7 @@
 from datetime import timedelta
 
 DOMAIN = "meal_planner"
-VERSION = "0.2.0"
+VERSION = "0.2.0"  # x-release-please-version
 
 PLATFORMS = ["sensor"]
 

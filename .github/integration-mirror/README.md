@@ -88,6 +88,9 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements_test.txt
 
 Architektur und bewusste Entscheidungen stehen in [`AGENTS.md`](AGENTS.md).
 
+Releases entstehen automatisch: Commits nach [Conventional Commits](https://www.conventionalcommits.org/)
+schreiben, den von Release-Please gepflegten Release-PR mergen – Tag und GitHub-Release folgen.
+
 ## Lizenz
 
 [Apache License 2.0](LICENSE)

@@ -91,6 +91,14 @@ raten (`async_update_reload_and_abort`, `HassioServiceInfo`, `StaticPathConfig`,
 
 ## Git und Releases
 
-Kein Release-Please/Conventional-Commits-Zwang wie im Add-on-Repo (noch kein Release-Prozess
-aufgesetzt). `version` in `manifest.json` von Hand pflegen, bei jeder inhaltlichen Änderung an der
-Karte (Cache-Busting über `?v=` in `__init__.py`) mit anheben.
+Conventional Commits (`feat:`, `fix:`, `chore:` …; bei Squash-Merge zählt der PR-Titel, geprüft von
+`lint-pr-title.yml`). [Release-Please](.github/workflows/release-please.yml) pflegt auf `main` einen
+Release-PR mit Changelog und Versions-Bump; dessen Merge erzeugt Tag `vX.Y.Z` und GitHub-Release, aus
+dem HACS installiert. Die Version wird **nicht** von Hand gepflegt: Release-Please schreibt sie in
+`manifest.json` und `const.py` (Zeile mit Marker `# x-release-please-version` – nicht entfernen);
+`const.py` `VERSION` dient als Cache-Busting `?v=` der Karte in `__init__.py`.
+Konfiguration: `release-please-config.json`, `.release-please-manifest.json`.
+
+Voraussetzung im GitHub-Repo: Settings → Actions → „Allow GitHub Actions to create and approve pull
+requests“. Vom Release-PR (erstellt mit `GITHUB_TOKEN`) starten keine Workflows automatisch; bei Bedarf
+PAT/App-Token in `release-please.yml` ergänzen.
