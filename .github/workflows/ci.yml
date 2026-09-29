@@ -92,6 +92,20 @@ jobs:
           [ "$code" = "403" ] || { echo "expected 403 from the ingress guard, got $code"; dump guarded; exit 1; }
           docker rm -f guarded
 
+          # 3) HA state port: 401 without the token, 404 for anything else, the token file exists and works.
+          docker run -d --name hastate -p 8098:8100 -e INGRESS_ONLY_IP= meal-planner:smoke
+          code=000
+          for _ in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8098/ha/state || true)
+            [ "$code" != "000" ] && break
+            sleep 1
+          done
+          [ "$code" = "401" ] || { echo "expected 401 without token, got $code"; dump hastate; exit 1; }
+          [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8098/api/plans)" = "404" ] || { dump hastate; exit 1; }
+          token=$(docker exec hastate cat /data/ha-token)
+          curl -fsS -H "Authorization: Bearer $token" http://localhost:8098/ha/state | grep -q '"current":null' || { dump hastate; exit 1; }
+          docker rm -f hastate
+
       - name: Build (amd64, arm64)
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
