@@ -44,13 +44,16 @@ Sobald eine neue Version veröffentlicht ist, zeigt der App-Store ein Update an.
 ## Home Assistant Dashboard
 
 Die aktuelle Liste lässt sich zusätzlich im Home-Assistant-Dashboard anzeigen (Entitäten + Lovelace-Karte) und für
-Automatisierungen nutzen (Events bei neuer Liste/neuem Eintrag): siehe
-[twostone/ha-meal-planner](https://github.com/twostone/ha-meal-planner), per HACS installierbar.
+Automatisierungen nutzen (Events bei neuer Liste sowie bei hinzugefügten, entfernten und abgehakten Gerichten, jeweils mit
+dem auslösenden Nutzer): siehe [twostone/ha-meal-planner](https://github.com/twostone/ha-meal-planner), per HACS
+installierbar. Die Integration wird von der App per Discovery gefunden; die App bietet dafür einen zweiten, nur lesenden
+Port (8100, Token, nur im Supervisor-Netz erreichbar). Wer das Token erneuern will, löscht `/data/ha-token` und startet die
+App neu. In Automationen die Details aus den Eventdaten lesen, nicht aus den Sensoren: sie ziehen einen Moment nach.
 
 ## Datenschutz und Sicherheit
 
 - Die App ist nur über Home-Assistant-Ingress erreichbar. Der Server nimmt ausschließlich Verbindungen von Supervisor
-  an und ist kein eigener Port im Netzwerk.
+  an. Einzige Ausnahme ist der nur lesende, per Token geschützte Port für die HA-Integration (siehe oben).
 - Extern ruft nur der Server ab, und nur Links, die jemand selbst eingegeben hat. Interne Adressen (Heimnetz, andere
   Apps, Router) sind dabei gesperrt. Der Browser lädt nichts von Drittservern: Schriften und Bilder kommen vom eigenen Server.
 - Es gibt keine Nutzerverwaltung: Alle, die die App in Home Assistant öffnen dürfen, sehen und ändern dieselbe Liste.

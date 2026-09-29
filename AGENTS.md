@@ -30,7 +30,9 @@ meal-planner/            das Add-on (Docker-Build-Kontext)
     safe-fetch.ts          der einzige Weg, fremde URLs abzurufen
     preview.ts             Titel und Bild aus HTML (og:-Tags, schema.org-Rezept)
     images.ts              Bildspeicher (/data/images, Dateiname = Hash)
-    ha-notify.ts            Push der aktuellen Liste an Home Assistant (Webhook)
+    ha-api.ts, ha-state.ts  Zweiter Listener (Token) und Zustand für die HA-Integration
+    ha-notify.ts            Bus-Events an Home Assistant (über den Supervisor)
+    ha-discovery.ts         Meldung von Host, Port und Token per Supervisor-Discovery
   web/                   Frontend: Svelte 5 + Vite (Runes, TypeScript)
     public/favicon.svg     Favicon der App, Vorlage für icon.png
   test/                  Tests (node:test)
@@ -99,15 +101,22 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   Metadaten. Vor einem Einbau am echten Gerät testen und die Bedingungen erneut lesen.
 - **Keine externen Anfragen aus dem Browser:** Schriften sind lokal eingebunden (`@fontsource-variable`), Bilder kommen
   vom eigenen Server. Extern ruft nur der Server ab, und nur Links, die der Nutzer eingegeben hat.
-- **Home-Assistant-Push (`ha-notify.ts`):** Für eine begleitende HA-Integration/Lovelace-Karte (separates Repo, per HACS
-  installierbar) pusht das Add-on die aktuelle Liste per Webhook. Option `ha_webhook_url` in `config.yaml` (leer = aus).
-  Nach jeder Änderung der aktuellen Liste (Liste anlegen/löschen, Eintrag anlegen/ändern/löschen) und einmal beim Start
-  wird ein voller Snapshot der *aktuellen* Liste gepusht (`repo.getCurrentPlan()`, spiegelt `pickInitial` im Frontend,
-  siehe `store.svelte.ts`). Nur `POST /api/plans` und `POST /api/plans/:id/entries` tragen zusätzlich ein Event
-  (`plan_created`/`entry_added`), aus dem die HA-Integration Bus-Events feuert; alle anderen Pushes tragen `event: null`
-  und aktualisieren dort nur still den Anzeigezustand. `POST/PATCH/DELETE /api/dishes/:id` lösen bewusst **keinen** Push
-  aus (Katalog-Änderung, nicht Listen-Änderung) – eine spätere Listen-Mutation holt den Stand nach. Push ist
-  Fire-and-forget wie `sweep()`: ein Fehler wird geloggt und blockiert nie die auslösende Anfrage.
+- **Home-Assistant-Anbindung** (für die HA-Integration/Lovelace-Karte, separates Repo, per HACS installierbar; zwei Kanäle):
+  - **Daten (Abruf):** Ein zweiter Listener (`HA_API_PORT`, im Dockerfile 8100, `ha-api.ts`) hat genau eine Route,
+    `GET /ha/state` mit Bearer-Token, Antwort `{current, next, generated_at}` (Form `HaPlan`, `ha-state.ts`). „Aktuell“ ist die
+    Liste, die heute enthält, sonst `null` (`repo.getPlanOn`), „nächste“ die früheste mit Start nach heute (`getNextPlan`).
+    Beides wird bei jedem Abruf aus dem Datum abgeleitet, ohne Zeitgeber. „Heute“ ist das lokale Datum (`TZ`), nicht UTC.
+    Das Token entsteht beim ersten Start und liegt in `/data/ha-token` (Rotation: Datei löschen, App neu starten). Alles
+    andere ist 404, der Listener liest keine `X-Remote-User-*`-Header und feuert keine Events.
+  - **Events (Push):** `ha-notify.ts` postet `meal_planner_<typ>` an `http://supervisor/core/api/events/` (`homeassistant_api: true`,
+    `SUPERVISOR_TOKEN`). Typen: `plan_created`, `entry_added`, `entry_removed`, `entry_done`, `entry_undone` (nur wenn sich
+    `done` ändert). Daten: `plan {id,start_date,end_date}`, `entry {id,dish_id,title}` (außer bei `plan_created`) und
+    `user {id,name,display_name}` oder `null` (aus den Ingress-Headern, `haUser()` in `app.ts`). Kein Snapshot im Event.
+    Liste löschen und Katalog-Änderungen feuern bewusst nichts. Fire-and-forget wie `sweep()`: Fehler werden geloggt,
+    ein verlorenes Event wird nicht nachgeholt (der Zustand kommt beim nächsten Abruf).
+  - **Einrichtung:** Beim Start postet `ha-discovery.ts` `{service: "meal_planner", config: {host, port, token}}` an
+    `http://supervisor/discovery` (`discovery: [meal_planner]`), mit Wiederholung, nie fatal. Der Dienstname muss der
+    Domain der Integration entsprechen. Ohne `SUPERVISOR_TOKEN` (Entwicklung, Tests) sind Events und Discovery aus.
 
 ## Sicherheit
 
@@ -122,14 +131,15 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
 - `allowPrivate` in `fetchLimited` ist **nur für Tests** (lokaler Testserver auf 127.0.0.1). Nie im Produktivcode setzen,
   nie über eine Umgebungsvariable oder Konfiguration erreichbar machen.
 - **`ha-notify.ts` ist bewusst die eine Ausnahme von der SSRF-Regel oben:** Es nutzt einfaches `fetch`, nicht
-  `fetchLimited`. Das Ziel (Home Assistant) ist admin-konfiguriert (`ha_webhook_url` aus `/data/options.json`), kein
-  Nutzer-Input, und liegt erwartungsgemäß selbst im Heimnetz – genau die Adressen, die `net-guard.ts` für Rezept-Links
-  zu Recht sperrt. Diese beiden Pfade nicht vermischen.
+  `fetchLimited`. Das Ziel (`http://supervisor`, `ha-discovery.ts` ebenso) ist im Code festgelegt, kein Nutzer-Input, und
+  liegt im internen Netz – genau die Adressen, die `net-guard.ts` für Rezept-Links zu Recht sperrt. Diese beiden Pfade
+  nicht vermischen.
 - Änderungen an `net-guard.ts` mit Vorsicht: Node prüft IPv4-Adressen als IPv4-gemappte IPv6-Adressen, eine Regel für
   `::ffff:0:0/96` würde daher **jede** IPv4-Adresse sperren (der Test `isPublicIp` fängt das).
 - Bildnamen kommen nur aus dem Bildspeicher (Hash + Endung, geprüft per `IMAGE_NAME`), nie Pfade vom Client.
   Ausgeliefert wird mit `nosniff` und `Content-Security-Policy: default-src 'none'`.
-- Neue Ports oder `host_network` nicht ohne Rückfrage freigeben.
+- Neue Ports oder `host_network` nicht ohne Rückfrage freigeben. Der Port 8100 (`ha-api.ts`) ist die eine bewusste Ausnahme:
+  nur `GET /ha/state`, Token-Vergleich zeitkonstant, kein `ports:`-Mapping (nur im Supervisor-Netz erreichbar).
 - **Das Repository ist öffentlich:** keine Zugangsdaten, Tokens, privaten Hostnamen oder Adressen aus dem Heimnetz
   einchecken (auch nicht in Tests, Kommentaren oder Beispielen).
 - Workflows: keine eigenen Secrets. Veröffentlicht wird nur mit dem `GITHUB_TOKEN` im Job `publish` nach einem Release.
@@ -214,11 +224,11 @@ Kategorien umbenennen/zusammenführen, Mehrfachauswahl im Kategorie-Filter.
   festgehalten.
 - Voraussetzung im Repository (gesetzt): Einstellungen → Actions → General → „Allow GitHub Actions to create and approve pull requests“.
 - Kein Dunkelmodus (HA-Theme dunkel, App bleibt hell).
-- Die HA-Integration + Lovelace-Karte, die `ha-notify.ts` konsumiert, lebt in
-  [twostone/ha-meal-planner](https://github.com/twostone/ha-meal-planner) (eigenes Repo, per HACS installierbar) und
-  ist nicht von diesem Repo/dieser CI abgedeckt. Der Webhook-Push selbst (`ha-notify.ts`) ist nur hier getestet, gegen
-  einen lokalen Test-Server; die Integration ist gegen `pytest-homeassistant-custom-component` getestet, aber noch
-  nicht gegen eine echte Home-Assistant-Instanz durchgespielt. Die Lovelace-Karte zeigt bewusst keine Bilder (die
+- Die HA-Integration + Lovelace-Karte lebt in [twostone/ha-meal-planner](https://github.com/twostone/ha-meal-planner)
+  (eigenes Repo, per HACS installierbar) und ist nicht von diesem Repo/dieser CI abgedeckt. Die Anbindung (Discovery,
+  zweiter Port, Events über den Supervisor) ist hier nur gegen lokale Testserver getestet, **nicht am echten System**:
+  offen sind Hostname und Erreichbarkeit des Ports, der Event-Weg, die Zeitzone im Container und die Nutzer-Header
+  (siehe `docs/umbauplan-ha-integration.md`, Phase 0). Die Lovelace-Karte zeigt bewusst keine Bilder (die
   Vorschaubilder liegen hinter der Ingress-only-API des Add-ons, für das HA-Frontend unerreichbar).
 
 ## Git und Pull Requests
