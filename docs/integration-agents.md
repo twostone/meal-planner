@@ -53,7 +53,9 @@ custom_components/meal_planner/
   manifest.json
   strings.json / translations/
   www/meal-planner-card.js   Lovelace-Karte, reine Anzeige
-  brand/icon.png      Für HACS-Validierung („brands"), falls nicht in home-assistant/brands gelistet
+  brand/              icon.png (256×256) und icon@2x.png (512×512): Icon der Integration. Quelle ist
+                      web/public/favicon.svg im Add-on-Repo, die PNGs sind daraus abgeleitet. HA ab 2026.3
+                      nutzt sie lokal, die HACS-Validierung („brands") verlangt sie
 tests/                pytest + pytest-homeassistant-custom-component
 ```
 
