@@ -1,5 +1,7 @@
 # Meal Planner
 
+<img src="custom_components/meal_planner/brand/icon.png" alt="Meal Planner" width="96" align="right">
+
 [![Validate](https://github.com/twostone/ha-meal-planner/actions/workflows/validate.yml/badge.svg)](https://github.com/twostone/ha-meal-planner/actions/workflows/validate.yml)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 [![License](https://img.shields.io/github/license/twostone/ha-meal-planner.svg)](LICENSE)
