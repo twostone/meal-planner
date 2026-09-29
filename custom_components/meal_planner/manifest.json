@@ -1,6 +1,9 @@
 {
   "domain": "meal_planner",
   "name": "Meal Planner",
+  "after_dependencies": [
+    "lovelace"
+  ],
   "codeowners": [
     "@twostone"
   ],

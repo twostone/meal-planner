@@ -68,7 +68,9 @@ einen Moment nach.
 
 ## Lovelace-Karte
 
-Wird automatisch als Dashboard-Ressource registriert, kein manueller Eintrag nötig:
+Wird automatisch als Dashboard-Ressource registriert, kein manueller Eintrag nötig (bei Dashboards im YAML-Modus
+lädt sie stattdessen als Extra-Modul; tritt dort in der Companion App „Konfigurationsfehler“ auf, den Eintrag
+`/meal_planner/meal-planner-card.js` als JavaScript-Modul unter `lovelace: resources:` ergänzen):
 
 ```yaml
 type: custom:meal-planner-card
