@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/twostone/ha-meal-planner/compare/v1.0.0...v1.1.0) (2026-09-29)
+
+
+### Features
+
+* visueller Editor und Picker-Vorschau für die Karte ([#6](https://github.com/twostone/ha-meal-planner/issues/6)) ([56220f1](https://github.com/twostone/ha-meal-planner/commit/56220f13676c230a14b49ba2f7927324ff725f6e))
+
 ## [1.0.0](https://github.com/twostone/ha-meal-planner/compare/v0.2.0...v1.0.0) (2026-09-29)
 
 
