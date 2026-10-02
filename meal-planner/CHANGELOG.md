@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.0](https://github.com/twostone/meal-planner/compare/v0.7.0...v0.8.0) (2026-10-02)
+
+
+### Neu
+
+* **ha:** Namen der Liste im HA-Zustand ausliefern ([ea960c6](https://github.com/twostone/meal-planner/commit/ea960c6e63788e80c188b470229d8f188c781b8b))
+* **liste:** Name und Zeitraum einer Liste speichern (Migration v5, updatePlan) ([666a4c5](https://github.com/twostone/meal-planner/commit/666a4c55dc0af8963d81dceb6783bbae36db3efe))
+* **liste:** Name und Zeitraum im Zeitraum-Blatt bearbeiten ([97cb8ec](https://github.com/twostone/meal-planner/commit/97cb8ec4f449fc31470f841f63d2d57fd4d979a0))
+* **liste:** PATCH /api/plans/:id mit Überlappungsprüfung und Event plan_updated ([260e551](https://github.com/twostone/meal-planner/commit/260e551b93db0dd0e812416133845dfac31d0964))
+* **liste:** Überlappungsprüfung beim Anlegen einer Liste ([c302a16](https://github.com/twostone/meal-planner/commit/c302a1618bb91c82892b6877dc26692e03f68333))
+
 ## [0.7.0](https://github.com/twostone/meal-planner/compare/v0.6.0...v0.7.0) (2026-09-29)
 
 
