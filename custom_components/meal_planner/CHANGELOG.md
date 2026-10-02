@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/twostone/ha-meal-planner/compare/v1.2.2...v1.3.0) (2026-10-02)
+
+
+### Features
+
+* **liste:** Listenname und Event plan_updated unterstützen ([#16](https://github.com/twostone/ha-meal-planner/issues/16)) ([7b6ec6f](https://github.com/twostone/ha-meal-planner/commit/7b6ec6f74681814dc6da2536be55abb88d78a51e))
+
 ## [1.2.2](https://github.com/twostone/ha-meal-planner/compare/v1.2.1...v1.2.2) (2026-09-29)
 
 
