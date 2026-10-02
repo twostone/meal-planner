@@ -42,6 +42,9 @@ export class ConflictError extends Error {}
 export function createRepo(db: DatabaseSync) {
   const one = <T>(sql: string, ...p: any[]) => db.prepare(sql).get(...p) as T | undefined;
   const all = <T>(sql: string, ...p: any[]) => db.prepare(sql).all(...p) as T[];
+  // True if another plan (not `excludeId`) shares at least one day with start..end (bounds inclusive).
+  const overlapsOther = (excludeId: number | null, start: string, end: string) =>
+    !!one("SELECT 1 FROM plan WHERE id IS NOT ? AND start_date <= ? AND ? <= end_date", excludeId, end, start);
 
   // Tags of all dishes in one query (the catalog of a household is small).
   function tagMap(): Map<number, string[]> {
@@ -167,14 +170,18 @@ export function createRepo(db: DatabaseSync) {
       );
     },
 
+    // A new plan must not overlap another one (inclusive dates), same rule as in updatePlan.
     createPlan(input: { start_date: string; end_date: string }): Plan {
-      const r = db.prepare("INSERT INTO plan (start_date, end_date) VALUES (?, ?)").run(input.start_date, input.end_date);
-      return one<Plan>("SELECT * FROM plan WHERE id = ?", Number(r.lastInsertRowid))!;
+      return transaction(db, () => {
+        if (overlapsOther(null, input.start_date, input.end_date)) throw new ConflictError("plan overlaps");
+        const r = db.prepare("INSERT INTO plan (start_date, end_date) VALUES (?, ?)").run(input.start_date, input.end_date);
+        return one<Plan>("SELECT * FROM plan WHERE id = ?", Number(r.lastInsertRowid))!;
+      });
     },
 
     // Changes name and/or period of a plan. `before` is returned so the caller can tell what changed.
     // A new period must not overlap another plan (inclusive dates). The check only runs when the dates
-    // change, so a plan that already overlaps (createPlan does not check) can still be renamed.
+    // change, so a plan that already overlaps (created before createPlan checked) can still be renamed.
     updatePlan(
       id: number,
       patch: { title?: string | null; start_date?: string; end_date?: string },
@@ -188,13 +195,7 @@ export function createRepo(db: DatabaseSync) {
           end_date: patch.end_date ?? before.end_date,
         };
         if (next.start_date !== before.start_date || next.end_date !== before.end_date) {
-          const clash = one(
-            "SELECT 1 FROM plan WHERE id != ? AND start_date <= ? AND ? <= end_date",
-            id,
-            next.end_date,
-            next.start_date,
-          );
-          if (clash) throw new ConflictError("plan overlaps");
+          if (overlapsOther(id, next.start_date, next.end_date)) throw new ConflictError("plan overlaps");
         }
         db.prepare("UPDATE plan SET title = ?, start_date = ?, end_date = ? WHERE id = ?").run(
           next.title,
