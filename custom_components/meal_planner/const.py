@@ -18,5 +18,5 @@ DEFAULT_PORT = 8100
 UPDATE_INTERVAL = timedelta(minutes=5)
 
 # Bus events fired by the add-on (through the Supervisor's Core API proxy), not by this integration.
-EVENT_TYPES = ("plan_created", "entry_added", "entry_removed", "entry_done", "entry_undone")
+EVENT_TYPES = ("plan_created", "plan_updated", "entry_added", "entry_removed", "entry_done", "entry_undone")
 EVENT_PREFIX = f"{DOMAIN}_"

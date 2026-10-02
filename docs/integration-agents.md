@@ -26,10 +26,15 @@ und liefert eine Lovelace-Karte mit aus. Grundsatz wie im Add-on-Repo: **KISS un
   anzulegen; `reload_even_if_entry_is_unchanged=False`, weil die Meldung bei jedem Start des Add-ons kommt.
   Fallback: Schritt `user` mit Host, Port, Token und Verbindungstest. Ein abgelehntes Token (401) startet Reauth.
 - **Events:** Das Add-on feuert sie über die Core-API des Supervisors, diese Integration feuert nichts selbst.
-  `meal_planner_plan_created|entry_added|entry_removed|entry_done|entry_undone`, Daten `plan`, `entry` (außer bei
-  `plan_created`), `user {id, name, display_name}` oder `null`. `logbook.py` beschreibt sie
-  („Anna hat „Pasta“ abgehakt“, Rückfall auf Benutzername, dann „Jemand“). Ein verlorenes Event wird nicht
-  nachgeholt, der Zustand kommt beim nächsten Abruf.
+  `meal_planner_plan_created|plan_updated|entry_added|entry_removed|entry_done|entry_undone` (`EVENT_TYPES` in
+  `const.py`, jeder löst einen sofortigen Refresh aus). Daten: `plan`, `previous` (nur `plan_updated`: Name und
+  Zeitraum davor, `plan` trägt dort die neuen Werte samt `title`), `entry` (nur bei den `entry_*`-Events),
+  `user {id, name, display_name}` oder `null`. `logbook.py` beschreibt sie
+  („Anna hat „Pasta“ abgehakt“, Rückfall auf Benutzername, dann „Jemand“; bei `plan_updated` sagt es, ob Name, Zeitraum
+  oder beides geändert wurde, mit alten und neuen Daten). Ein verlorenes Event wird nicht nachgeholt, der Zustand
+  kommt beim nächsten Abruf.
+- **Listenname:** Das Attribut `title` der beiden Listen-Sensoren kommt aus `/ha/state` (`plan.title`, `None` ohne Namen).
+  Ein älteres Add-on sendet das Feld nicht, deshalb `plan.get("title")`. Die Karte zeigt den Namen vor dem Zeitraum.
 - **Karte wird als Lovelace-Resource geladen (Storage-Modus), nicht nur per `add_extra_js_url`:** Letzteres
   lädt parallel zum Dashboard; die Companion App rendert die Karte dann teils vor der Definition von
   `meal-planner-card` („Konfigurationsfehler“ nach jedem Neuladen, am echten System bestätigt: mit manueller
