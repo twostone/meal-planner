@@ -58,8 +58,16 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
 
 ## Architektur und bewusste Entscheidungen
 
-- **Datenmodell:** `dish` (Katalog, mit `url`, `note`, `image`), `dish_tag` (Kategorien), `plan` (Zeitraum, Start/Ende),
-  `plan_entry` (Gericht in Zeitraum, `done`, `note`). Bewusst **keine Tageszuordnung** und keine manuelle Reihenfolge per Drag.
+- **Datenmodell:** `dish` (Katalog, mit `url`, `note`, `image`), `dish_tag` (Kategorien), `plan` (Zeitraum, Start/Ende,
+  optional `title`), `plan_entry` (Gericht in Zeitraum, `done`, `note`). Bewusst **keine Tageszuordnung** und keine manuelle
+  Reihenfolge per Drag.
+- **Liste bearbeiten:** Name und Zeitraum einer Liste ändert `PATCH /api/plans/:id` (`updatePlan` in `repo.ts`), im UI per
+  Stift-Symbol im Zeitraum-Blatt. `title`: höchstens 100 Zeichen, `""`/`null` löscht den Namen, fehlt es, bleibt er. Ohne
+  Namen gilt der Datumsbereich als Anzeigename. `start_date` und `end_date` gibt es nur zusammen (sonst 400), Ende nicht vor
+  Start. Überschneidet der neue Zeitraum eine andere Liste (Grenzen inklusive), antwortet die API mit 409 `plan overlaps`
+  und ändert nichts. Die Prüfung läuft nur, wenn sich die Daten ändern: eine schon überlappende Liste bleibt umbenennbar.
+  `POST /api/plans` prüft **keine** Überlappung (bewusst unverändert, noch offen). Gleiche Zeiträume mehrfach anzulegen
+  ist also weiter möglich.
 - Ein Gericht kann pro Zeitraum nur einmal vorkommen. Der Titel ist im Katalog eindeutig (ohne Groß-/Kleinschreibung).
   Ein Eintrag per Titel legt das Gericht an oder verwendet ein vorhandenes wieder. Löschen eines Gerichts, das noch
   in einer Liste steht, ist absichtlich gesperrt (409).
@@ -103,17 +111,19 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   vom eigenen Server. Extern ruft nur der Server ab, und nur Links, die der Nutzer eingegeben hat.
 - **Home-Assistant-Anbindung** (für die HA-Integration/Lovelace-Karte, separates Repo, per HACS installierbar; zwei Kanäle):
   - **Daten (Abruf):** Ein zweiter Listener (`HA_API_PORT`, im Dockerfile 8100, `ha-api.ts`) hat genau eine Route,
-    `GET /ha/state` mit Bearer-Token, Antwort `{current, next, generated_at}` (Form `HaPlan`, `ha-state.ts`). „Aktuell“ ist die
-    Liste, die heute enthält, sonst `null` (`repo.getPlanOn`), „nächste“ die früheste mit Start nach heute (`getNextPlan`).
-    Beides wird bei jedem Abruf aus dem Datum abgeleitet, ohne Zeitgeber. „Heute“ ist das lokale Datum (`TZ`), nicht UTC.
-    Das Token entsteht beim ersten Start und liegt in `/data/ha-token` (Rotation: Datei löschen, App neu starten). Alles
-    andere ist 404, der Listener liest keine `X-Remote-User-*`-Header und feuert keine Events.
+    `GET /ha/state` mit Bearer-Token, Antwort `{current, next, generated_at}` (Form `HaPlan` mit `title`, `ha-state.ts`).
+    „Aktuell“ ist die Liste, die heute enthält, sonst `null` (`repo.getPlanOn`), „nächste“ die früheste mit Start nach heute
+    (`getNextPlan`). Beides wird bei jedem Abruf aus dem Datum abgeleitet, ohne Zeitgeber. „Heute“ ist das lokale Datum
+    (`TZ`), nicht UTC. Das Token entsteht beim ersten Start und liegt in `/data/ha-token` (Rotation: Datei löschen, App neu
+    starten). Alles andere ist 404, der Listener liest keine `X-Remote-User-*`-Header und feuert keine Events.
   - **Events (Push):** `ha-notify.ts` postet `meal_planner_<typ>` an `http://supervisor/core/api/events/` (`homeassistant_api: true`,
-    `SUPERVISOR_TOKEN`). Typen: `plan_created`, `entry_added`, `entry_removed`, `entry_done`, `entry_undone` (nur wenn sich
-    `done` ändert). Daten: `plan {id,start_date,end_date}`, `entry {id,dish_id,title}` (außer bei `plan_created`) und
-    `user {id,name,display_name}` oder `null` (aus den Ingress-Headern, `haUser()` in `app.ts`). Kein Snapshot im Event.
-    Liste löschen und Katalog-Änderungen feuern bewusst nichts. Fire-and-forget wie `sweep()`: Fehler werden geloggt,
-    ein verlorenes Event wird nicht nachgeholt (der Zustand kommt beim nächsten Abruf).
+    `SUPERVISOR_TOKEN`). Typen: `plan_created`, `plan_updated` (nur bei echter Änderung von Name oder Zeitraum), `entry_added`,
+    `entry_removed`, `entry_done`, `entry_undone` (nur wenn sich `done` ändert). Daten: `plan {id,start_date,end_date}`
+    (bei `plan_updated` zusätzlich `title`), `previous {start_date,end_date,title}` (nur `plan_updated`, die Werte davor),
+    `entry {id,dish_id,title}` (nur bei den `entry_*`-Events) und `user {id,name,display_name}` oder `null` (aus den
+    Ingress-Headern, `haUser()` in `app.ts`). Kein Snapshot im Event. Liste löschen und Katalog-Änderungen feuern bewusst
+    nichts. Fire-and-forget wie `sweep()`: Fehler werden geloggt, ein verlorenes Event wird nicht nachgeholt (der Zustand
+    kommt beim nächsten Abruf).
   - **Einrichtung:** Beim Start postet `ha-discovery.ts` `{service: "meal_planner", config: {host, port, token}}` an
     `http://supervisor/discovery` (`discovery: [meal_planner]`), mit Wiederholung, nie fatal. Der Dienstname muss der
     Domain der Integration entsprechen. Ohne `SUPERVISOR_TOKEN` (Entwicklung, Tests) sind Events und Discovery aus.
@@ -183,7 +193,8 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   gibt es keinen Release und HA zeigt kein Update.
 - **Datenbank nur über Migrationen ändern:** in `src/db.ts` einen Eintrag an `MIGRATIONS` **anhängen**, nie ändern oder
   umsortieren (`PRAGMA user_version` zählt sie). Neue Migrationen mit einem Test gegen eine Datenbank im alten Stand.
-  Die Tests, die die Schema-Version prüfen (`dish-image`, `tags`, `entry-note`), bei jeder neuen Migration mit anheben.
+  Die Tests, die die Schema-Version prüfen (`dish-image`, `tags`, `entry-note`, `plan-edit`), bei jeder neuen Migration
+  mit anheben.
 - **Add-on-Build:** Kein `build.yaml`, kein `BUILD_FROM` (beides gilt seit Supervisor 2026.04 nicht mehr). HA baut nicht
   selbst, es lädt das Image aus `image:`. Das Dockerfile ist zweistufig: Das Frontend wird auf der Architektur des Builders
   gebaut (`--platform=$BUILDPLATFORM`, sonst dauert arm64 unter Emulation sehr lange), die Laufzeit-Stufe je Zielarchitektur.
