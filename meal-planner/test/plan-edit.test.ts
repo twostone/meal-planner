@@ -13,7 +13,8 @@ const USER = { "X-Remote-User-Id": "u1", "X-Remote-User-Name": "anna", "X-Remote
 
 function setup() {
   const events: HaEventInput[] = [];
-  const app = createApp(createRepo(openDb(":memory:")), { notify: async (ev) => void events.push(ev) });
+  const db = openDb(":memory:");
+  const app = createApp(createRepo(db), { notify: async (ev) => void events.push(ev) });
   const call = async (method: string, url: string, body?: unknown, headers: Record<string, string> = {}) => {
     const res = await app.request(url, {
       method,
@@ -25,7 +26,7 @@ function setup() {
   };
   const plan = async (start_date: string, end_date: string) =>
     (await call("POST", "/api/plans", { start_date, end_date })).json;
-  return { call, plan, events, updated: () => events.filter((e) => e.type === "plan_updated") };
+  return { call, plan, db, events, updated: () => events.filter((e) => e.type === "plan_updated") };
 }
 
 test("new plans have no name", async () => {
@@ -98,9 +99,11 @@ test("touching without overlap is fine, and a plan never collides with its own o
 });
 
 test("renaming a plan that already overlaps another (created before this check existed) still works", async () => {
-  const { call, plan } = setup();
+  const { call, plan, db } = setup();
   await plan("2026-10-03", "2026-10-09");
-  const b = await plan("2026-10-05", "2026-10-12"); // createPlan does not check overlaps
+  // plans created before POST checked overlaps: insert directly, createPlan would refuse this now
+  db.prepare("INSERT INTO plan (start_date, end_date) VALUES (?, ?)").run("2026-10-05", "2026-10-12");
+  const b = (await call("GET", "/api/plans")).json.find((x: any) => x.start_date === "2026-10-05");
   assert.equal((await call("PATCH", `/api/plans/${b.id}`, { title: "Doppelt" })).status, 200);
   assert.equal((await call("PATCH", `/api/plans/${b.id}`, { start_date: "2026-10-05", end_date: "2026-10-13" })).status, 409);
 });
@@ -169,4 +172,30 @@ test("migration v4 -> v5 keeps plans and entries and adds the name column", asyn
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("creating a plan whose period overlaps another is refused with 409, creates nothing and sends no event", async () => {
+  const { call, plan, events } = setup();
+  await plan("2026-10-03", "2026-10-09");
+  events.length = 0;
+  for (const [start_date, end_date] of [
+    ["2026-10-03", "2026-10-09"], // identical
+    ["2026-10-09", "2026-10-15"], // shares the last day
+    ["2026-09-28", "2026-10-03"], // shares the first day
+    ["2026-10-05", "2026-10-06"], // inside
+    ["2026-10-01", "2026-10-20"], // contains
+  ]) {
+    const res = await call("POST", "/api/plans", { start_date, end_date });
+    assert.equal(res.status, 409, `${start_date}..${end_date}`);
+    assert.equal(res.json.error, "plan overlaps");
+  }
+  assert.equal((await call("GET", "/api/plans")).json.length, 1);
+  assert.deepEqual(events, []);
+});
+
+test("creating a plan that only touches or sits next to another is fine", async () => {
+  const { call, plan } = setup();
+  await plan("2026-10-03", "2026-10-09");
+  assert.equal((await call("POST", "/api/plans", { start_date: "2026-10-10", end_date: "2026-10-16" })).status, 201);
+  assert.equal((await call("POST", "/api/plans", { start_date: "2026-09-26", end_date: "2026-10-02" })).status, 201);
 });
