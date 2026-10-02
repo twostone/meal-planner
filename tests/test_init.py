@@ -40,6 +40,14 @@ async def test_sensors_show_current_and_next_list(hass, aioclient_mock):
     assert hass.states.get("sensor.meal_planner_done_count").state == "1"
 
 
+async def test_list_name_is_an_attribute_and_none_without_one(hass, aioclient_mock):
+    state = {**STATE, "current": {**CURRENT, "title": "Geburtstagswoche"}}
+    await _setup(hass, aioclient_mock, state)
+    assert hass.states.get("sensor.meal_planner_current_list").attributes["title"] == "Geburtstagswoche"
+    # a list without a name (or an add-on too old to send one) has title None
+    assert hass.states.get("sensor.meal_planner_next_list").attributes["title"] is None
+
+
 async def test_app_link_comes_from_the_discovered_slug(hass, aioclient_mock):
     aioclient_mock.get(STATE_URL, json=STATE)
     entry = make_entry(slug="abc_meal_planner")
@@ -106,7 +114,8 @@ async def test_bus_event_refreshes_immediately(hass, aioclient_mock):
 
 async def test_every_event_type_triggers_a_refresh(hass, aioclient_mock):
     await _setup(hass, aioclient_mock)
-    assert len(EVENT_TYPES) == 5
+    assert len(EVENT_TYPES) == 6
+    assert "plan_updated" in EVENT_TYPES
     for kind in EVENT_TYPES:
         aioclient_mock.mock_calls.clear()
         hass.bus.async_fire(f"{EVENT_PREFIX}{kind}", {})

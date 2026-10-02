@@ -1,4 +1,4 @@
-// Read-only Lovelace card for the Meal Planner integration. Renders the attributes (start_date,
+// Read-only Lovelace card for the Meal Planner integration. Renders the attributes (title, start_date,
 // end_date, entries[]) of sensor.meal_planner_current_list and, below it, sensor.meal_planner_next_list.
 // No write-back to the add-on: this integration only ever reads its state, it never writes back
 // (see the add-on's AGENTS.md) — so nothing clickable here changes anything (the optional `app_url` is a plain link). Intentionally no images: entry.image is only a filename the add-on serves behind its
@@ -57,6 +57,7 @@ class MealPlannerCard extends HTMLElement {
           h2 { margin: 0; font-size: 1.1em; }
           a.app { flex: none; color: var(--primary-color); font-size: 0.9em; text-decoration: none; }
           .range { color: var(--secondary-text-color); font-size: 0.9em; margin-bottom: 12px; }
+          .range b { color: var(--primary-text-color); font-weight: 500; }
           .group-title { font-size: 0.85em; color: var(--secondary-text-color); margin: 12px 0 4px; text-transform: uppercase; }
           ul { list-style: none; margin: 0; padding: 0; }
           li { display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; border-top: 1px solid var(--divider-color); }
@@ -81,7 +82,8 @@ class MealPlannerCard extends HTMLElement {
       content.innerHTML = `<div class="empty">Entität ${this._config.entity} nicht gefunden.</div>`;
       return;
     }
-    const { start_date, end_date, entries } = state.attributes;
+    // planTitle: the optional name of the list (not the card's own `title`).
+    const { start_date, end_date, entries, title: planTitle } = state.attributes;
     // Link to the add-on's UI (Ingress path): from the sensor (known through discovery), the YAML `app_url`
     // overrides it. Plain navigation, no write-back.
     const appUrl = this._config.app_url || state.attributes.app_url;
@@ -93,7 +95,7 @@ class MealPlannerCard extends HTMLElement {
       const list = Array.isArray(entries) ? entries : [];
       const open = list.filter((e) => !e.done);
       const done = list.filter((e) => e.done);
-      html += `<div class="range">${escapeHtml(start_date)} – ${escapeHtml(end_date)}</div>`;
+      html += `<div class="range">${planTitle ? `<b>${escapeHtml(planTitle)}</b> · ` : ""}${escapeHtml(start_date)} – ${escapeHtml(end_date)}</div>`;
       if (!list.length) html += `<div class="empty">Noch keine Gerichte.</div>`;
       if (open.length) html += `<div class="group-title">Offen</div>${renderList(open)}`;
       if (done.length && this._config.show_done) html += `<div class="group-title">Gekocht</div>${renderList(done)}`;
@@ -101,8 +103,9 @@ class MealPlannerCard extends HTMLElement {
     // The next list is optional: hidden when its entity is missing or there is none.
     const next = demo ? DEMO.next : this._hass.states[this._config.next_entity];
     if (this._config.show_next && next && next.attributes.start_date) {
-      const { start_date: ns, end_date: ne, entries: nextEntries } = next.attributes;
-      html += `<div class="group-title">Nächste Liste · ${escapeHtml(ns)} – ${escapeHtml(ne)}</div>`;
+      const { start_date: ns, end_date: ne, entries: nextEntries, title: nextTitle } = next.attributes;
+      const name = nextTitle ? `${escapeHtml(nextTitle)} · ` : "";
+      html += `<div class="group-title">Nächste Liste · ${name}${escapeHtml(ns)} – ${escapeHtml(ne)}</div>`;
       html += Array.isArray(nextEntries) && nextEntries.length
         ? renderList(nextEntries)
         : `<div class="empty">Noch keine Gerichte.</div>`;

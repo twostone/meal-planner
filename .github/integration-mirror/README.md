@@ -8,8 +8,8 @@
 
 Zeigt die aktuelle Liste des [meal-planner](https://github.com/twostone/meal-planner)-Add-ons
 ("Essensplanung") als Sensoren und Lovelace-Karte im Home-Assistant-Dashboard an, zeigt auch die nächste
-Liste, schreibt Änderungen ins Logbuch und löst Automatisierungen aus (neue Liste, Gericht hinzugefügt,
-entfernt, abgehakt), jeweils mit dem Nutzer, der es getan hat.
+Liste, schreibt Änderungen ins Logbuch und löst Automatisierungen aus (neue Liste, Liste umbenannt oder
+verschoben, Gericht hinzugefügt, entfernt, abgehakt), jeweils mit dem Nutzer, der es getan hat.
 
 <a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=twostone&repository=ha-meal-planner&category=integration">
   <img src="https://my.home-assistant.io/badges/hacs_repository.svg" alt="Zu HACS hinzufügen">
@@ -42,12 +42,13 @@ Entitäten „nicht verfügbar“.
 
 | Entität | Beispiel-Zustand | Attribute / Bedeutung |
 |---|---|---|
-| `sensor.meal_planner_current_list` | `3 offen von 7` | Liste, die heute enthält: `start_date`, `end_date`, `entries` (Titel, Notiz, Kategorien, Link, erledigt je Gericht) |
+| `sensor.meal_planner_current_list` | `3 offen von 7` | Liste, die heute enthält: `title` (Name der Liste, sonst `null`), `start_date`, `end_date`, `entries` (Titel, Notiz, Kategorien, Link, erledigt je Gericht) |
 | `sensor.meal_planner_next_list` | `5 Gerichte` | frühste Liste, die nach heute beginnt, gleiche Attribute |
 | `sensor.meal_planner_open_count` | `3` | Anzahl offener Gerichte der aktuellen Liste |
 | `sensor.meal_planner_done_count` | `4` | Anzahl erledigter Gerichte der aktuellen Liste |
 
-Liegt heute in keiner Liste, ist die aktuelle Liste „Keine Liste“.
+Liegt heute in keiner Liste, ist die aktuelle Liste „Keine Liste“. Das Attribut `title` gibt es erst mit einer App-Version,
+die Listen-Namen kennt; mit einer älteren ist es immer `null`.
 
 ## Events
 
@@ -56,15 +57,17 @@ Für Automatisierungen (*Einstellungen → Automatisierungen → Trigger → Ere
 | Event | Ausgelöst durch |
 |---|---|
 | `meal_planner_plan_created` | Neue Liste angelegt |
+| `meal_planner_plan_updated` | Name oder Zeitraum einer Liste geändert |
 | `meal_planner_entry_added` | Gericht zu einer Liste hinzugefügt |
 | `meal_planner_entry_removed` | Gericht aus einer Liste entfernt |
 | `meal_planner_entry_done` | Gericht abgehakt |
 | `meal_planner_entry_undone` | Gericht wieder geöffnet |
 
-Eventdaten: `plan` (`id`, `start_date`, `end_date`), `entry` (`id`, `dish_id`, `title`; nicht bei `plan_created`) und
-`user` (`id` = Home-Assistant-Nutzer-ID, `name`, `display_name`; `null`, wenn die App den Nutzer nicht kennt), z. B.
-`{{ trigger.event.data.user.display_name }}`. Details aus den Eventdaten lesen, nicht aus den Sensoren: die ziehen
-einen Moment nach.
+Eventdaten: `plan` (`id`, `start_date`, `end_date`; bei `plan_updated` zusätzlich `title`), `previous` (`start_date`,
+`end_date`, `title` vor der Änderung; nur bei `plan_updated`), `entry` (`id`, `dish_id`, `title`; nur bei den
+`entry_*`-Events) und `user` (`id` = Home-Assistant-Nutzer-ID, `name`, `display_name`; `null`, wenn die App den Nutzer
+nicht kennt), z. B. `{{ trigger.event.data.user.display_name }}`. Details aus den Eventdaten lesen, nicht aus den
+Sensoren: die ziehen einen Moment nach.
 
 ## Lovelace-Karte
 
@@ -89,8 +92,8 @@ wenn `app_url` gesetzt ist.
 Die Karte lässt sich auch ohne YAML im Dashboard-Editor konfigurieren; im „Karte hinzufügen“-Dialog
 erscheint sie mit Vorschau (mit Beispieldaten, solange die Sensoren noch fehlen).
 
-Zeigt Titel, Notiz, Kategorien, Link sowie offen/erledigt der aktuellen Liste und darunter die nächste Liste an. Reine Anzeige (kein Abhaken aus der
-Karte heraus) und ohne Vorschaubilder.
+Zeigt Titel, Notiz, Kategorien, Link sowie offen/erledigt der aktuellen Liste und darunter die nächste Liste an. Hat eine
+Liste einen Namen, steht er vor dem Zeitraum. Reine Anzeige (kein Abhaken aus der Karte heraus) und ohne Vorschaubilder.
 
 ## Entwicklung
 

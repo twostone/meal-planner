@@ -68,7 +68,13 @@ class _ListSensor(_MealPlannerSensor):
     def extra_state_attributes(self) -> dict[str, Any]:
         attrs: dict[str, Any] = {"app_url": self._app_url} if self._app_url else {}
         if plan := self._plan:
-            attrs |= {"start_date": plan["start_date"], "end_date": plan["end_date"], "entries": plan["entries"]}
+            attrs |= {
+                # Optional name of the list; None when none is set (or the add-on is too old to send it).
+                "title": plan.get("title"),
+                "start_date": plan["start_date"],
+                "end_date": plan["end_date"],
+                "entries": plan["entries"],
+            }
         return attrs
 
 
