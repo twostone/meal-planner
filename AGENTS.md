@@ -66,8 +66,9 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   Namen gilt der Datumsbereich als Anzeigename. `start_date` und `end_date` gibt es nur zusammen (sonst 400), Ende nicht vor
   Start. Überschneidet der neue Zeitraum eine andere Liste (Grenzen inklusive), antwortet die API mit 409 `plan overlaps`
   und ändert nichts. Die Prüfung läuft nur, wenn sich die Daten ändern: eine schon überlappende Liste bleibt umbenennbar.
-  `POST /api/plans` prüft **keine** Überlappung (bewusst unverändert, noch offen). Gleiche Zeiträume mehrfach anzulegen
-  ist also weiter möglich.
+  `POST /api/plans` prüft dieselbe Regel (`overlapsOther` in `repo.ts`): Überschneidung -> 409 `plan overlaps`, es wird
+  nichts angelegt und kein Event gesendet. Berühren ohne gemeinsamen Tag ist erlaubt. Bereits überlappende Altdaten
+  bleiben unverändert bestehen.
 - Ein Gericht kann pro Zeitraum nur einmal vorkommen. Der Titel ist im Katalog eindeutig (ohne Groß-/Kleinschreibung).
   Ein Eintrag per Titel legt das Gericht an oder verwendet ein vorhandenes wieder. Löschen eines Gerichts, das noch
   in einer Liste steht, ist absichtlich gesperrt (409).
