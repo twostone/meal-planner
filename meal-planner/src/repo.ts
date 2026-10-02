@@ -11,7 +11,13 @@ export type Dish = {
   tags: string[]; // sorted, case-insensitively unique
 };
 type DishRow = Omit<Dish, "tags">;
-export type Plan = { id: number; start_date: string; end_date: string; created_at: string };
+export type Plan = {
+  id: number;
+  start_date: string;
+  end_date: string;
+  title: string | null; // optional name; null = shown as its date range
+  created_at: string;
+};
 export type Entry = {
   id: number;
   plan_id: number;
@@ -164,6 +170,40 @@ export function createRepo(db: DatabaseSync) {
     createPlan(input: { start_date: string; end_date: string }): Plan {
       const r = db.prepare("INSERT INTO plan (start_date, end_date) VALUES (?, ?)").run(input.start_date, input.end_date);
       return one<Plan>("SELECT * FROM plan WHERE id = ?", Number(r.lastInsertRowid))!;
+    },
+
+    // Changes name and/or period of a plan. `before` is returned so the caller can tell what changed.
+    // A new period must not overlap another plan (inclusive dates). The check only runs when the dates
+    // change, so a plan that already overlaps (createPlan does not check) can still be renamed.
+    updatePlan(
+      id: number,
+      patch: { title?: string | null; start_date?: string; end_date?: string },
+    ): { before: Plan; plan: Plan } {
+      return transaction(db, () => {
+        const before = one<Plan>("SELECT * FROM plan WHERE id = ?", id);
+        if (!before) throw new NotFoundError("plan");
+        const next = {
+          title: patch.title === undefined ? before.title : patch.title,
+          start_date: patch.start_date ?? before.start_date,
+          end_date: patch.end_date ?? before.end_date,
+        };
+        if (next.start_date !== before.start_date || next.end_date !== before.end_date) {
+          const clash = one(
+            "SELECT 1 FROM plan WHERE id != ? AND start_date <= ? AND ? <= end_date",
+            id,
+            next.end_date,
+            next.start_date,
+          );
+          if (clash) throw new ConflictError("plan overlaps");
+        }
+        db.prepare("UPDATE plan SET title = ?, start_date = ?, end_date = ? WHERE id = ?").run(
+          next.title,
+          next.start_date,
+          next.end_date,
+          id,
+        );
+        return { before, plan: one<Plan>("SELECT * FROM plan WHERE id = ?", id)! };
+      });
     },
 
     getPlan(id: number): Plan & { entries: Entry[] } {

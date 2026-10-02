@@ -1,9 +1,12 @@
-export type HaEventType = "plan_created" | "entry_added" | "entry_removed" | "entry_done" | "entry_undone";
+export type HaEventType = "plan_created" | "plan_updated" | "entry_added" | "entry_removed" | "entry_done" | "entry_undone";
 // Any field is null when Ingress did not send it (unknown session, or unset on the HA user).
 export type HaUser = { id: string; name: string | null; display_name: string | null };
 export type HaEventInput = {
   type: HaEventType;
-  plan: { id: number; start_date: string; end_date: string };
+  // plan_updated also carries the (new) title; the other plan events do not.
+  plan: { id: number; start_date: string; end_date: string; title?: string | null };
+  // plan_updated only: what the plan looked like before the change.
+  previous?: { start_date: string; end_date: string; title: string | null };
   entry?: { id: number; dish_id: number; title: string };
   user: HaUser | null;
 };
