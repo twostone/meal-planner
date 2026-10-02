@@ -94,7 +94,7 @@ test("migration v3 -> v4 keeps entries and adds the note column", async () => {
     old.close();
 
     const db = openDb(file);
-    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 4);
+    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 5);
     const repo = createRepo(db);
     const [entry] = repo.getPlan(1).entries;
     assert.deepEqual([entry!.dish.title, entry!.done, entry!.note], ["Linsensuppe", true, null]);

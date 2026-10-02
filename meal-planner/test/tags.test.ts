@@ -89,7 +89,7 @@ test("migration v2 keeps dishes and adds tags", async () => {
     old.close();
 
     const db = openDb(file);
-    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 4);
+    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 5);
     const repo = createRepo(db);
     assert.deepEqual(repo.listDishes().map((d) => [d.title, d.tags]), [["Linsensuppe", []]]);
     assert.deepEqual(repo.updateDish(1, { tags: ["Suppe"] }).tags, ["Suppe"]);
