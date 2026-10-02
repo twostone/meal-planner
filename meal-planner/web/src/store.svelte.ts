@@ -126,6 +126,13 @@ export const createPlan = (start_date: string, end_date: string) =>
     closeSheet();
   });
 
+// Changes name and period of a plan. The sheet stays open; the current plan is reloaded so the header follows.
+export const updatePlan = (id: number, p: { title: string | null; start_date: string; end_date: string }) =>
+  guard(async () => {
+    await api.updatePlan(id, p);
+    await reload();
+  });
+
 export const deletePlan = (id: number) =>
   guard(async () => {
     await api.deletePlan(id);

@@ -6,6 +6,7 @@ const MESSAGES: Record<string, string> = {
   "dish title exists": "Ein Gericht mit diesem Titel gibt es schon.",
   "dish already in plan": "Steht schon in der Liste.",
   "dish is used in a plan": "Das Gericht steht noch in einer Liste und kann nicht gelöscht werden.",
+  "plan overlaps": "Der Zeitraum überschneidet sich mit einer anderen Liste.",
 };
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -37,6 +38,9 @@ export const deleteDish = (id: number) => request<void>("DELETE", `api/dishes/${
 export const listPlans = () => request<PlanSummary[]>("GET", "api/plans");
 export const getPlan = (id: number) => request<PlanDetail>("GET", `api/plans/${id}`);
 export const createPlan = (p: { start_date: string; end_date: string }) => request<PlanSummary>("POST", "api/plans", p);
+// title null clears the name. The period is always sent as a whole (both dates).
+export const updatePlan = (id: number, p: { title: string | null; start_date: string; end_date: string }) =>
+  request<unknown>("PATCH", `api/plans/${id}`, p);
 export const deletePlan = (id: number) => request<void>("DELETE", `api/plans/${id}`);
 
 export const addEntry = (planId: number, e: { dish_id: number } | { title: string }) =>
