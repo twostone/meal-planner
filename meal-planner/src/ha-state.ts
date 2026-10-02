@@ -17,6 +17,7 @@ export type HaPlan = {
   id: number;
   start_date: string;
   end_date: string;
+  title: string | null; // optional name of the plan; null = none set
   entry_count: number;
   done_count: number;
   entries: HaEntry[];
@@ -45,6 +46,7 @@ function snapshot(plan: (Plan & { entries: Entry[] }) | null): HaPlan | null {
     id: plan.id,
     start_date: plan.start_date,
     end_date: plan.end_date,
+    title: plan.title,
     entry_count: entries.length,
     done_count: entries.filter((e) => e.done).length,
     entries,
