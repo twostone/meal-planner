@@ -45,6 +45,19 @@ const dishPatch = z.object({
 const planBody = z
   .object({ start_date: date, end_date: date })
   .refine((v) => v.end_date >= v.start_date, { message: "end_date before start_date", path: ["end_date"] });
+// Optional name of a plan; "" or null clears it.
+const planTitle = z.string().trim().min(1).max(100);
+// The period is changed as a whole: both dates or none, so the end-after-start check needs no stored values.
+const planPatch = z
+  .object({ title: optional(planTitle), start_date: date.optional(), end_date: date.optional() })
+  .refine((v) => (v.start_date === undefined) === (v.end_date === undefined), {
+    message: "start_date and end_date go together",
+    path: ["end_date"],
+  })
+  .refine((v) => v.start_date === undefined || v.end_date! >= v.start_date, {
+    message: "end_date before start_date",
+    path: ["end_date"],
+  });
 const entryBody = z.union([z.object({ dish_id: id }), dishBody]);
 // note: only for this entry (dish in one plan); "" or null clears it
 const entryPatch = z.object({
@@ -180,6 +193,19 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
     return c.json(plan, 201);
   });
   app.get("/api/plans/:id", zValidator("param", z.object({ id })), (c) => c.json(repo.getPlan(c.req.valid("param").id)));
+  app.patch("/api/plans/:id", zValidator("param", z.object({ id })), zValidator("json", planPatch), (c) => {
+    const { before, plan } = repo.updatePlan(c.req.valid("param").id, c.req.valid("json"));
+    // Only a real change is an event: saving the sheet unchanged must not wake any automation.
+    if (plan.title !== before.title || plan.start_date !== before.start_date || plan.end_date !== before.end_date) {
+      notifyHa({
+        type: "plan_updated",
+        plan: { id: plan.id, start_date: plan.start_date, end_date: plan.end_date, title: plan.title },
+        previous: { start_date: before.start_date, end_date: before.end_date, title: before.title },
+        user: haUser(c),
+      });
+    }
+    return c.json(plan);
+  });
   app.delete("/api/plans/:id", zValidator("param", z.object({ id })), (c) => {
     repo.deletePlan(c.req.valid("param").id);
     return c.body(null, 204);
