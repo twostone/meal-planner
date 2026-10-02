@@ -11,6 +11,7 @@ export type PlanSummary = {
   id: number;
   start_date: string;
   end_date: string;
+  title: string | null; // optional name; null = shown as its date range
   created_at: string;
   entry_count: number;
   done_count: number;
@@ -24,6 +25,13 @@ export type Entry = {
   note: string | null; // only for this dish in this plan
   dish: Dish;
 };
-export type PlanDetail = { id: number; start_date: string; end_date: string; created_at: string; entries: Entry[] };
+export type PlanDetail = {
+  id: number;
+  start_date: string;
+  end_date: string;
+  title: string | null;
+  created_at: string;
+  entries: Entry[];
+};
 export type DishInput = { title: string; url: string | null; note: string | null; image: string | null; tags: string[] };
 export type Preview = { title: string | null; image: string | null; titleSuggestions: string[]; reason: string | null };

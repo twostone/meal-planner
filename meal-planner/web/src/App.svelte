@@ -11,19 +11,22 @@
   onMount(() => {
     init();
   });
+
+  // A plan is shown by its name when it has one, else by its date range.
+  const planLabel = $derived(app.plan ? (app.plan.title ?? fmtRange(app.plan.start_date, app.plan.end_date)) : null);
 </script>
 
 <div class="shell">
   <header>
     {#if app.view === "list"}
       <button type="button" class="period" onclick={openPeriods}>
-        <span>{app.plan ? fmtRange(app.plan.start_date, app.plan.end_date) : "Zeitraum wählen"}</span>
+        <span>{planLabel ?? "Zeitraum wählen"}</span>
         <Icon name="chevron-down" />
       </button>
     {:else}
       <h1>Katalog</h1>
-      {#if app.plan}
-        <p class="target">Hinzufügen zu: {fmtRange(app.plan.start_date, app.plan.end_date)}</p>
+      {#if planLabel}
+        <p class="target">Hinzufügen zu: {planLabel}</p>
       {/if}
     {/if}
 
