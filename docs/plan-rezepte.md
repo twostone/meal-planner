@@ -12,18 +12,23 @@ App liegen.
 - **Zweck:** Nachschlagen beim Kochen (unabhängig davon, ob Link oder Instagram-Post noch existiert), Suche nach Zutat,
   Portionen umrechnen, später Einkaufsliste.
 - **Zutaten gleich strukturiert** (Menge, Einheit, Zutat), nicht als Freitext.
-- **Einkaufsliste kommt nicht in diese Stufe.** Diese Stufe legt nur das Datenmodell an, auf das sie später aufbaut.
+- **Originaltext getrennt sichern:** Caption bzw. schema.org-Rezept wird ohne LLM als `source_text` gespeichert
+  (Stufe 2). Das strukturierte Rezept entsteht daraus später per LLM (Stufe 3).
+- **Einkaufsliste kommt nicht in diesen Ausbau.** Er legt nur das Datenmodell an, auf das sie später aufbaut.
 - **Quellen:** überwiegend Instagram, daneben Rezeptseiten. Bei etwa jedem dritten Instagram-Post steht das Rezept nur im
   Bild oder Video, nicht in der Caption.
 - **Erfassung:** **aus dem Link** (Instagram-Caption oder schema.org-Rezept) als Hauptweg, **„Text einfügen“** als
-  Rückfall, Handeingabe immer möglich. **Screenshot** (Rezept im Bild) als spätere Phase 4.
+  Rückfall, Handeingabe immer möglich. **Screenshot** (Rezept im Bild) als letzte Stufe.
 - **Zerlegung per LLM** über die HA-Action **`ai_task.generate_data`**. Eingerichtet ist ein Cloud-LLM. Die App braucht
   keinen eigenen API-Key, aber eine AI-Task-Entität in HA.
 - **Prüfansicht immer vor dem Speichern.** Ohne LLM (keine Entität, Fehler, Zeitüberschreitung) bleibt die Handeingabe.
 - **Zubereitungsschritte** und ein **Kochmodus** gehören dazu. Wake Lock wird vorher am Handy getestet.
 - **Keine Nährwerte**, **kein Feld „fehlende Zutaten“** (im Test unzuverlässig, Abschnitt 4).
+- **Umsetzung in acht Stufen** (Abschnitt 8), jede ein PR und für sich nutzbar.
 
-## 2. Datenmodell (Migration, an `MIGRATIONS` anhängen)
+## 2. Datenmodell (Migrationen, an `MIGRATIONS` anhängen)
+
+**Stufe 1:**
 
 ```sql
 ALTER TABLE dish ADD COLUMN servings INTEGER;        -- Basis für das Umrechnen, NULL = unbekannt
@@ -39,13 +44,23 @@ CREATE TABLE dish_ingredient (
   unit      TEXT,                      -- normierte Einheit, NULL = gezählt ohne Einheit ("1 Zwiebel") oder ohne Menge
   name      TEXT NOT NULL,             -- "Zwiebel" (für Suche und spätere Einkaufsliste)
   note      TEXT,                      -- "große", "kleine Würfel", "optional"
-  raw       TEXT NOT NULL              -- Originalzeile, wird nie verändert
+  raw       TEXT NOT NULL              -- Originalzeile; bei Handeingabe aus Menge/Einheit/Zutat gebildet
 );
 CREATE INDEX dish_ingredient_dish ON dish_ingredient(dish_id, pos);
 ```
 
+**Stufe 2:**
+
+```sql
+ALTER TABLE dish ADD COLUMN source_text TEXT;                          -- Originaltext aus dem Link, unverändert
+ALTER TABLE dish ADD COLUMN source_truncated INTEGER NOT NULL DEFAULT 0; -- 1 = Caption evtl. gekürzt
+```
+
 Begründungen:
 
+- **`source_text` getrennt vom strukturierten Rezept.** Es sichert das Rezept, falls der Post verschwindet, dient der
+  Prüfansicht als „Original“ und ist die Eingabe für das LLM (kein erneuter Abruf nötig). Es wird nur beim Holen aus dem
+  Link überschrieben, nie beim Bearbeiten des Rezepts.
 - **`raw` immer speichern.** Ist die Struktur falsch, bleibt die Originalzeile sichtbar, und eine spätere bessere Zerlegung
   kann neu laufen.
 - **Schritte als Text, nicht als Tabelle.** Schritte werden nur angezeigt und nicht ausgewertet (YAGNI).
@@ -55,8 +70,8 @@ Begründungen:
 - **Einheiten:** feste Liste `g`, `kg`, `ml`, `l`, `EL`, `TL`, `Prise`, `Zehe`, `Bund`, `Dose`, `Packung`, `Becher`,
   `Scheibe`, `Handvoll`. **Kein „Stück“:** Gezähltes hat `unit = NULL`, es gibt also nur eine Schreibweise (wichtig für
   die Einkaufsliste). Passt sonst keine Einheit, `unit = NULL` und der Rest in `note`.
-- Grenzen: höchstens 60 Zutaten, `name` höchstens 80 Zeichen, `raw`/`note` höchstens 200, `instructions` höchstens 10 000
-  Zeichen, `servings` 1–50.
+- Grenzen: höchstens 60 Zutaten, `name` höchstens 80 Zeichen, `raw`/`note` höchstens 200, `instructions` und `source_text`
+  höchstens 10 000 Zeichen, `servings` 1–50.
 
 ## 3. Quelle Instagram: Caption aus dem Link (getestet 03.–06.10.2026)
 
@@ -74,11 +89,11 @@ Begründungen:
   (ohne Likes-Präfix). Die Caption ist der Text zwischen dem ersten `: "` und dem letzten `"`, nach `decodeEntities`.
 - Vollständig geprüft bei 4 Posts von 4 Accounts mit bis zu 1 490 Zeichen, Pfade `/reel/`, `/reels/` und `/p/`, Abruf aus
   HA in 0,6–1 s. **Nicht geprüft: Captions über 1 500 Zeichen** (Instagram erlaubt 2 200).
-- **Kürzung erkennen statt weiter testen:** Endet `og:title` nicht mit `"`, gilt die Caption als möglicherweise gekürzt.
-  Die Prüfansicht zeigt dann „Caption evtl. gekürzt, ggf. Text einfügen“.
+- **Kürzung erkennen statt weiter testen:** Endet `og:title` nicht mit `"`, gilt die Caption als möglicherweise gekürzt
+  (`source_truncated = 1`). Die Rezept-Ansicht zeigt dann „Caption evtl. gekürzt, ggf. Text einfügen“.
 - **Rezept nicht in der Caption:** Bei einem der vier Posts stand das Rezept als Rezeptkarte im letzten Karussell-Bild
-  („bis zum letzten Bild wischen“). `og:image` liefert nur das erste Bild. Das LLM lieferte korrekt leere Zutaten (aber
-  erfundene Portionen, Abschnitt 4). Laut Nutzer ist das bei etwa jedem dritten Post so → Phase 4.
+  („bis zum letzten Bild wischen“). `og:image` liefert nur das erste Bild. Laut Nutzer ist das bei etwa jedem dritten Post
+  so → Stufe 8.
 - **Nicht stabil:** Das ist undokumentiertes Verhalten für Link-Vorschauen. Instagram kann es jederzeit ändern, deshalb
   bleibt „Text einfügen“ als Rückfall. Den User-Agent nicht in einen Browser-UA ändern (dann kommt nichts mehr).
 - **Nutzungsbedingungen:** Die App liest schon heute den Titel aus derselben Seite. Die Caption als Rezept zu speichern
@@ -87,7 +102,7 @@ Begründungen:
 - Kein eigener Abruf: Die Caption kommt aus derselben Seite, die `preview.ts` schon lädt (`fetchLimited`, 1,5 MB Limit
   reicht bei 155 KB).
 
-## 4. LLM-Test (Phase 0, Punkt 2; 05./06.10.2026)
+## 4. LLM-Test (05./06.10.2026)
 
 HA-Script: Caption per `rest_command` holen, `ai_task.generate_data` mit `structure` (`servings` als `number`, die übrigen
 Felder als `text`, Zutaten als JSON-Text). Prompt siehe Anhang.
@@ -108,7 +123,7 @@ Hashtags (auch ohne `#`), Emojis und Werbung fallen weg. Dauer 1–5 s.
 |---|---|
 | **Erfundene Werte** (Portionen) | LLM liefert `servings_quote` (Textstelle). Kommt sie nicht wörtlich in der Quelle vor, oder gibt es keine Zutaten, wird `servings` verworfen |
 | **Verfälschter Text** („Auflerdin“) | `raw` und `section` müssen wörtlich in der Quelle vorkommen (Vergleich ohne Leerzeichen-/Aufzählungszeichen-Unterschiede). Sonst Markierung in der Prüfansicht |
-| **Weggelassene Zeilen** („Salz & Pfeffer“) | Lässt sich nicht automatisch prüfen. Die Prüfansicht zeigt den Originaltext **neben** dem Entwurf, nicht nur aufklappbar |
+| **Weggelassene Zeilen** („Salz & Pfeffer“) | Lässt sich nicht automatisch prüfen. Die Prüfansicht zeigt den Originaltext **neben** dem Entwurf |
 | **Uneinheitliche Normalisierung**, Alternativen im Namen („Wasser oder Gemüsebrühe“) | Jetzt egal (`raw` bleibt). Erst bei der Einkaufsliste relevant |
 | **Nicht deterministisch** (gleicher Text, leicht anderes Ergebnis) | Prüfansicht. Kein automatisches Speichern |
 | Kosmetik: Nummern/Keycap-Emojis am Schrittanfang (`1.`, `1️⃣`), Doppelpunkt am Abschnittsnamen, Leerzeilen zwischen Schritten | Die App räumt auf: führende Nummerierung entfernen, `:` am Abschnittsende entfernen, leere Zeilen verwerfen |
@@ -116,7 +131,7 @@ Hashtags (auch ohne `#`), Emojis und Werbung fallen weg. Dauer 1–5 s.
 **Verworfen:** Feld „fehlende Zutaten“ (`missing`). Einmal richtig („Salz“), einmal falsch (meldete „Salz, Pfeffer“ als
 fehlend, obwohl sie in der Liste standen).
 
-## 5. LLM-Anbindung über Home Assistant
+## 5. LLM-Anbindung über Home Assistant (ab Stufe 3)
 
 - **Aufruf:** `POST http://supervisor/core/api/services/ai_task/generate_data?return_response` mit `SUPERVISOR_TOKEN`
   (`homeassistant_api: true` ist schon gesetzt). Laut REST-Doku liefert `?return_response` die Antwort unter
@@ -139,97 +154,104 @@ fehlend, obwohl sie in der Liste standen).
 
 ## 6. API
 
-| Route | Zweck |
-|---|---|
-| `GET /api/dishes/:id/recipe` | `{servings, ingredients[], instructions}` |
-| `PUT /api/dishes/:id/recipe` | ersetzt das ganze Rezept (Transaktion). Leeres Rezept = löschen |
-| `POST /api/recipe/import {url}` | Seite über `fetchLimited` laden (wie `preview.ts`, gemeinsame Analyse). Quelle in dieser Reihenfolge: schema.org-Rezept (`recipeIngredient`, `recipeInstructions` inkl. `HowToStep`/`HowToSection`, `recipeYield`), sonst Instagram-Caption aus `og:title` (Abschnitt 3). Text → LLM → **Entwurf** mit `source` (Originaltext), `maybeTruncated` und pro Zutat `verified` (Abgleich). Ohne Quelle: `{reason: "no recipe"}`, die UI bietet „Text einfügen“ an |
-| `POST /api/recipe/parse {text}` | eingefügter Text → LLM → Entwurf (nicht gespeichert), gleiche Form. Text höchstens 10 000 Zeichen |
-| `GET /api/recipe/status` | `{ai: true/false, reason}`. `false` ohne `SUPERVISOR_TOKEN` oder ohne `ai_task.*`-Entität (`GET /core/api/states`, gegen die REST-Doku prüfen). Die UI zeigt die LLM-Knöpfe nur bei `true`, sonst einen Hinweis zur Einrichtung |
-| `GET /api/dishes?ingredient=zucchini` | Suche über `dish_ingredient.name` (`LIKE`, ohne Groß-/Kleinschreibung) |
+| Route | Stufe | Zweck |
+|---|---|---|
+| `GET /api/dishes/:id/recipe` | 1 | `{servings, ingredients[], instructions}`, ab Stufe 2 zusätzlich `source_text`, `source_truncated` |
+| `PUT /api/dishes/:id/recipe` | 1 | ersetzt das strukturierte Rezept (Transaktion). Leeres Rezept = löschen. `source_text` bleibt unberührt |
+| `POST /api/preview` (bestehend) | 2 | liefert zusätzlich `sourceText` und `sourceTruncated`: schema.org-Rezept (Zutatenzeilen, Leerzeile, Schritte) oder Instagram-Caption aus `og:title` |
+| `POST /api/dishes`, `PATCH /api/dishes/:id` (bestehend) | 2 | nehmen `source_text`/`source_truncated` an (wie das Bild aus der Vorschau) |
+| `POST /api/dishes/:id/source` | 2 | „Rezept aus Link holen“: Link des Gerichts neu abrufen, `source_text` ersetzen. Ohne Fund: `{reason: "no recipe"}`, nichts ändert sich |
+| `POST /api/dishes/:id/recipe/draft` | 3 | `source_text` → LLM → **Entwurf** (wird nicht gespeichert) mit pro Zutat `verified` (Abgleich) |
+| `GET /api/recipe/status` | 3 | `{ai: true/false, reason}`. `false` ohne `SUPERVISOR_TOKEN` oder ohne `ai_task.*`-Entität (`GET /core/api/states`, gegen die REST-Doku prüfen). Die UI zeigt die LLM-Knöpfe nur bei `true`, sonst einen Hinweis zur Einrichtung |
+| `POST /api/recipe/parse {text}` | 4 | eingefügter Text → LLM → Entwurf, gleiche Form. Text höchstens 10 000 Zeichen. Beim Speichern wird der Text zu `source_text` |
+| `GET /api/dishes?ingredient=zucchini` | 5 | Suche über `dish_ingredient.name` (`LIKE`, ohne Groß-/Kleinschreibung) |
 
 Kein HA-Event für Rezept-Änderungen (Katalog-Änderungen feuern bewusst nichts).
 
 ## 7. UI
 
-- **Bearbeiten-Blatt des Gerichts:** neuer Bereich „Rezept“ mit Knopf „Rezept ansehen“ bzw. „Rezept hinzufügen“. Die Zeile
-  in der Liste bleibt unverändert schlank (höchstens ein kleines Symbol, wenn ein Rezept da ist).
-- **Rezept-Ansicht** (eigene Ansicht, kein Blatt, sonst wird es zu eng): Portionen-Stepper, Zutaten nach Abschnitt, Schritte,
-  Knöpfe „Kochmodus“ und „Bearbeiten“.
-- **Erfassen:** „Aus Link übernehmen“ (Standard, wenn ein Link da ist), „Text einfügen“ und „Von Hand“. Die ersten beiden
-  führen in die Prüfansicht.
-- **Prüfansicht / Editor** (ein und dieselbe Ansicht): Jede Zutat ist eine Zeile mit Menge, Einheit (Auswahl) und Zutat, dazu
-  die Originalzeile klein darunter. Nicht im Text gefundene Zeilen/Abschnitte sind markiert. **Originaltext daneben** bzw.
-  auf dem Handy als zweiter Reiter („Entwurf | Original“), damit weggelassene Zeilen auffallen. Zeile löschen, Zeile
-  hinzufügen, Schritte als Textfeld, Hinweis bei möglicherweise gekürzter Caption. Erst „Speichern“ schreibt. Auf 360 px
-  ist eine Zeile mit drei Feldern eng → im Browser bei 390 px prüfen, notfalls Menge+Einheit über der Zutat.
-- **Umrechnen:** `amount × (gewählte / servings)`, Rundung je Einheit (g/ml auf 5, gezählt/Zehe auf ½, EL/TL auf ½). Ohne
-  `amount` wird nichts gerechnet. Ohne `servings` ist der Stepper aus. Nur Anzeige, die gespeicherten Werte bleiben.
-- **Kochmodus:** große Schrift, Zutaten abhakbar (nur im Speicher, nicht gespeichert), Schritte einzeln oder als Liste,
-  Bildschirm bleibt an (Wake Lock, falls Phase 0 grün, sonst stiller Rückfall).
-- **Katalog:** Suchfeld findet auch Zutaten („zucchini“ zeigt alle Gerichte mit Zucchini).
+- **Bearbeiten-Blatt des Gerichts:** neuer Bereich „Rezept“ mit Knopf „Rezept ansehen“ bzw. „Rezept hinzufügen“, ab Stufe 2
+  zusätzlich „Rezept aus Link holen“ (nur mit Link; überschreibt ein vorhandenes `source_text` erst nach zweistufiger
+  Bestätigung). Die Zeile in der Liste bleibt unverändert schlank (höchstens ein kleines Symbol, wenn ein Rezept da ist).
+- **Rezept-Ansicht** (eigene Ansicht, kein Blatt, sonst wird es zu eng): strukturiertes Rezept (Portionen, Zutaten nach
+  Abschnitt, Schritte), Knöpfe „Bearbeiten“ und ab Stufe 7 „Kochmodus“. Gibt es nur `source_text`, wird der Originaltext
+  angezeigt (Zeilenumbrüche erhalten), ab Stufe 3 mit Knopf „Zutaten erkennen“. Hinweis bei `source_truncated`.
+- **Editor = Prüfansicht** (ab Stufe 1 als Editor, ab Stufe 3 auch für Entwürfe): Jede Zutat ist eine Zeile mit Menge,
+  Einheit (Auswahl) und Zutat, dazu die Originalzeile klein darunter. Nicht im Text gefundene Zeilen/Abschnitte sind
+  markiert. **Originaltext daneben** bzw. auf dem Handy als zweiter Reiter („Entwurf | Original“), damit weggelassene
+  Zeilen auffallen. Zeile löschen, Zeile hinzufügen, Schritte als Textfeld. Erst „Speichern“ schreibt. Auf 360 px ist eine
+  Zeile mit drei Feldern eng → im Browser bei 390 px prüfen, notfalls Menge+Einheit über der Zutat.
+- **Umrechnen** (Stufe 6): `amount × (gewählte / servings)`, Rundung je Einheit (g/ml auf 5, gezählt/Zehe auf ½, EL/TL
+  auf ½). Ohne `amount` wird nichts gerechnet. Ohne `servings` ist der Stepper aus. Nur Anzeige.
+- **Kochmodus** (Stufe 7): große Schrift, Zutaten abhakbar (nur im Speicher, nicht gespeichert), Schritte einzeln oder als
+  Liste, Bildschirm bleibt an (Wake Lock, falls der Test grün ist, sonst stiller Rückfall).
+- **Katalog** (Stufe 5): Suchfeld findet auch Zutaten („zucchini“ zeigt alle Gerichte mit Zucchini).
 
-## 8. Phasen (je ein PR)
+## 8. Stufen (je ein PR und ein Release)
 
-### Phase 0 – Unverifiziertes klären
-1. ~~Liefert der Link die Instagram-Caption?~~ **Erledigt:** ja, mit dem Bot-User-Agent der App (Abschnitt 3).
-2. ~~LLM-Qualität mit echten Captions~~ **Erledigt:** reicht mit Prüfansicht und Abgleich (Abschnitt 4). Offen: 2
-   Rezeptseiten (schema.org-Zeilen statt Caption).
-3. ~~`structure` mit Liste von Objekten?~~ **Entschieden:** nicht nötig, JSON im `text`-Feld funktioniert.
-4. `ai_task` über den **Supervisor-Proxy** (aus dem Add-on, nicht per langlebigem Token) mit `?return_response`: Kommt
-   `service_response` an? Reicht `homeassistant_api`? Und `GET /core/api/states` für die Statusprüfung.
-5. Wake Lock (`navigator.wakeLock.request("screen")`) in der Companion-App im Ingress-iframe. Erwartung: Der iframe hat
-   denselben Origin, deshalb erlaubt die Permissions-Policy (Standard `self`) es. Unklar ist, ob die WebView die API kennt.
-6. schema.org auf echten Seiten (Chefkoch & Co.): Kommt `recipeIngredient` durch oder blockt Cloudflare?
-7. Für Phase 4: Wie übergibt die App ein Bild als `attachments` (`media_content_id`) an `ai_task`? Laut Doku gibt es
-   Anhänge, der Weg aus einem Add-on ist ungeklärt.
+Regel: Jede Stufe ist für sich nutzbar. Nach jeder Stufe entscheiden, ob die nächste sich lohnt.
 
-### Phase 1 – Datenmodell, API und Handeingabe (`feat/rezepte`)
-Migration, `repo.ts` (`getRecipe`, `setRecipe`), `GET/PUT …/recipe`, Rezept-Ansicht, Editor ohne LLM, Zutatensuche.
-Tests inkl. Migration gegen eine Datenbank im alten Stand, Schema-Version in den bestehenden Tests anheben.
+| Stufe | Branch | Inhalt | Nutzen danach | braucht |
+|---|---|---|---|---|
+| **1 Rezept von Hand** | `feat/rezepte` | Migration (strukturiertes Rezept), `GET/PUT …/recipe`, Rezept-Ansicht, Editor | Rezepte speichern und nachlesen. Der Editor wird später die Prüfansicht | – |
+| **2 Originaltext aus Link** | `feat/rezept-quelle` | Migration `source_text`, Caption/schema.org in `preview.ts`, automatisch beim Anlegen, Knopf „Rezept aus Link holen“ | Jedes neue Gericht mit Link hat sein Rezept als Text gesichert, ohne LLM | 1 |
+| **3 Zutaten erkennen (LLM)** | `feat/rezept-ki` | `ha-ai.ts`, `…/recipe/draft`, `/status`, Abgleich, Aufräumen, Entwurf im Editor mit Original daneben | Aus dem gesicherten Text wird mit einem Klick ein strukturiertes Rezept | 2 |
+| **4 Text einfügen** | `feat/rezept-text` | `/parse`, Einstieg im UI | Rückfall, wenn der Link nichts liefert | 3 |
+| **5 Zutatensuche** | `feat/zutatensuche` | `?ingredient=`, Suchfeld im Katalog | „Was koche ich mit Zucchini?“ | 1 |
+| **6 Portionen umrechnen** | `feat/portionen` | Stepper mit Rundung | Mengen skalieren | 1 |
+| **7 Kochmodus** | `feat/kochmodus` | große Ansicht, abhaken, Wake Lock | Komfort am Herd | 1 |
+| **8 Screenshot** | `feat/rezept-bild` | Bild als Anhang an `ai_task`, derselbe Entwurf | jedes dritte Instagram-Rezept | 3 |
 
-### Phase 2 – LLM und Import (`feat/rezept-import`)
-`ha-ai.ts`, Caption-Extraktion (gemeinsam mit `preview.ts`), Abgleich mit der Quelle, Aufräumen (Nummern, Doppelpunkte),
-`POST /api/recipe/import`, `/parse`, `/status`, Prüfansicht mit Entwurf und Original. Tests: Caption-Extraktion gegen
-lokale Testseiten im Instagram-Format (Zeilenumbrüche, Entities, gekürzt/ungekürzt), Fake-Supervisor mit den Antworten
-aus Abschnitt 4 (fehlerfrei, erfundene Portionen, „Auflerdin“, weggelassene Zeilen, kein JSON, Zeitüberschreitung, kein
-Token), lokale Rezeptseite.
+Hinweise:
 
-### Phase 3 – Umrechnen und Kochmodus (`feat/kochmodus`)
-Portionen-Stepper mit Rundung (Unit-Tests für die Rundung), Kochmodus, Wake Lock je nach Ergebnis aus Phase 0.
+- **Stufe 1 allein ist mühsam** (alles von Hand am Handy). Stufe 2 und 3 sollten zügig folgen.
+- **Stufe 2 und 3 sind bewusst getrennt:** Stufe 2 ist risikoarm (Abruf und Extraktion sind getestet) und sichert die
+  Rezepte sofort. Stufe 3 bringt die neue Abhängigkeit (HA-KI-Dienst) und den größten UI-Aufwand.
+- Stufen 5–7 hängen nur an Stufe 1, Reihenfolge frei.
 
-### Phase 4 – Rezept aus Screenshot (`feat/rezept-bild`, erst nach Phase 1–3)
-Für Rezepte im Bild (Rezeptkarte im Karussell, Text im Video). Screenshot hochladen → `ai_task` mit Anhang → derselbe
-Entwurf und dieselbe Prüfansicht (Abgleich mit der Quelle entfällt, dafür Bild daneben). Hängt an Phase 0, Punkt 7.
+**Pro Stufe zu klären bzw. zu testen:**
+
+| Stufe | Vorab bzw. als erster Commit |
+|---|---|
+| 2 | Captions über 1 500 Zeichen (Kürzungserkennung greift sonst). schema.org auf echten Seiten (Chefkoch & Co.): Kommt `recipeIngredient` durch oder blockt Cloudflare? |
+| 3 | Aus dem Add-on heraus: `ai_task` über den **Supervisor-Proxy** mit `?return_response`, reicht `homeassistant_api`? `GET /core/api/states` für die Statusprüfung. `servings_quote` und „jede Zutatenzeile übernehmen“ mit den 4 Captions testen. 2 Rezeptseiten durchs LLM |
+| 7 | Wake Lock (`navigator.wakeLock.request("screen")`) in der Companion-App im Ingress-iframe. Erwartung: Same-Origin, Permissions-Policy `self` erlaubt es. Unklar, ob die WebView die API kennt |
+| 8 | Wie übergibt die App ein Bild als `attachments` (`media_content_id`) an `ai_task`? Laut Doku gibt es Anhänge, der Weg aus einem Add-on ist ungeklärt |
+
+**Tests je Stufe** (zusätzlich zu den üblichen aus `AGENTS.md`):
+
+- 1: Migration gegen eine Datenbank im alten Stand, Schema-Version in den bestehenden Tests anheben, `setRecipe`
+  (Ersetzen, Grenzen, Einheitenliste).
+- 2: Caption-Extraktion gegen lokale Testseiten im Instagram-Format (Zeilenumbrüche, Entities, gekürzt/ungekürzt,
+  Attributreihenfolge), schema.org-Seite mit `HowToStep`/`HowToSection`, Seite ohne Rezept.
+- 3: Fake-Supervisor mit den Antworten aus Abschnitt 4 (fehlerfrei, erfundene Portionen, „Auflerdin“, weggelassene Zeilen,
+  kein JSON, Zeitüberschreitung, kein Token), Abgleich und Aufräumen als Unit-Tests.
+- 6: Rundung als Unit-Tests.
 
 ## 9. Risiken
 
 - **Instagram ändert die Auslieferung:** Dann liefert der Link keine Caption mehr, und „Text einfügen“ wird zum Hauptweg.
-  Am Add-on-Protokoll erkennbar (Zeile `[preview]` bzw. eine neue Zeile für den Import).
-- **LLM lässt Zeilen weg** (im Test 1 von 3 Caption-Rezepten). Nur die Prüfansicht mit Originaltext fängt das ab. Wer
-  ungeprüft speichert, verliert Zutaten.
+  Am Add-on-Protokoll erkennbar (Zeile `[preview]`, ab Stufe 2 mit `source=yes/no`).
+- **LLM lässt Zeilen weg** (im Test 1 von 3 Caption-Rezepten). Nur die Prüfansicht mit Originaltext fängt das ab.
 - **Abhängigkeit vom HA-KI-Dienst:** Kosten pro Aufruf (gering), Ausfall oder Modellwechsel in HA ändern das Ergebnis.
-  `raw` bleibt immer erhalten.
-- **Jedes dritte Instagram-Rezept** liegt im Bild. Bis Phase 4 bleibt dafür nur die Handeingabe.
+  `source_text` und `raw` bleiben immer erhalten.
+- **Jedes dritte Instagram-Rezept** liegt im Bild. Bis Stufe 8 bleibt dafür nur die Handeingabe.
 - **Struktur ohne Nutzer:** Die strukturierten Felder zahlen sich erst mit Umrechnen und Einkaufsliste aus. Wird die
   Einkaufsliste nie gebaut, war `section`/`amount_max`/Einheitenliste teilweise Vorratsarbeit.
-- **Handeingabe auf dem Handy** mit drei Feldern pro Zutat ist mühsam. Falls das im Alltag stört: eine Zeile tippen und die
-  App zerlegt sie, als spätere Verbesserung.
 
-## 10. Anpassungen an `AGENTS.md` (mit Phase 1/2)
+## 10. Anpassungen an `AGENTS.md` (mit der jeweiligen Stufe)
 
-- „Bewusst nicht gebaut“: „Zutaten“ streichen, „Einkaufsliste“ und „Nährwerte“ bleiben bzw. kommen dazu.
-- Datenmodell um `dish_ingredient`, `servings`, `instructions` ergänzen, Einheitenregel (kein „Stück“).
-- Instagram-Absatz: Caption aus `og:title` mit dem Bot-User-Agent, Kürzungserkennung, Nutzungsbedingungen, User-Agent
-  nicht ändern.
-- Sicherheit: `ha-ai.ts` als weitere bewusste Ausnahme neben `ha-notify.ts`/`ha-discovery.ts`, LLM-Ausgabe gilt als
+- Stufe 1: „Bewusst nicht gebaut“: „Zutaten“ streichen, „Einkaufsliste“ und „Nährwerte“ bleiben bzw. kommen dazu.
+  Datenmodell um `dish_ingredient`, `servings`, `instructions` ergänzen, Einheitenregel (kein „Stück“).
+- Stufe 2: `source_text`, Instagram-Absatz (Caption aus `og:title` mit dem Bot-User-Agent, Kürzungserkennung,
+  Nutzungsbedingungen, User-Agent nicht ändern).
+- Stufe 3: `ha-ai.ts` als weitere bewusste Ausnahme neben `ha-notify.ts`/`ha-discovery.ts`, LLM-Ausgabe gilt als
   Nutzereingabe und wird gegen die Quelle abgeglichen.
 
 ## 11. Offene Punkte
 
-- Phase 0, Punkte 2 (Rezeptseiten), 4–7.
+- Die Vorab-Punkte je Stufe (Abschnitt 8).
 - Soll eine bestimmte AI-Task-Entität wählbar sein (Add-on-Option) oder reicht die bevorzugte? Vorschlag: bevorzugte (YAGNI).
-- `servings_quote` ist im Prompt, aber noch nicht in einem Testlauf geprüft.
 
 ## Anhang: Prompt (Stand Test, plus `servings_quote`, ohne `missing`)
 
