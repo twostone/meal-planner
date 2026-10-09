@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.0](https://github.com/twostone/meal-planner/compare/v0.8.0...v0.9.0) (2026-10-09)
+
+
+### Neu
+
+* **rezept:** Originaltext aus dem Link sichern (Instagram-Caption, schema.org) ([#22](https://github.com/twostone/meal-planner/issues/22)) ([02c43a7](https://github.com/twostone/meal-planner/commit/02c43a7e3026ce60ac0cc27891b8d50e94e7d6d1))
+* **rezept:** Rezept mit Zutaten und Zubereitung von Hand erfassen ([#20](https://github.com/twostone/meal-planner/issues/20)) ([7c1a57c](https://github.com/twostone/meal-planner/commit/7c1a57c21d6e148fcb1167fc40688c4173918ce9))
+
 ## [0.8.0](https://github.com/twostone/meal-planner/compare/v0.7.0...v0.8.0) (2026-10-02)
 
 
