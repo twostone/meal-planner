@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/twostone/meal-planner/compare/v0.9.0...v0.10.0) (2026-10-09)
+
+
+### Neu
+
+* **rezept:** Zutaten per KI aus dem Originaltext erkennen ([#23](https://github.com/twostone/meal-planner/issues/23)) ([6ed27e8](https://github.com/twostone/meal-planner/commit/6ed27e84423fedbd203dc499193b16a1a2b988d8))
+
 ## [0.9.0](https://github.com/twostone/meal-planner/compare/v0.8.0...v0.9.0) (2026-10-09)
 
 
