@@ -37,8 +37,8 @@
   onMount(async () => {
     try {
       recipe = await api.getRecipe(dishId);
-      editing = isBlank(recipe);
-      if (editing) startEdit();
+      // Nothing saved yet: straight into the editor, unless there is a link to get the recipe from first.
+      if (isBlank(recipe) && !hasLink) startEdit();
     } catch {
       loadError = true;
     }
@@ -203,6 +203,7 @@
     </form>
   {:else}
     <article class="recipe">
+      {#if isBlank(recipe)}<p class="status">Noch kein Rezept. Du kannst es aus dem Link holen oder von Hand eintragen.</p>{/if}
       {#if recipe.servings !== null}<p class="servings">{recipe.servings} {recipe.servings === 1 ? "Portion" : "Portionen"}</p>{/if}
       {#if recipe.ingredients.length}
         <h3>Zutaten</h3>
