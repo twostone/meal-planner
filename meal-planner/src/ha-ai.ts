@@ -49,11 +49,15 @@ export function createHaAi(token: string | null, baseUrl = SUPERVISOR_CORE_URL, 
       if (!token) return { ai: false, reason: "disabled" };
       try {
         const res = await request("states", { method: "GET" }, token, baseUrl, STATUS_TIMEOUT_MS);
-        if (!res.ok) return { ai: false, reason: "unreachable" };
+        if (!res.ok) {
+          console.error(`[ha-ai] status check failed: supervisor responded ${res.status}`);
+          return { ai: false, reason: "unreachable" };
+        }
         const states = (await res.json()) as { entity_id?: unknown; state?: unknown }[];
         const has = Array.isArray(states) && states.some((s) => typeof s.entity_id === "string" && s.entity_id.startsWith("ai_task.") && s.state !== "unavailable");
         return has ? { ai: true, reason: null } : { ai: false, reason: "no_entity" };
-      } catch {
+      } catch (e) {
+        console.error("[ha-ai] status check failed:", e instanceof Error ? e.message : e);
         return { ai: false, reason: "unreachable" };
       }
     },
@@ -77,7 +81,10 @@ export function createHaAi(token: string | null, baseUrl = SUPERVISOR_CORE_URL, 
       } catch (e) {
         throw new AiError(e instanceof Error && e.name === "AbortError" ? "timeout" : "unreachable");
       }
-      if (!res.ok) throw new AiError("unreachable");
+      if (!res.ok) {
+        console.error(`[ha-ai] generate failed: supervisor responded ${res.status}`);
+        throw new AiError("unreachable");
+      }
       let body: any;
       try {
         body = await res.json();
