@@ -17,7 +17,7 @@ LICENSE                  Apache-2.0
 AGENTS.md                diese Datei
 release-please-config.json, .release-please-manifest.json   Release-Automatik (Version, Changelog)
 .github/workflows/       ci.yml (Tests, Docker-Build, Smoke-Test), release.yml (Release Please, Image)
-.github/dependabot.yml   hält die festgepinnten Actions aktuell
+renovate.json            Renovate: hält Actions, npm und Docker-Basisimage aktuell (gruppierte PRs)
 meal-planner/            das Add-on (Docker-Build-Kontext)
   config.yaml            Add-on-Konfiguration (Version pflegt Release Please)
   icon.png               Icon im App-Store (128×128 PNG, aus web/public/favicon.svg erzeugt)
@@ -208,7 +208,10 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
 - **Image:** `ghcr.io/twostone/meal-planner:<version>` und `:latest`, Tag = Version aus `config.yaml`. Das Paket muss
   **öffentlich** sein (Package settings → Change visibility), sonst kann Home Assistant es nicht ohne Zugangsdaten laden.
   Provenance und SBOM sind aus (KISS).
-- **Actions nur mit vollem Commit-SHA pinnen** (Kommentar mit der Version), Dependabot aktualisiert sie wöchentlich.
+- **Renovate** (`renovate.json`): npm (ohne Major), GitHub Actions und Docker-Basisimages je in einem gruppierten PR, Majors
+  einzeln. TypeScript bleibt per `allowedVersions: "<7"` unter 7 (siehe „Regeln beim Ändern“). Config prüfen mit
+  `npx --package renovate -- renovate-config-validator renovate.json`.
+- **Actions nur mit vollem Commit-SHA pinnen** (Kommentar mit der Version), Renovate aktualisiert sie (`helpers:pinGitHubActionDigests`, alle Actions in einem PR).
   Rechte in den Workflows so klein wie möglich lassen (`packages: write` nur im Job `publish`).
 - **`image:` in `config.yaml`** steht ohne Tag (`ghcr.io/twostone/meal-planner`), Home Assistant hängt `version` als Tag an.
   Nie einen Tag oder `latest` eintragen. Nach dem Merge eines Release-PR steht die neue Version sofort in `config.yaml`,
@@ -252,7 +255,7 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
 ## Bewusst nicht gebaut (nur auf ausdrücklichen Wunsch)
 
 Einkaufsliste, Nährwerte, Anbindung an HA-Todo/Kalender, Tageszuordnung, Drag-and-Drop, OAuth, Instagram-oEmbed,
-Bildverkleinerung, Image-Signatur/SBOM, Renovate/Dependabot für npm (TypeScript ist bewusst gepinnt),
+Bildverkleinerung, Image-Signatur/SBOM,
 Kategorien umbenennen/zusammenführen, Mehrfachauswahl im Kategorie-Filter.
 
 ## Stand und offene Punkte
