@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1](https://github.com/twostone/meal-planner/compare/v0.10.0...v0.10.1) (2026-10-09)
+
+
+### Behoben
+
+* **rezept:** Rezept aus Link holen auch bei leerem Rezept anbieten ([#26](https://github.com/twostone/meal-planner/issues/26)) ([867cd92](https://github.com/twostone/meal-planner/commit/867cd92ba3118bbaaa94314e719dfce734f00c62))
+
 ## [0.10.0](https://github.com/twostone/meal-planner/compare/v0.9.0...v0.10.0) (2026-10-09)
 
 
