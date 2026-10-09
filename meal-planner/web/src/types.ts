@@ -33,8 +33,23 @@ export type PlanDetail = {
   created_at: string;
   entries: Entry[];
 };
-export type DishInput = { title: string; url: string | null; note: string | null; image: string | null; tags: string[] };
-export type Preview = { title: string | null; image: string | null; titleSuggestions: string[]; reason: string | null };
+export type DishInput = {
+  title: string;
+  url: string | null;
+  note: string | null;
+  image: string | null;
+  tags: string[];
+  source_text?: string | null; // only when a new dish is created from a link preview
+  source_truncated?: boolean;
+};
+export type Preview = {
+  title: string | null;
+  image: string | null;
+  titleSuggestions: string[];
+  sourceText: string | null;
+  sourceTruncated: boolean;
+  reason: string | null;
+};
 export type Ingredient = {
   section: string | null;
   amount: number | null;
@@ -44,6 +59,12 @@ export type Ingredient = {
   note: string | null;
   raw: string; // original line
 };
-export type Recipe = { servings: number | null; instructions: string | null; ingredients: Ingredient[] };
+export type Recipe = {
+  servings: number | null;
+  instructions: string | null;
+  ingredients: Ingredient[];
+  source_text: string | null; // the recipe as found at the link, unchanged
+  source_truncated: boolean; // the caption may have been cut off
+};
 // Same list as UNITS in the server's repo.ts. Counted things ("1 Zwiebel") have no unit.
 export const UNITS = ["g", "kg", "ml", "l", "EL", "TL", "Prise", "Zehe", "Bund", "Dose", "Packung", "Becher", "Scheibe", "Handvoll"];

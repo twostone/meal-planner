@@ -783,3 +783,19 @@ fieldset.ingredients legend {
 .ing-note {
   color: var(--muted);
 }
+.source-text {
+  margin: 4px 0 0;
+  white-space: pre-wrap; /* the original line breaks */
+  overflow-wrap: anywhere;
+  font-size: 15px;
+}
+details.source {
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--green-soft);
+}
+details.source summary {
+  min-height: 24px;
+  font-weight: 600;
+  color: var(--muted);
+}

@@ -4,7 +4,7 @@
 // where nothing sensible can be derived, fewer candidates come back (possibly none).
 
 // The word before "Instagram" follows the request language (the app asks for German), not the caption's.
-const PREFIX = /^[^\r\n]{1,120}? (?:auf|on) Instagram: /;
+export const PREFIX = /^[^\r\n]{1,120}? (?:auf|on) Instagram: /;
 const QUOTES_AT_EDGES = /^["„“”]+|["“”]+$/g;
 // Extended_Pictographic, not Emoji: the latter also matches digits and "#".
 const EMOJI = /[\p{Extended_Pictographic}\u200d\ufe0f\u{1f3fb}-\u{1f3ff}]/gu;

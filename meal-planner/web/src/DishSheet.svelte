@@ -38,6 +38,9 @@
   let loading = $state(false);
   let hint = $state("");
   let suggestions = $state<string[]>([]); // title candidates from the link, best first
+  // Recipe text found at the link. Only a new dish takes it along; for a saved one there is "Rezept aus Link holen".
+  let sourceText = $state<string | null>(null);
+  let sourceTruncated = $state(false);
 
   const creating = start.dishId === null;
 
@@ -86,6 +89,8 @@
       const r = await api.previewUrl(u);
       if (!alive) return;
       suggestions = r.titleSuggestions;
+      sourceText = r.sourceText;
+      sourceTruncated = r.sourceTruncated;
       const best = r.titleSuggestions[0] ?? r.title;
       if (best && !title.trim()) title = best; // never overwrite what the user typed
       if (r.image) image = r.image;
@@ -120,7 +125,14 @@
     const listNote = entryNote.trim();
     await saveDish(
       start.dishId,
-      { title: title.trim(), url: u || null, note: note.trim() || null, image, tags },
+      {
+        title: title.trim(),
+        url: u || null,
+        note: note.trim() || null,
+        image,
+        tags,
+        ...(creating && u && sourceText ? { source_text: sourceText, source_truncated: sourceTruncated } : {}),
+      },
       start.addToPlan,
       start.entryId !== null && listNote !== start.entryNote.trim() ? { id: start.entryId, note: listNote || null } : undefined,
     );

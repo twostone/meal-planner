@@ -89,7 +89,7 @@ test("POST /api/preview: validates the URL and passes the result through", async
   const seen: string[] = [];
   const { call, done } = await setup(async (url) => {
     seen.push(url);
-    return { title: "Curry", image: "0123456789abcdef.png", titleSuggestions: ["Curry"], reason: null };
+    return { title: "Curry", image: "0123456789abcdef.png", titleSuggestions: ["Curry"], sourceText: null, sourceTruncated: false, reason: null };
   });
   try {
     assert.equal((await call("POST", "/api/preview", { url: "javascript:alert(1)" })).status, 400);
@@ -97,7 +97,7 @@ test("POST /api/preview: validates the URL and passes the result through", async
     assert.equal((await call("POST", "/api/preview", {})).status, 400);
     const ok = await call("POST", "/api/preview", { url: " https://example.com/r " });
     assert.equal(ok.status, 200);
-    assert.deepEqual(ok.json, { title: "Curry", image: "0123456789abcdef.png", titleSuggestions: ["Curry"], reason: null });
+    assert.deepEqual(ok.json, { title: "Curry", image: "0123456789abcdef.png", titleSuggestions: ["Curry"], sourceText: null, sourceTruncated: false, reason: null });
     assert.deepEqual(seen, ["https://example.com/r"]);
   } finally {
     await done();
@@ -109,7 +109,7 @@ test("POST /api/preview: at most four run in parallel, the fifth gets 429", asyn
   const gate = new Promise<void>((r) => (release = r));
   const { call, done } = await setup(async () => {
     await gate;
-    return { title: null, image: null, titleSuggestions: [], reason: "no_metadata" };
+    return { title: null, image: null, titleSuggestions: [], sourceText: null, sourceTruncated: false, reason: "no_metadata" };
   });
   try {
     const running = Array.from({ length: 4 }, () => call("POST", "/api/preview", { url: "https://example.com/" }));
@@ -143,7 +143,7 @@ test("migration from v1 keeps existing dishes and adds the image column and tags
     old.close();
 
     const db = openDb(file);
-    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 6);
+    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 7);
     const dishes = createRepo(db).listDishes();
     assert.deepEqual(dishes.map((d) => [d.title, d.url, d.image]), [["Linsensuppe", "https://example.com/l", null]]);
     assert.deepEqual(dishes[0]!.tags, []);

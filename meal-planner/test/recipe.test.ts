@@ -37,7 +37,7 @@ const recipe = (over: object = {}) => ({ servings: 4, instructions: "Erhitzen.\n
 test("a dish without recipe has an empty one", async () => {
   const { call } = setup();
   const d = (await call("POST", "/api/dishes", { title: "Suppe" })).json;
-  assert.deepEqual((await call("GET", `/api/dishes/${d.id}/recipe`)).json, { servings: null, instructions: null, ingredients: [] });
+  assert.deepEqual((await call("GET", `/api/dishes/${d.id}/recipe`)).json, { servings: null, instructions: null, ingredients: [], source_text: null, source_truncated: false });
 });
 
 test("recipe columns never show up in the catalog or in plan entries", async () => {
@@ -73,7 +73,7 @@ test("an empty recipe clears it, empty strings become null", async () => {
   const d = (await call("POST", "/api/dishes", { title: "Suppe" })).json;
   await call("PUT", `/api/dishes/${d.id}/recipe`, recipe());
   const r = await call("PUT", `/api/dishes/${d.id}/recipe`, { servings: null, instructions: "", ingredients: [] });
-  assert.deepEqual(r.json, { servings: null, instructions: null, ingredients: [] });
+  assert.deepEqual(r.json, { servings: null, instructions: null, ingredients: [], source_text: null, source_truncated: false });
   assert.equal((db.prepare("SELECT COUNT(*) AS n FROM dish_ingredient").get() as { n: number }).n, 0);
 });
 
@@ -129,10 +129,10 @@ test("migration v5 keeps dishes and adds the recipe tables", async () => {
     old.close();
 
     const db = openDb(file);
-    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 6);
+    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 7);
     const repo = createRepo(db);
     assert.deepEqual(repo.listDishes().map((d) => d.title), ["Linsensuppe"]);
-    assert.deepEqual(repo.getRecipe(1), { servings: null, instructions: null, ingredients: [] });
+    assert.deepEqual(repo.getRecipe(1), { servings: null, instructions: null, ingredients: [], source_text: null, source_truncated: false });
     db.close();
   } finally {
     await rm(dir, { recursive: true, force: true });

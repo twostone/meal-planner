@@ -37,8 +37,11 @@ export const deleteDish = (id: number) => request<void>("DELETE", `api/dishes/${
 
 export const getRecipe = (dishId: number) => request<Recipe>("GET", `api/dishes/${dishId}/recipe`);
 // Replaces the whole recipe. An empty one (no servings, steps or ingredients) removes it.
-export const putRecipe = (dishId: number, r: Omit<Recipe, "ingredients"> & { ingredients: (Omit<Recipe["ingredients"][number], "raw"> & { raw?: string | null })[] }) =>
+export const putRecipe = (dishId: number, r: Pick<Recipe, "servings" | "instructions"> & { ingredients: (Omit<Recipe["ingredients"][number], "raw"> & { raw?: string | null })[] }) =>
   request<Recipe>("PUT", `api/dishes/${dishId}/recipe`, r);
+
+// "Get the recipe from the link": the server fetches the dish's link again. Nothing found -> { reason }.
+export const fetchSource = (dishId: number) => request<Recipe | { reason: string }>("POST", `api/dishes/${dishId}/source`);
 
 export const listPlans = () => request<PlanSummary[]>("GET", "api/plans");
 export const getPlan = (id: number) => request<PlanDetail>("GET", `api/plans/${id}`);

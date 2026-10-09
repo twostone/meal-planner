@@ -21,14 +21,20 @@
   let problem = $state("");
   let busy = $state(false);
   let nextKey = 0;
+  let fetching = $state(false);
+  let confirmReplace = $state(false);
+  let sourceHint = $state("");
 
+  const hasLink = $derived(!!dish?.url);
+  // Structured part only: a recipe that has just the original text is still shown, not edited.
   const isEmpty = (r: Recipe) => r.servings === null && !r.instructions && r.ingredients.length === 0;
+  const isBlank = (r: Recipe) => isEmpty(r) && !r.source_text;
   const steps = $derived((recipe?.instructions ?? "").split("\n").map((s) => s.trim()).filter(Boolean));
 
   onMount(async () => {
     try {
       recipe = await api.getRecipe(dishId);
-      editing = isEmpty(recipe);
+      editing = isBlank(recipe);
       if (editing) startEdit();
     } catch {
       loadError = true;
@@ -56,8 +62,26 @@
   }
 
   function cancel() {
-    if (isEmpty(recipe!)) closeSheet();
+    if (isBlank(recipe!)) closeSheet();
     else editing = false;
+  }
+
+  // Replaces the saved original text; with one already there only after a second tap.
+  async function getSource() {
+    if (recipe?.source_text && !confirmReplace) return void (confirmReplace = true);
+    confirmReplace = false;
+    fetching = true;
+    sourceHint = "";
+    app.error = "";
+    try {
+      const r = await api.fetchSource(dishId);
+      if ("reason" in r) sourceHint = "Auf der Seite wurde kein Rezept gefunden.";
+      else recipe = r;
+    } catch (err) {
+      app.error = err instanceof Error ? err.message : String(err);
+    } finally {
+      fetching = false;
+    }
   }
 
   async function save(e: SubmitEvent) {
@@ -84,7 +108,7 @@
     app.error = "";
     try {
       recipe = await api.putRecipe(dishId, { servings: sv, instructions: instructions.trim() || null, ingredients });
-      if (isEmpty(recipe)) startEdit();
+      if (isBlank(recipe)) startEdit();
       else editing = false;
     } catch (err) {
       app.error = err instanceof Error ? err.message : String(err);
@@ -136,6 +160,12 @@
         Zubereitung
         <textarea rows="6" maxlength="10000" bind:value={instructions} placeholder="Ein Schritt pro Zeile"></textarea>
       </label>
+      {#if recipe.source_text}
+        <details class="source">
+          <summary>Originaltext vom Link</summary>
+          <p class="source-text">{recipe.source_text}</p>
+        </details>
+      {/if}
       {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
       <div class="actions">
         <button type="button" class="btn outline" onclick={cancel}>Abbrechen</button>
@@ -162,10 +192,21 @@
           {#each steps as s, si (si)}<li>{s}</li>{/each}
         </ol>
       {/if}
+      {#if recipe.source_text}
+        <h3>{isEmpty(recipe) ? "Rezept vom Link" : "Originaltext vom Link"}</h3>
+        <p class="source-text">{recipe.source_text}</p>
+        {#if recipe.source_truncated}<p class="status">Der Text ist evtl. gekürzt. Bei Bedarf den vollständigen Text von Hand ergänzen.</p>{/if}
+      {/if}
     </article>
+    {#if hasLink}
+      <button type="button" class="btn outline wide" disabled={fetching} onclick={getSource}>
+        {fetching ? "Hole Rezept …" : confirmReplace ? "Vorhandenen Text ersetzen?" : "Rezept aus Link holen"}
+      </button>
+    {/if}
+    {#if sourceHint}<p class="status" aria-live="polite">{sourceHint}</p>{/if}
     <div class="actions">
       <button type="button" class="btn outline" onclick={closeSheet}>Schließen</button>
-      <button type="button" class="btn primary" onclick={startEdit}>Bearbeiten</button>
+      <button type="button" class="btn primary" onclick={startEdit}>{isEmpty(recipe) ? "Von Hand eintragen" : "Bearbeiten"}</button>
     </div>
   {/if}
 </Sheet>
