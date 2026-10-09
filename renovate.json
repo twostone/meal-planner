@@ -1,6 +1,30 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
+    "config:recommended",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "packageRules": [
+    {
+      "description": "Alle npm-Updates ohne Major in einem PR",
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["minor", "patch", "lockFileMaintenance"],
+      "groupName": "npm-Abhängigkeiten"
+    },
+    {
+      "description": "Alle GitHub-Actions-Updates in einem PR",
+      "matchManagers": ["github-actions"],
+      "groupName": "GitHub Actions"
+    },
+    {
+      "description": "Node-Basisimage im Dockerfile",
+      "matchManagers": ["dockerfile"],
+      "groupName": "Docker-Basisimages"
+    },
+    {
+      "description": "svelte-check unterstützt TypeScript 7 noch nicht (siehe AGENTS.md)",
+      "matchPackageNames": ["typescript"],
+      "allowedVersions": "<7"
+    }
   ]
 }
