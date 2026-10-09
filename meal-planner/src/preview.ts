@@ -171,7 +171,8 @@ function withOriginal(candidates: string[], original: string): string[] {
 }
 
 // Title: the schema.org recipe name is the cleanest source (no "| Site" suffix), then og:title, then <title>.
-// Only the fallback can be a long social-media caption; for that one, shorter candidates are derived as well.
+// Only the fallback can be a long social-media caption; for that one, the best shorter candidate is derived as well
+// (one only: the sheet shows two heuristic suggestions, the page's own title and this one, next to two from the AI).
 // Image: og:image first (usually a landscape photo), then the recipe image.
 function analyze(html: string, base: URL): Parsed & { titleSuggestions: string[]; source: Source | null } {
   const meta = new Map<string, string>();
@@ -192,7 +193,7 @@ function analyze(html: string, base: URL): Parsed & { titleSuggestions: string[]
     ? []
     : recipeTitle
       ? [recipeTitle]
-      : withOriginal(suggestTitles(decodeEntities(fallback ?? "")), title);
+      : withOriginal(suggestTitles(decodeEntities(fallback ?? "")).slice(0, 1), title);
   const imageUrl = resolveImage(
     meta.get("og:image") ??
       meta.get("og:image:secure_url") ??

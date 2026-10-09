@@ -48,6 +48,31 @@ function linkSlug(text: string): string | null {
   return words.map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
 }
 
+export const MAX_AI_TITLES = 2;
+const LIST_PREFIX = /^\s*(?:\d{1,2}\s*[.)]|[•\-–*])\s*/u;
+
+// The model's answer (ha-ai.ts `titles`) is untrusted input, like the recipe draft: one title per line, but it may
+// add numbering, quotes, emojis or hashtags, repeat itself, or return something that is not text at all.
+// Only plain, short, distinct titles come out (at most MAX_AI_TITLES, possibly none). It is only ever shown as a chip.
+export function cleanAiTitles(raw: unknown): string[] {
+  const lines = Array.isArray(raw) ? raw.filter((x): x is string => typeof x === "string") : typeof raw === "string" ? raw.split(/[\r\n]+/) : [];
+  const out: string[] = [];
+  for (const line of lines) {
+    const clean = line
+      .replace(LIST_PREFIX, "")
+      .replace(QUOTES_AT_EDGES, "")
+      .replace(EMOJI, "")
+      .replace(HASHTAG, " ")
+      .replace(/\s+/g, " ")
+      .replace(EDGE_DECORATION, "");
+    if (!/\p{L}/u.test(clean) || LINK_ONLY.test(clean)) continue;
+    const title = shorten(clean);
+    if (!out.some((x) => x.toLowerCase() === title.toLowerCase())) out.push(title);
+    if (out.length >= MAX_AI_TITLES) break;
+  }
+  return out;
+}
+
 // `raw` must keep its line breaks. Returns 0-2 candidates, best first; the caller adds the original title.
 export function suggestTitles(raw: string): string[] {
   const text = raw.trim();

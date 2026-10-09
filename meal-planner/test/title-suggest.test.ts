@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MAX_SUGGESTION_LENGTH, suggestTitles } from "../src/title-suggest.ts";
+import { cleanAiTitles, MAX_SUGGESTION_LENGTH, suggestTitles } from "../src/title-suggest.ts";
 
 // Shaped like real Instagram og:title values (checked against three real reels): account prefix, dish name
 // on the first line wrapped in emojis, ingredients and steps, hashtags at the end. Names and texts are invented.
@@ -74,4 +74,18 @@ test("suggestTitles: link slugs need three words made of letters, so ids and sho
   for (const u of ["https://bit.ly/3xYz", "https://linktr.ee/kim", "https://example.com/rezept-123-abc", "https://example.com/zwei-woerter", "https://example.com/"]) {
     assert.deepEqual(withLink(u), [], u);
   }
+});
+
+test("cleanAiTitles: strips numbering, quotes, emojis and hashtags, keeps at most two distinct titles", () => {
+  assert.deepEqual(cleanAiTitles('1. "Linsensuppe 🍲"\n2) Linsensuppe\n- Rote Linsen-Curry-Suppe #suppe\nDritter'), ["Linsensuppe", "Rote Linsen-Curry-Suppe"]);
+  assert.deepEqual(cleanAiTitles("  käsespätzle \r\n\r\nKÄSESPÄTZLE"), ["käsespätzle"]);
+});
+
+test("cleanAiTitles: skips lines without letters or that are only a link, shortens long ones, tolerates other types", () => {
+  assert.deepEqual(cleanAiTitles("🍲🍲\n#suppe\nhttps://example.com/x\n42\nPasta"), ["Pasta"]);
+  const long = cleanAiTitles("Das ist ein sehr langer Titel, der weit über die erlaubte Länge hinausgeht und deshalb gekürzt wird.");
+  assert.equal(long.length, 1);
+  assert.ok(long[0]!.length <= MAX_SUGGESTION_LENGTH + 1);
+  assert.deepEqual(cleanAiTitles(["A", 3, "B", "C"]), ["A", "B"]);
+  for (const v of [null, undefined, 5, {}, "", "   "]) assert.deepEqual(cleanAiTitles(v), []);
 });

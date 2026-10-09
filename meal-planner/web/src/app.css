@@ -710,6 +710,55 @@ fieldset.suggestions legend {
   color: #fff;
   font-weight: 600;
 }
+/* AI suggestions carry a small "KI" tag; until they are in, two dashed placeholders hold their place */
+.suggestion.ai {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.suggestion.ai span {
+  flex: 1;
+  min-width: 0; /* long titles wrap inside the chip instead of pushing the tag out */
+}
+.ai-tag {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.suggestion.ai[aria-pressed="true"] .ai-tag {
+  background: rgb(255 255 255 / 0.2);
+  color: #fff;
+}
+.suggestion.placeholder {
+  border-style: dashed;
+  background: transparent;
+}
+.suggestion.placeholder span {
+  display: block;
+  flex: 1;
+  max-width: 55%;
+  height: 14px;
+  border-radius: 7px;
+  background: linear-gradient(90deg, var(--green-soft) 25%, var(--line) 50%, var(--green-soft) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s linear infinite;
+}
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .suggestion.placeholder span {
+    animation: none;
+  }
+}
 
 /* recipe */
 select {
