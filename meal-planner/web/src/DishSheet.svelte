@@ -4,6 +4,7 @@
   import Icon from "./Icon.svelte";
   import Sheet from "./Sheet.svelte";
   import { app, deleteDish, openRecipe, removeEntry, saveDish, type SheetState } from "./store.svelte";
+  import type { Preview } from "./types";
   import { isUrl, sameTag } from "./util";
 
   let { sheet }: { sheet: Extract<SheetState, { kind: "dish" }> } = $props();
@@ -38,6 +39,12 @@
   let loading = $state(false);
   let hint = $state("");
   let suggestions = $state<string[]>([]); // title candidates from the link, best first
+  // AI title candidates arrive a few seconds after the preview: two placeholders show until they are in (or failed).
+  let aiTitles = $state<string[]>([]);
+  let aiLoading = $state(false);
+  let aiRun = 0; // a newer preview makes the answer to an older one obsolete
+  // Without an AI task in Home Assistant there are no placeholders that would only vanish again.
+  const aiReady = api.getRecipeStatus().then((s) => s.ai, () => false);
   // Recipe text found at the link. Only a new dish takes it along; for a saved one there is "Rezept aus Link holen".
   let sourceText = $state<string | null>(null);
   let sourceTruncated = $state(false);
@@ -78,6 +85,22 @@
   let alive = true;
   onDestroy(() => (alive = false));
 
+  // The AI is a bonus on top of the preview: it never delays it, and when it fails there are simply no AI chips.
+  async function loadAiTitles(run: number, r: Preview) {
+    if (!(r.title || r.sourceText) || !(await aiReady) || run !== aiRun || !alive) return;
+    aiLoading = true;
+    try {
+      const title = r.title ?? "";
+      const { titles } = await api.suggestTitles({ title, text: r.sourceText ?? title });
+      if (run !== aiRun || !alive) return;
+      aiTitles = titles.filter((t) => !suggestions.some((s) => s.toLowerCase() === t.toLowerCase()));
+    } catch {
+      // no message: the rule-based suggestions are all there is
+    } finally {
+      if (run === aiRun && alive) aiLoading = false;
+    }
+  }
+
   async function loadPreview(force = false) {
     const u = normalizeUrl(url);
     if (!isUrl(u) || loading || (!force && u === lastUrl)) return;
@@ -85,6 +108,9 @@
     loading = true;
     hint = "";
     suggestions = [];
+    aiTitles = [];
+    aiLoading = false;
+    const run = ++aiRun;
     try {
       const r = await api.previewUrl(u);
       if (!alive) return;
@@ -95,6 +121,7 @@
       if (best && !title.trim()) title = best; // never overwrite what the user typed
       if (r.image) image = r.image;
       hint = r.title || r.image ? "" : "Keine Vorschau verfügbar. Titel bitte selbst eintragen.";
+      void loadAiTitles(run, r);
     } catch {
       if (alive) hint = "Vorschau nicht verfügbar. Titel bitte selbst eintragen.";
     } finally {
@@ -149,12 +176,22 @@
       Titel
       <input type="text" bind:value={title} autocomplete="off" />
     </label>
-    {#if suggestions.length > 1}
+    {#if suggestions.length + aiTitles.length > 1 || aiLoading}
       <fieldset class="suggestions">
         <legend>Vorschläge vom Link</legend>
         {#each suggestions as s (s)}
           <button type="button" class="suggestion" aria-pressed={title === s} onclick={() => (title = s)}><span>{s}</span></button>
         {/each}
+        {#each aiTitles as s (s)}
+          <button type="button" class="suggestion ai" aria-pressed={title === s} onclick={() => (title = s)}>
+            <span>{s}</span><small class="ai-tag">KI</small>
+          </button>
+        {/each}
+        {#if aiLoading}
+          {#each [0, 1] as i (i)}
+            <div class="suggestion ai placeholder" aria-hidden="true"><span></span><small class="ai-tag">KI</small></div>
+          {/each}
+        {/if}
       </fieldset>
     {/if}
     {#if start.entryId !== null}
@@ -181,7 +218,7 @@
         {loading ? "Lade Vorschau …" : "Titel und Bild vom Link laden"}
       </button>
     {/if}
-    <p class="status" aria-live="polite">{loading ? "Lade Vorschau …" : hint}</p>
+    <p class="status" aria-live="polite">{loading ? "Lade Vorschau …" : aiLoading ? "KI-Vorschläge werden geladen …" : hint}</p>
     {#if image}
       <button type="button" class="btn ghost-danger" onclick={() => (image = null)}>Bild entfernen</button>
     {/if}

@@ -17,7 +17,8 @@ dieselbe Liste.
 - Kategorien: Gerichte lassen sich frei kategorisieren (z. B. Snack, Suppe, Vegan), mehrere pro Gericht. Im Katalog
   filtern Chips nach einer Kategorie.
 - Aus einem eingefügten Link (Rezeptseite, Instagram, …) holt der Server Titel und Vorschaubild. Klappt das nicht,
-  trägt man den Titel selbst ein.
+  trägt man den Titel selbst ein. Dazu gibt es Titelvorschläge: zwei aus festen Regeln (der Originaltitel und ein
+  bereinigter) und, wenn Home Assistant eine KI hat, zwei von der KI.
 - Rezepte: Zutaten (Menge, Einheit, Zutat), Portionen und Zubereitung pro Gericht, von Hand oder aus dem Text, den die
   App beim Link-Abruf sichert (Rezeptseite oder Instagram-Caption). Optional zerlegt die KI von Home Assistant den Text in
   Zutaten und Schritte. Das Ergebnis ist ein Entwurf, den man mit dem Originaltext vergleicht und erst dann speichert.
@@ -53,11 +54,17 @@ installierbar. Die Integration wird von der App per Discovery gefunden; die App 
 Port (8100, Token, nur im Supervisor-Netz erreichbar). Wer das Token erneuern will, löscht `/data/ha-token` und startet die
 App neu. In Automationen die Details aus den Eventdaten lesen, nicht aus den Sensoren: sie ziehen einen Moment nach.
 
-## Zutaten erkennen (KI)
+## KI-Funktionen
 
-Der Knopf „Zutaten erkennen“ erscheint nur, wenn Home Assistant eine **AI-Task-Entität** hat (Einstellungen → System →
-KI-Aufgaben, eingerichtet über eine LLM-Integration wie OpenAI, Anthropic oder Google; ein Gesprächsagent allein reicht
-nicht). Genutzt wird die dort bevorzugte Entität. Ohne sie bleibt die Handeingabe.
+Der Knopf „Zutaten erkennen“ und die KI-Titelvorschläge gibt es nur, wenn Home Assistant eine **AI-Task-Entität** hat
+(Einstellungen → System → KI-Aufgaben, eingerichtet über eine LLM-Integration wie OpenAI, Anthropic oder Google; ein
+Gesprächsagent allein reicht nicht). Genutzt wird die dort bevorzugte Entität. Ohne sie bleibt es bei den regelbasierten
+Titelvorschlägen und der Handeingabe.
+
+Die KI-Titel erscheinen automatisch nach jeder Link-Vorschau, zunächst als zwei Platzhalter mit „KI“-Kennzeichen. Fehlt
+die Antwort oder dauert sie länger als 15 Sekunden, verschwinden die Platzhalter, die übrigen Vorschläge bleiben. Die
+Sprache der Titel ist die Sprache des Browsers (auf dem Handy: die Systemsprache). Ein Titel wird nie ungefragt
+überschrieben: Man wählt einen Vorschlag selbst.
 
 ## Datenschutz und Sicherheit
 
@@ -66,7 +73,9 @@ nicht). Genutzt wird die dort bevorzugte Entität. Ohne sie bleibt die Handeinga
 - Extern ruft nur der Server ab, und nur Links, die jemand selbst eingegeben hat. Interne Adressen (Heimnetz, andere
   Apps, Router) sind dabei gesperrt. Der Browser lädt nichts von Drittservern: Schriften und Bilder kommen vom eigenen Server.
 - „Zutaten erkennen“ schickt den gesicherten Rezepttext an den KI-Dienst, der in Home Assistant eingerichtet ist (bei
-  einem Cloud-Dienst also ins Internet). Nur auf Knopfdruck, nie automatisch.
+  einem Cloud-Dienst also ins Internet), und zwar nur auf Knopfdruck. **Die KI-Titelvorschläge dagegen laufen automatisch:**
+  Jede Link-Vorschau schickt den Seitentitel und den gefundenen Text (höchstens 10 000 Zeichen) an denselben Dienst. Wer das
+  nicht möchte, richtet in Home Assistant keine AI-Task-Entität ein (oder entfernt sie): dann bleiben beide Funktionen aus.
 - Es gibt keine Nutzerverwaltung: Alle, die die App in Home Assistant öffnen dürfen, sehen und ändern dieselbe Liste.
 
 ## Entwicklung

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/twostone/meal-planner/compare/v0.10.1...v0.11.0) (2026-10-09)
+
+
+### Neu
+
+* **titel:** Titelvorschläge per KI ergänzen ([#28](https://github.com/twostone/meal-planner/issues/28)) ([1b298a9](https://github.com/twostone/meal-planner/commit/1b298a9c1d0b9e5f3f57925180a961aa8db54f59))
+
 ## [0.10.1](https://github.com/twostone/meal-planner/compare/v0.10.0...v0.10.1) (2026-10-09)
 
 

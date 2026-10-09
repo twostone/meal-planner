@@ -67,5 +67,9 @@ export const deleteEntry = (id: number) => request<void>("DELETE", `api/entries/
 
 // The server fetches the page (never the browser: CORS, and the link must not be opened from the phone).
 export const previewUrl = (url: string) => request<Preview>("POST", "api/preview", { url });
+// Up to two title candidates from the AI for a link preview (takes a few seconds, 502 when the AI fails).
+// The browser language tells the server which language the titles should be in.
+export const suggestTitles = (b: { title: string; text: string }) =>
+  request<{ titles: string[] }>("POST", "api/title-suggestions", { ...b, lang: navigator.language });
 // Relative like every other URL, so it works under the ingress prefix.
 export const imageSrc = (name: string) => `api/images/${name}`;
