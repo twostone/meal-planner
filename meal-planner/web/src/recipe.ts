@@ -1,4 +1,12 @@
-import type { Ingredient } from "./types";
+// Structural type instead of importing ./types: the backend's tsc (nodenext) also compiles this file via its test.
+type Ingredient = {
+  section: string | null;
+  amount: number | null;
+  amount_max: number | null;
+  unit: string | null;
+  name: string;
+  note: string | null;
+};
 
 // 1.5 -> "1,5" (German decimal comma, no trailing zeros)
 export const fmtNum = (n: number) => String(Math.round(n * 100) / 100).replace(".", ",");
