@@ -11,6 +11,7 @@ export type SheetState =
       addToPlan: boolean; // create mode: also put the new dish into the current plan
       prefill: { title: string; url: string; tags: string[] };
     }
+  | { kind: "recipe"; dishId: number }
   | { kind: "periods" };
 
 export const app = $state({
@@ -104,6 +105,13 @@ export function openDishSheet(opts: {
     addToPlan: opts.addToPlan ?? false,
     prefill: { title: opts.title ?? "", url: opts.url ?? "", tags: opts.tags ?? [] },
   };
+}
+
+// From the dish sheet: the history entry of the open sheet is reused.
+export function openRecipe(dishId: number) {
+  app.error = "";
+  pushSheetEntry();
+  app.sheet = { kind: "recipe", dishId };
 }
 
 export function openPeriods() {

@@ -35,3 +35,15 @@ export type PlanDetail = {
 };
 export type DishInput = { title: string; url: string | null; note: string | null; image: string | null; tags: string[] };
 export type Preview = { title: string | null; image: string | null; titleSuggestions: string[]; reason: string | null };
+export type Ingredient = {
+  section: string | null;
+  amount: number | null;
+  amount_max: number | null; // only for ranges ("1-2")
+  unit: string | null;
+  name: string;
+  note: string | null;
+  raw: string; // original line
+};
+export type Recipe = { servings: number | null; instructions: string | null; ingredients: Ingredient[] };
+// Same list as UNITS in the server's repo.ts. Counted things ("1 Zwiebel") have no unit.
+export const UNITS = ["g", "kg", "ml", "l", "EL", "TL", "Prise", "Zehe", "Bund", "Dose", "Packung", "Becher", "Scheibe", "Handvoll"];

@@ -56,6 +56,22 @@ const MIGRATIONS = [
   "ALTER TABLE plan_entry ADD COLUMN note TEXT",
   // v5: optional name of a plan (null = the plan is shown as its date range)
   "ALTER TABLE plan ADD COLUMN title TEXT",
+  // v6: recipe of a dish. Ingredients are structured; `raw` is the original line and is always kept.
+  `ALTER TABLE dish ADD COLUMN servings INTEGER;
+  ALTER TABLE dish ADD COLUMN instructions TEXT;
+  CREATE TABLE dish_ingredient (
+    id INTEGER PRIMARY KEY,
+    dish_id INTEGER NOT NULL REFERENCES dish(id) ON DELETE CASCADE,
+    pos INTEGER NOT NULL,
+    section TEXT,
+    amount REAL,
+    amount_max REAL,
+    unit TEXT,
+    name TEXT NOT NULL,
+    note TEXT,
+    raw TEXT NOT NULL
+  ) STRICT;
+  CREATE INDEX dish_ingredient_dish ON dish_ingredient(dish_id, pos);`,
 ];
 
 function migrate(db: DatabaseSync): void {

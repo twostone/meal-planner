@@ -69,6 +69,14 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   `POST /api/plans` prüft dieselbe Regel (`overlapsOther` in `repo.ts`): Überschneidung -> 409 `plan overlaps`, es wird
   nichts angelegt und kein Event gesendet. Berühren ohne gemeinsamen Tag ist erlaubt. Bereits überlappende Altdaten
   bleiben unverändert bestehen.
+- **Rezept** (Plan: `docs/plan-rezepte.md`, Stufe 1 gebaut): gehört zum Gericht, nicht zum Listeneintrag. `dish.servings`
+  (1–50) und `dish.instructions` (ein Schritt pro Zeile, höchstens 10 000 Zeichen) plus `dish_ingredient` (Reihenfolge `pos`,
+  `section`, `amount`/`amount_max`, `unit`, `name`, `note`, `raw`). `GET/PUT /api/dishes/:id/recipe`: PUT ersetzt alles in einer
+  Transaktion (wie `setTags`), ein leeres Rezept löscht es. Höchstens 60 Zutaten. `unit` nur aus `UNITS` in `repo.ts`
+  (wie `UNITS` in `web/src/types.ts`), **kein „Stück“**: Gezähltes hat `unit = null`. `raw` ist die Originalzeile und bleibt
+  immer erhalten, bei Handeingabe wird sie aus Menge/Einheit/Name gebildet. Die Rezeptspalten kommen nie mit dem Katalog
+  (`DISH_COLS` in `repo.ts`, kein `SELECT *` auf `dish`). Im UI öffnet „Rezept“ im Bearbeiten-Blatt ein eigenes Blatt
+  (Ansicht und Editor in `RecipeSheet.svelte`).
 - Ein Gericht kann pro Zeitraum nur einmal vorkommen. Der Titel ist im Katalog eindeutig (ohne Groß-/Kleinschreibung).
   Ein Eintrag per Titel legt das Gericht an oder verwendet ein vorhandenes wieder. Löschen eines Gerichts, das noch
   in einer Liste steht, ist absichtlich gesperrt (409).
@@ -194,7 +202,7 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   gibt es keinen Release und HA zeigt kein Update.
 - **Datenbank nur über Migrationen ändern:** in `src/db.ts` einen Eintrag an `MIGRATIONS` **anhängen**, nie ändern oder
   umsortieren (`PRAGMA user_version` zählt sie). Neue Migrationen mit einem Test gegen eine Datenbank im alten Stand.
-  Die Tests, die die Schema-Version prüfen (`dish-image`, `tags`, `entry-note`, `plan-edit`), bei jeder neuen Migration
+  Die Tests, die die Schema-Version prüfen (`dish-image`, `tags`, `entry-note`, `plan-edit`, `recipe`), bei jeder neuen Migration
   mit anheben.
 - **Add-on-Build:** Kein `build.yaml`, kein `BUILD_FROM` (beides gilt seit Supervisor 2026.04 nicht mehr). HA baut nicht
   selbst, es lädt das Image aus `image:`. Das Dockerfile ist zweistufig: Das Frontend wird auf der Architektur des Builders
@@ -219,7 +227,7 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
 
 ## Bewusst nicht gebaut (nur auf ausdrücklichen Wunsch)
 
-Einkaufsliste/Zutaten, Anbindung an HA-Todo/Kalender, Tageszuordnung, Drag-and-Drop, OAuth, Instagram-oEmbed,
+Einkaufsliste, Nährwerte, Anbindung an HA-Todo/Kalender, Tageszuordnung, Drag-and-Drop, OAuth, Instagram-oEmbed,
 Bildverkleinerung, Image-Signatur/SBOM, Renovate/Dependabot für npm (TypeScript ist bewusst gepinnt),
 Kategorien umbenennen/zusammenführen, Mehrfachauswahl im Kategorie-Filter.
 

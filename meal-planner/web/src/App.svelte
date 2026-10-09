@@ -6,6 +6,7 @@
   import Icon from "./Icon.svelte";
   import ListView from "./ListView.svelte";
   import PeriodSheet from "./PeriodSheet.svelte";
+  import RecipeSheet from "./RecipeSheet.svelte";
   import { app, dismissError, init, openPeriods } from "./store.svelte";
 
   onMount(() => {
@@ -61,6 +62,8 @@
 
   {#if app.sheet.kind === "dish"}
     <DishSheet sheet={app.sheet} />
+  {:else if app.sheet.kind === "recipe"}
+    <RecipeSheet dishId={app.sheet.dishId} />
   {:else if app.sheet.kind === "periods"}
     <PeriodSheet />
   {/if}
