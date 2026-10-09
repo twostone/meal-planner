@@ -34,6 +34,8 @@ export type DishInput = {
   note?: string | null;
   image?: string | null;
   tags?: string[];
+  source_text?: string | null;
+  source_truncated?: boolean;
 };
 
 // The recipe columns (servings, instructions) are loaded on their own, never with the catalog.
@@ -50,10 +52,16 @@ export type Ingredient = {
   note: string | null;
   raw: string; // original line; built from amount/unit/name when entered by hand
 };
-export type Recipe = {
+export type RecipeInput = {
   servings: number | null;
   instructions: string | null; // one step per line
+  ingredients: (Omit<Ingredient, "raw"> & { raw?: string | null })[];
+};
+// source_text: the recipe as found at the link, unchanged; only a fetch from the link writes it, never setRecipe.
+export type Recipe = Omit<RecipeInput, "ingredients"> & {
   ingredients: Ingredient[];
+  source_text: string | null;
+  source_truncated: boolean; // the caption may have been cut off
 };
 
 export class NotFoundError extends Error {}
@@ -114,8 +122,15 @@ export function createRepo(db: DatabaseSync) {
     let id: number;
     try {
       const r = db
-        .prepare("INSERT INTO dish (title, url, note, image) VALUES (?, ?, ?, ?)")
-        .run(input.title.trim(), input.url ?? null, input.note ?? null, input.image ?? null);
+        .prepare("INSERT INTO dish (title, url, note, image, source_text, source_truncated) VALUES (?, ?, ?, ?, ?, ?)")
+        .run(
+          input.title.trim(),
+          input.url ?? null,
+          input.note ?? null,
+          input.image ?? null,
+          input.source_text ?? null,
+          input.source_text && input.source_truncated ? 1 : 0,
+        );
       id = Number(r.lastInsertRowid);
     } catch (e: any) {
       if (String(e?.message).includes("UNIQUE")) throw new ConflictError("dish title exists");
@@ -133,8 +148,8 @@ export function createRepo(db: DatabaseSync) {
 
   const self = {
     getRecipe(dishId: number): Recipe {
-      const d = one<{ servings: number | null; instructions: string | null }>(
-        "SELECT servings, instructions FROM dish WHERE id = ?",
+      const d = one<{ servings: number | null; instructions: string | null; source_text: string | null; source_truncated: number }>(
+        "SELECT servings, instructions, source_text, source_truncated FROM dish WHERE id = ?",
         dishId,
       );
       if (!d) throw new NotFoundError("dish");
@@ -142,11 +157,25 @@ export function createRepo(db: DatabaseSync) {
         "SELECT section, amount, amount_max, unit, name, note, raw FROM dish_ingredient WHERE dish_id = ? ORDER BY pos",
         dishId,
       );
-      return { servings: d.servings, instructions: d.instructions, ingredients };
+      return {
+        servings: d.servings,
+        instructions: d.instructions,
+        ingredients,
+        source_text: d.source_text,
+        source_truncated: !!d.source_text && !!d.source_truncated,
+      };
+    },
+
+    // Replaces the text found at the link (null removes it). Does not touch the structured recipe.
+    setSource(dishId: number, text: string | null, truncated: boolean): void {
+      const r = db
+        .prepare("UPDATE dish SET source_text = ?, source_truncated = ? WHERE id = ?")
+        .run(text, text && truncated ? 1 : 0, dishId);
+      if (r.changes === 0) throw new NotFoundError("dish");
     },
 
     // Replaces the whole recipe (like setTags). An empty recipe removes it.
-    setRecipe(dishId: number, recipe: Omit<Recipe, "ingredients"> & { ingredients: (Omit<Ingredient, "raw"> & { raw?: string | null })[] }): Recipe {
+    setRecipe(dishId: number, recipe: RecipeInput): Recipe {
       return transaction(db, () => {
         getDish(dishId);
         db.prepare("UPDATE dish SET servings = ?, instructions = ? WHERE id = ?").run(recipe.servings, recipe.instructions, dishId);
@@ -185,6 +214,7 @@ export function createRepo(db: DatabaseSync) {
           note: patch.note === undefined ? cur.note : patch.note,
           image: patch.image === undefined ? cur.image : patch.image,
         };
+        if (patch.source_text !== undefined) self.setSource(id, patch.source_text, patch.source_truncated ?? false);
         try {
           db.prepare("UPDATE dish SET title = ?, url = ?, note = ?, image = ? WHERE id = ?").run(
             next.title,

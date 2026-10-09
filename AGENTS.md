@@ -69,7 +69,7 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   `POST /api/plans` prüft dieselbe Regel (`overlapsOther` in `repo.ts`): Überschneidung -> 409 `plan overlaps`, es wird
   nichts angelegt und kein Event gesendet. Berühren ohne gemeinsamen Tag ist erlaubt. Bereits überlappende Altdaten
   bleiben unverändert bestehen.
-- **Rezept** (Plan: `docs/plan-rezepte.md`, Stufe 1 gebaut): gehört zum Gericht, nicht zum Listeneintrag. `dish.servings`
+- **Rezept** (Plan: `docs/plan-rezepte.md`, Stufe 1 und 2 gebaut): gehört zum Gericht, nicht zum Listeneintrag. `dish.servings`
   (1–50) und `dish.instructions` (ein Schritt pro Zeile, höchstens 10 000 Zeichen) plus `dish_ingredient` (Reihenfolge `pos`,
   `section`, `amount`/`amount_max`, `unit`, `name`, `note`, `raw`). `GET/PUT /api/dishes/:id/recipe`: PUT ersetzt alles in einer
   Transaktion (wie `setTags`), ein leeres Rezept löscht es. Höchstens 60 Zutaten. `unit` nur aus `UNITS` in `repo.ts`
@@ -77,6 +77,13 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   immer erhalten, bei Handeingabe wird sie aus Menge/Einheit/Name gebildet. Die Rezeptspalten kommen nie mit dem Katalog
   (`DISH_COLS` in `repo.ts`, kein `SELECT *` auf `dish`). Im UI öffnet „Rezept“ im Bearbeiten-Blatt ein eigenes Blatt
   (Ansicht und Editor in `RecipeSheet.svelte`).
+  **Originaltext (Stufe 2):** `dish.source_text` (höchstens 10 000 Zeichen) und `source_truncated` sichern das Rezept so, wie es
+  am Link steht, ohne LLM und ohne Deutung. Die Vorschau (`extractSource` in `preview.ts`, `sourceText`/`sourceTruncated` in
+  `POST /api/preview`) liefert schema.org-Zutatenzeilen, Leerzeile, Schritte, sonst die Instagram-Caption. Ein neues Gericht
+  aus dem Link nimmt den Text mit (`source_text` in `POST /api/dishes`), bei einem gespeicherten Gericht holt ihn nur
+  `POST /api/dishes/:id/source` (Link neu abrufen; ohne Fund `{reason}` und nichts ändert sich; im UI „Rezept aus Link holen“
+  mit zweiter Bestätigung, wenn schon ein Text da ist). Er kommt mit `GET /api/dishes/:id/recipe`, nie mit dem Katalog, und
+  `PUT …/recipe` lässt ihn unberührt.
 - Ein Gericht kann pro Zeitraum nur einmal vorkommen. Der Titel ist im Katalog eindeutig (ohne Groß-/Kleinschreibung).
   Ein Eintrag per Titel legt das Gericht an oder verwendet ein vorhandenes wieder. Löschen eines Gerichts, das noch
   in einer Liste steht, ist absichtlich gesperrt (409).
@@ -113,7 +120,11 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   Typ nach den Datei-Bytes). Nie fremde Bild-URLs im Frontend einbinden (Adressen, besonders bei Instagram, laufen ab,
   und der Browser würde Drittserver anfragen). Nicht mehr verwendete Dateien räumt `ImageStore.sweep` auf (Dateien unter
   einer Stunde bleiben, damit Vorschauen vor dem Speichern nicht verschwinden).
-- **Instagram:** nur der allgemeine Abruf, ohne eigene Behandlung. Die oEmbed-Schnittstelle (seit 15.06.2026 ohne Token) ist
+- **Instagram:** Der Abruf ist der allgemeine (`fetchLimited`) mit dem Bot-User-Agent `EssensplanungBot`, **nicht in einen
+  Browser-User-Agent ändern**: nur damit liefert Instagram eine vorgerenderte Seite mit der vollständigen Caption in `og:title`
+  (`<Name> auf Instagram: "<Caption>"`); mit Browser-UA kommt nur eine JavaScript-Hülle. Das ist undokumentiertes Verhalten,
+  getestet bis 1 490 Zeichen. Fehlt das schließende `"`, gilt die Caption als gekürzt (`source_truncated`). Die Caption wird
+  als `source_text` gespeichert (Nutzungsbedingungen: für einen privaten Haushalt bewusst akzeptiert). Die oEmbed-Schnittstelle (seit 15.06.2026 ohne Token) ist
   nicht eingebaut: das Antwortformat ohne Token ist ungeprüft, und Metas Bedingungen verbieten das Speichern der
   Metadaten. Vor einem Einbau am echten Gerät testen und die Bedingungen erneut lesen.
 - **Keine externen Anfragen aus dem Browser:** Schriften sind lokal eingebunden (`@fontsource-variable`), Bilder kommen

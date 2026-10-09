@@ -72,6 +72,9 @@ const MIGRATIONS = [
     raw TEXT NOT NULL
   ) STRICT;
   CREATE INDEX dish_ingredient_dish ON dish_ingredient(dish_id, pos);`,
+  // v7: the recipe text exactly as found at the link (kept apart from the structured recipe)
+  `ALTER TABLE dish ADD COLUMN source_text TEXT;
+  ALTER TABLE dish ADD COLUMN source_truncated INTEGER NOT NULL DEFAULT 0;`,
 ];
 
 function migrate(db: DatabaseSync): void {

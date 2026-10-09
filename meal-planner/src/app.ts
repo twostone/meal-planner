@@ -34,13 +34,17 @@ const image = z.string().regex(IMAGE_NAME);
 // Free-form categories. Duplicates (any case) are merged by the repo, so only size limits are checked here.
 const tags = z.array(z.string().trim().min(1).max(30)).max(10);
 
-const dishBody = z.object({ title, url: optional(url), note: optional(note), image: optional(image), tags: tags.optional() });
+// The recipe text from a link preview (see POST /api/preview). Stored unchanged, never interpreted.
+const source = { source_text: optional(z.string().max(10000)), source_truncated: z.boolean().optional() };
+
+const dishBody = z.object({ title, url: optional(url), note: optional(note), image: optional(image), tags: tags.optional(), ...source });
 const dishPatch = z.object({
   title: title.optional(),
   url: optional(url),
   note: optional(note),
   image: optional(image),
   tags: tags.optional(),
+  ...source,
 });
 const planBody = z
   .object({ start_date: date, end_date: date })
@@ -202,15 +206,31 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
   if (opts.preview) {
     const preview = opts.preview;
     let running = 0;
-    app.post("/api/preview", zValidator("json", z.object({ url })), async (c) => {
-      if (running >= MAX_PARALLEL_PREVIEWS) return c.json({ error: "busy" }, 429);
+    // null = too many at once
+    const limited = async (u: string): Promise<PreviewResult | null> => {
+      if (running >= MAX_PARALLEL_PREVIEWS) return null;
       running++;
       try {
-        return c.json(await preview(c.req.valid("json").url));
+        return await preview(u);
       } finally {
         running--;
         sweep();
       }
+    };
+    app.post("/api/preview", zValidator("json", z.object({ url })), async (c) => {
+      const r = await limited(c.req.valid("json").url);
+      return r ? c.json(r) : c.json({ error: "busy" }, 429);
+    });
+    // "Get the recipe from the link": fetches the dish's link again and replaces source_text.
+    // Nothing found -> { reason } and nothing changes.
+    app.post("/api/dishes/:id/source", zValidator("param", z.object({ id })), async (c) => {
+      const dish = repo.getDish(c.req.valid("param").id);
+      if (!dish.url) return c.json({ error: "dish has no link" }, 400);
+      const r = await limited(dish.url);
+      if (!r) return c.json({ error: "busy" }, 429);
+      if (!r.sourceText) return c.json({ reason: r.reason && r.reason !== "no_metadata" ? r.reason : "no recipe" });
+      repo.setSource(dish.id, r.sourceText, r.sourceTruncated);
+      return c.json(repo.getRecipe(dish.id));
     });
   }
 

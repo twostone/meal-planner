@@ -1,14 +1,19 @@
 import type { ImageStore } from "./images.ts";
 import { FetchError, type FetchFailure } from "./net-guard.ts";
 import { fetchLimited, type Fetched } from "./safe-fetch.ts";
-import { suggestTitles } from "./title-suggest.ts";
+import { PREFIX, suggestTitles } from "./title-suggest.ts";
 
 export type Parsed = { title: string | null; imageUrl: string | null };
+// The recipe text found on the page, unchanged (see extractSource). truncated: the caption may be cut off.
+export type Source = { text: string; truncated: boolean };
+export const MAX_SOURCE_CHARS = 10_000;
 // titleSuggestions: best first, the page's own title always among them (empty when there is no title).
 export type PreviewResult = {
   title: string | null;
   image: string | null;
   titleSuggestions: string[];
+  sourceText: string | null;
+  sourceTruncated: boolean;
   reason: FetchFailure | "no_metadata" | null;
 };
 
@@ -115,6 +120,51 @@ function resolveImage(raw: string | null | undefined, base: URL): string | null 
   }
 }
 
+const oneLine = (s: string) => decodeEntities(s).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+
+// recipeInstructions is a string, a list of steps, or a list of sections that hold steps.
+function recipeSteps(v: unknown, depth = 0): string[] {
+  if (depth > 4 || v == null) return [];
+  if (typeof v === "string") return v.split(/\r?\n|<br\s*\/?>|<\/p>|<\/li>/i).map(oneLine).filter(Boolean);
+  if (Array.isArray(v)) return v.flatMap((x) => recipeSteps(x, depth + 1));
+  if (typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    if (o.itemListElement !== undefined) {
+      const head = typeof o.name === "string" ? oneLine(o.name) : "";
+      return [...(head ? [`${head}:`] : []), ...recipeSteps(o.itemListElement, depth + 1)];
+    }
+    return recipeSteps(o.text ?? o.name, depth + 1);
+  }
+  return [];
+}
+
+// The recipe as plain text, so it survives the page: ingredient lines, a blank line, the steps.
+// Sources: a schema.org recipe, else an Instagram caption (og:title is `<Name> auf Instagram: "<caption>"`,
+// the closing quote is missing when Instagram cut the caption). No LLM, nothing is interpreted.
+function extractSource(recipe: Record<string, unknown> | null, ogTitle: string | undefined): Source | null {
+  let text = "";
+  let truncated = false;
+  if (recipe) {
+    const raw = recipe.recipeIngredient ?? recipe.recipeIngredients;
+    const ingredients = (Array.isArray(raw) ? raw : []).filter((x): x is string => typeof x === "string").map(oneLine).filter(Boolean);
+    const steps = recipeSteps(recipe.recipeInstructions);
+    text = [ingredients.join("\n"), steps.join("\n")].filter(Boolean).join("\n\n");
+  }
+  if (!text && ogTitle) {
+    const decoded = decodeEntities(ogTitle).replace(/\r\n?/g, "\n");
+    const prefix = PREFIX.exec(decoded)?.[0];
+    const rest = prefix ? decoded.slice(prefix.length) : "";
+    if (rest.startsWith('"')) {
+      truncated = !rest.endsWith('"') || rest.length === 1;
+      text = (truncated ? rest.slice(1) : rest.slice(1, -1)).replace(/[ \t]+\n/g, "\n").trim();
+      if (!/\p{L}/u.test(text.replace(/#\S+/g, ""))) text = ""; // hashtags only
+    }
+  }
+  if (!text) return null;
+  if (text.length > MAX_SOURCE_CHARS) return { text: text.slice(0, MAX_SOURCE_CHARS), truncated: true };
+  return { text, truncated };
+}
+
 // The page's own title stays a candidate, whatever else is derived from it.
 function withOriginal(candidates: string[], original: string): string[] {
   return candidates.some((c) => c.toLowerCase() === original.toLowerCase()) ? candidates : [...candidates, original];
@@ -123,7 +173,7 @@ function withOriginal(candidates: string[], original: string): string[] {
 // Title: the schema.org recipe name is the cleanest source (no "| Site" suffix), then og:title, then <title>.
 // Only the fallback can be a long social-media caption; for that one, shorter candidates are derived as well.
 // Image: og:image first (usually a landscape photo), then the recipe image.
-function analyze(html: string, base: URL): Parsed & { titleSuggestions: string[] } {
+function analyze(html: string, base: URL): Parsed & { titleSuggestions: string[]; source: Source | null } {
   const meta = new Map<string, string>();
   for (const m of html.matchAll(META_TAG)) {
     const a = attrs(m[0]);
@@ -151,7 +201,7 @@ function analyze(html: string, base: URL): Parsed & { titleSuggestions: string[]
       firstImage(recipe?.image),
     base,
   );
-  return { title, imageUrl, titleSuggestions };
+  return { title, imageUrl, titleSuggestions, source: extractSource(recipe, meta.get("og:title")) };
 }
 
 export function parsePreview(html: string, base: URL): Parsed {
@@ -188,7 +238,7 @@ export function createPreviewService({ images, fetcher = fetchLimited, log = con
     })();
     const result = await run(rawUrl);
     // Host only: full links can carry tokens.
-    log(`[preview] ${host} title=${result.title ? "yes" : "no"} image=${result.image ? "yes" : "no"} reason=${result.reason ?? "-"}`);
+    log(`[preview] ${host} title=${result.title ? "yes" : "no"} image=${result.image ? "yes" : "no"} source=${result.sourceText ? "yes" : "no"} reason=${result.reason ?? "-"}`);
     return result;
   };
 
@@ -197,9 +247,9 @@ export function createPreviewService({ images, fetcher = fetchLimited, log = con
     try {
       page = await fetcher(rawUrl, { maxBytes: MAX_PAGE_BYTES, accept: HTML_ACCEPT });
     } catch (e) {
-      return { title: null, image: null, titleSuggestions: [], reason: e instanceof FetchError ? e.reason : "network" };
+      return { title: null, image: null, titleSuggestions: [], sourceText: null, sourceTruncated: false, reason: e instanceof FetchError ? e.reason : "network" };
     }
-    if (!/html|xml/.test(page.contentType)) return { title: null, image: null, titleSuggestions: [], reason: "type" };
+    if (!/html|xml/.test(page.contentType)) return { title: null, image: null, titleSuggestions: [], sourceText: null, sourceTruncated: false, reason: "type" };
 
     const parsed = analyze(decodeBody(page), page.url);
     let image: string | null = null;
@@ -211,7 +261,14 @@ export function createPreviewService({ images, fetcher = fetchLimited, log = con
         // title alone is still useful
       }
     }
-    return { title: parsed.title, image, titleSuggestions: parsed.titleSuggestions, reason: parsed.title || image ? null : "no_metadata" };
+    return {
+      title: parsed.title,
+      image,
+      titleSuggestions: parsed.titleSuggestions,
+      sourceText: parsed.source?.text ?? null,
+      sourceTruncated: parsed.source?.truncated ?? false,
+      reason: parsed.title || image || parsed.source ? null : "no_metadata",
+    };
   }
 }
 
