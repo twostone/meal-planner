@@ -18,6 +18,9 @@ dieselbe Liste.
   filtern Chips nach einer Kategorie.
 - Aus einem eingefügten Link (Rezeptseite, Instagram, …) holt der Server Titel und Vorschaubild. Klappt das nicht,
   trägt man den Titel selbst ein.
+- Rezepte: Zutaten (Menge, Einheit, Zutat), Portionen und Zubereitung pro Gericht, von Hand oder aus dem Text, den die
+  App beim Link-Abruf sichert (Rezeptseite oder Instagram-Caption). Optional zerlegt die KI von Home Assistant den Text in
+  Zutaten und Schritte. Das Ergebnis ist ein Entwurf, den man mit dem Originaltext vergleicht und erst dann speichert.
 - Bedienung für das Handy ausgelegt, auch in der Home-Assistant-Companion-App.
 
 ## Installation
@@ -50,12 +53,20 @@ installierbar. Die Integration wird von der App per Discovery gefunden; die App 
 Port (8100, Token, nur im Supervisor-Netz erreichbar). Wer das Token erneuern will, löscht `/data/ha-token` und startet die
 App neu. In Automationen die Details aus den Eventdaten lesen, nicht aus den Sensoren: sie ziehen einen Moment nach.
 
+## Zutaten erkennen (KI)
+
+Der Knopf „Zutaten erkennen“ erscheint nur, wenn Home Assistant eine **AI-Task-Entität** hat (Einstellungen → System →
+KI-Aufgaben, eingerichtet über eine LLM-Integration wie OpenAI, Anthropic oder Google; ein Gesprächsagent allein reicht
+nicht). Genutzt wird die dort bevorzugte Entität. Ohne sie bleibt die Handeingabe.
+
 ## Datenschutz und Sicherheit
 
 - Die App ist nur über Home-Assistant-Ingress erreichbar. Der Server nimmt ausschließlich Verbindungen von Supervisor
   an. Einzige Ausnahme ist der nur lesende, per Token geschützte Port für die HA-Integration (siehe oben).
 - Extern ruft nur der Server ab, und nur Links, die jemand selbst eingegeben hat. Interne Adressen (Heimnetz, andere
   Apps, Router) sind dabei gesperrt. Der Browser lädt nichts von Drittservern: Schriften und Bilder kommen vom eigenen Server.
+- „Zutaten erkennen“ schickt den gesicherten Rezepttext an den KI-Dienst, der in Home Assistant eingerichtet ist (bei
+  einem Cloud-Dienst also ins Internet). Nur auf Knopfdruck, nie automatisch.
 - Es gibt keine Nutzerverwaltung: Alle, die die App in Home Assistant öffnen dürfen, sehen und ändern dieselbe Liste.
 
 ## Entwicklung

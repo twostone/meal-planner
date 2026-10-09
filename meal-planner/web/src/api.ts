@@ -1,4 +1,4 @@
-import type { Dish, DishInput, Entry, PlanDetail, PlanSummary, Preview, Recipe } from "./types";
+import type { Dish, DishInput, Entry, PlanDetail, AiStatus, PlanSummary, Preview, Recipe, RecipeDraft } from "./types";
 
 // All URLs are resolved against the document URL (never "/api/..."), so the app
 // keeps working under the HA ingress prefix.
@@ -7,6 +7,8 @@ const MESSAGES: Record<string, string> = {
   "dish already in plan": "Steht schon in der Liste.",
   "dish is used in a plan": "Das Gericht steht noch in einer Liste und kann nicht gelöscht werden.",
   "plan overlaps": "Der Zeitraum überschneidet sich mit einer anderen Liste.",
+  "ai failed": "Die Zutaten konnten nicht erkannt werden. Bitte von Hand eintragen.",
+  busy: "Gerade beschäftigt. Bitte gleich noch einmal versuchen.",
 };
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -42,6 +44,11 @@ export const putRecipe = (dishId: number, r: Pick<Recipe, "servings" | "instruct
 
 // "Get the recipe from the link": the server fetches the dish's link again. Nothing found -> { reason }.
 export const fetchSource = (dishId: number) => request<Recipe | { reason: string }>("POST", `api/dishes/${dishId}/source`);
+
+// Is an AI task entity set up in Home Assistant? Decides whether "Zutaten erkennen" is offered.
+export const getRecipeStatus = () => request<AiStatus>("GET", "api/recipe/status");
+// Splits the saved original text into a draft (nothing is stored). Takes a few seconds.
+export const draftRecipe = (dishId: number) => request<RecipeDraft>("POST", `api/dishes/${dishId}/recipe/draft`);
 
 export const listPlans = () => request<PlanSummary[]>("GET", "api/plans");
 export const getPlan = (id: number) => request<PlanDetail>("GET", `api/plans/${id}`);

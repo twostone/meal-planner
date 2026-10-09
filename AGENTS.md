@@ -32,6 +32,8 @@ meal-planner/            das Add-on (Docker-Build-Kontext)
     images.ts              Bildspeicher (/data/images, Dateiname = Hash)
     ha-api.ts, ha-state.ts  Zweiter Listener (Token) und Zustand für die HA-Integration
     ha-notify.ts            Bus-Events an Home Assistant (über den Supervisor)
+    ha-ai.ts                ai_task.generate_data über den Supervisor (Rezept in Zutaten zerlegen)
+    recipe-draft.ts         prüft und bereinigt die LLM-Antwort, gleicht sie mit dem Originaltext ab
     ha-discovery.ts         Meldung von Host, Port und Token per Supervisor-Discovery
   web/                   Frontend: Svelte 5 + Vite (Runes, TypeScript)
     public/favicon.svg     Favicon der App, Vorlage für icon.png
@@ -69,7 +71,7 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   `POST /api/plans` prüft dieselbe Regel (`overlapsOther` in `repo.ts`): Überschneidung -> 409 `plan overlaps`, es wird
   nichts angelegt und kein Event gesendet. Berühren ohne gemeinsamen Tag ist erlaubt. Bereits überlappende Altdaten
   bleiben unverändert bestehen.
-- **Rezept** (Plan: `docs/plan-rezepte.md`, Stufe 1 und 2 gebaut): gehört zum Gericht, nicht zum Listeneintrag. `dish.servings`
+- **Rezept** (Plan: `docs/plan-rezepte.md`, Stufe 1 bis 3 gebaut): gehört zum Gericht, nicht zum Listeneintrag. `dish.servings`
   (1–50) und `dish.instructions` (ein Schritt pro Zeile, höchstens 10 000 Zeichen) plus `dish_ingredient` (Reihenfolge `pos`,
   `section`, `amount`/`amount_max`, `unit`, `name`, `note`, `raw`). `GET/PUT /api/dishes/:id/recipe`: PUT ersetzt alles in einer
   Transaktion (wie `setTags`), ein leeres Rezept löscht es. Höchstens 60 Zutaten. `unit` nur aus `UNITS` in `repo.ts`
@@ -84,6 +86,17 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   `POST /api/dishes/:id/source` (Link neu abrufen; ohne Fund `{reason}` und nichts ändert sich; im UI „Rezept aus Link holen“
   mit zweiter Bestätigung, wenn schon ein Text da ist). Er kommt mit `GET /api/dishes/:id/recipe`, nie mit dem Katalog, und
   `PUT …/recipe` lässt ihn unberührt.
+  **Zutaten erkennen (Stufe 3):** `POST /api/dishes/:id/recipe/draft` schickt `source_text` über `ha-ai.ts` an die bevorzugte
+  AI-Task-Entität von HA und liefert einen **Entwurf** (wird nie gespeichert). Die LLM-Antwort gilt als Nutzereingabe
+  (`buildDraft` in `recipe-draft.ts`): Schema, Grenzen, Einheitenliste (Unbekanntes -> `unit` null, Rest in `note`),
+  Aufräumen (Nummerierung der Schritte, `:` am Abschnittsende). Abgleich mit der Quelle (ohne Leerzeichen, Aufzählungszeichen,
+  Emojis, Doppelpunkte, Groß-/Kleinschreibung bleibt): `raw` und `section` müssen wörtlich im Text stehen, sonst
+  `verified: false` (im Editor rot markiert, bis man die Zeile ändert); `servings` gilt nur mit `servings_quote`, die im Text
+  steht, und mit mindestens einer Zutat. Weggelassene Zeilen lassen sich nicht automatisch prüfen: Der Editor zeigt den
+  Originaltext im Entwurf aufgeklappt. `GET /api/recipe/status` (`{ai, reason}`: `disabled`, `no_entity`, `unreachable`)
+  steuert, ob die UI den Knopf zeigt. Ohne Token ist `ai` nicht gesetzt: die Entwurfsroute gibt es dann nicht. Ablauf: 30 s
+  Zeitlimit, kein Wiederholen, höchstens 2 parallele Entwürfe, Fehler -> 502 `ai failed` und im UI „Von Hand eintragen“.
+  Das LLM hat keine Tools. Der Text geht an den in HA eingerichteten (evtl. Cloud-)Dienst: im README vermerkt.
 - Ein Gericht kann pro Zeitraum nur einmal vorkommen. Der Titel ist im Katalog eindeutig (ohne Groß-/Kleinschreibung).
   Ein Eintrag per Titel legt das Gericht an oder verwendet ein vorhandenes wieder. Löschen eines Gerichts, das noch
   in einer Liste steht, ist absichtlich gesperrt (409).
@@ -160,9 +173,9 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   Größenlimit nach dem Entpacken (gegen Zip-Bomben). Nicht lockern.
 - `allowPrivate` in `fetchLimited` ist **nur für Tests** (lokaler Testserver auf 127.0.0.1). Nie im Produktivcode setzen,
   nie über eine Umgebungsvariable oder Konfiguration erreichbar machen.
-- **`ha-notify.ts` ist bewusst die eine Ausnahme von der SSRF-Regel oben:** Es nutzt einfaches `fetch`, nicht
-  `fetchLimited`. Das Ziel (`http://supervisor`, `ha-discovery.ts` ebenso) ist im Code festgelegt, kein Nutzer-Input, und
-  liegt im internen Netz – genau die Adressen, die `net-guard.ts` für Rezept-Links zu Recht sperrt. Diese beiden Pfade
+- **`ha-notify.ts` ist bewusst die eine Ausnahme von der SSRF-Regel oben (ebenso `ha-ai.ts`):** Es nutzt einfaches `fetch`,
+  nicht `fetchLimited`. Das Ziel (`http://supervisor`, `ha-discovery.ts` und `ha-ai.ts` ebenso) ist im Code festgelegt, kein Nutzer-Input, und
+  liegt im internen Netz – genau die Adressen, die `net-guard.ts` für Rezept-Links zu Recht sperrt. Diese Pfade
   nicht vermischen.
 - Änderungen an `net-guard.ts` mit Vorsicht: Node prüft IPv4-Adressen als IPv4-gemappte IPv6-Adressen, eine Regel für
   `::ffff:0:0/96` würde daher **jede** IPv4-Adresse sperren (der Test `isPublicIp` fängt das).
