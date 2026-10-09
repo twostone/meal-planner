@@ -2,9 +2,11 @@ import { Hono, type Context } from "hono";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { zValidator } from "@hono/zod-validator";
 import * as z from "zod";
+import { AiError, type RecipeAi } from "./ha-ai.ts";
 import type { HaEventInput, HaUser } from "./ha-notify.ts";
 import { IMAGE_NAME, type ImageStore } from "./images.ts";
 import type { PreviewResult } from "./preview.ts";
+import { buildDraft, DraftError } from "./recipe-draft.ts";
 import { ConflictError, NotFoundError, UNITS, type Entry, type Repo } from "./repo.ts";
 
 const title = z.string().trim().min(1).max(200);
@@ -102,9 +104,13 @@ export type AppOptions = {
   // Fires a Home Assistant bus event after a mutation (see ha-notify.ts). Optional so the API
   // runs without it outside the add-on.
   notify?: (event: HaEventInput) => Promise<void>;
+  // Splits recipe text into ingredients and steps via Home Assistant's AI task (see ha-ai.ts). Optional:
+  // without it the recipe buttons stay hidden and the status says "disabled".
+  ai?: RecipeAi;
 };
 
 const MAX_PARALLEL_PREVIEWS = 4;
+const MAX_PARALLEL_DRAFTS = 2;
 
 export function createApp(repo: Repo, opts: AppOptions = {}) {
   const app = new Hono();
@@ -187,6 +193,30 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
   app.put("/api/dishes/:id/recipe", zValidator("param", z.object({ id })), zValidator("json", recipeBody), (c) =>
     c.json(repo.setRecipe(c.req.valid("param").id, c.req.valid("json"))),
   );
+
+  app.get("/api/recipe/status", async (c) => c.json(opts.ai ? await opts.ai.status() : { ai: false, reason: "disabled" }));
+  if (opts.ai) {
+    const ai = opts.ai;
+    let drafting = 0;
+    // Draft only: nothing is stored. The user reviews it (with the source text next to it) and saves via PUT …/recipe.
+    app.post("/api/dishes/:id/recipe/draft", zValidator("param", z.object({ id })), async (c) => {
+      const { source_text } = repo.getRecipe(c.req.valid("param").id);
+      if (!source_text) return c.json({ error: "dish has no source text" }, 400);
+      if (drafting >= MAX_PARALLEL_DRAFTS) return c.json({ error: "busy" }, 429);
+      drafting++;
+      try {
+        return c.json(buildDraft(await ai.generate(source_text), source_text));
+      } catch (e) {
+        if (e instanceof AiError || e instanceof DraftError) {
+          console.error("[recipe-draft] failed:", e instanceof AiError ? e.reason : e.message);
+          return c.json({ error: "ai failed", reason: e instanceof AiError ? e.reason : "bad_response" }, 502);
+        }
+        throw e;
+      } finally {
+        drafting--;
+      }
+    });
+  }
 
   if (opts.images) {
     const images = opts.images;

@@ -5,11 +5,11 @@
   import { fmtAmount, groupBySection, ingredientText, parseAmount } from "./recipe";
   import Sheet from "./Sheet.svelte";
   import { app, closeSheet } from "./store.svelte";
-  import { UNITS, type Recipe } from "./types";
+  import { UNITS, type AiStatus, type Recipe, type RecipeDraft } from "./types";
 
   let { dishId }: { dishId: number } = $props();
 
-  type Row = { key: number; section: string; amount: string; unit: string; name: string; note: string; raw: string | null; sig: string };
+  type Row = { key: number; section: string; amount: string; unit: string; name: string; note: string; raw: string | null; sig: string; verified: boolean };
 
   const dish = $derived(app.dishes.find((d) => d.id === dishId));
   let recipe = $state<Recipe | null>(null);
@@ -24,6 +24,9 @@
   let fetching = $state(false);
   let confirmReplace = $state(false);
   let sourceHint = $state("");
+  let ai = $state<AiStatus>({ ai: false, reason: null });
+  let drafting = $state(false);
+  let draftMode = $state(false); // the editor shows a draft from the AI, not the saved recipe
 
   const hasLink = $derived(!!dish?.url);
   // Structured part only: a recipe that has just the original text is still shown, not edited.
@@ -39,18 +42,22 @@
     } catch {
       loadError = true;
     }
+    // Only matters for the button; a failed status simply hides it.
+    ai = await api.getRecipeStatus().catch(() => ({ ai: false, reason: null }));
   });
 
   // The signature says whether a row was touched: only an untouched row keeps its original line (raw).
-  const sigOf = (r: Omit<Row, "sig" | "key" | "raw">) => [r.amount, r.unit, r.name].join("|");
+  const sigOf = (r: Pick<Row, "amount" | "unit" | "name">) => [r.amount, r.unit, r.name].join("|");
 
-  function startEdit() {
-    const r = recipe!;
+  // `draft`: values from the AI instead of the saved recipe (nothing is saved before "Speichern").
+  function startEdit(draft?: RecipeDraft) {
+    const r = draft ?? recipe!;
+    draftMode = !!draft;
     servings = r.servings === null ? "" : String(r.servings);
     instructions = r.instructions ?? "";
     rows = r.ingredients.map((i) => {
       const row = { section: i.section ?? "", amount: fmtAmount(i), unit: i.unit ?? "", name: i.name, note: i.note ?? "" };
-      return { key: nextKey++, ...row, raw: i.raw, sig: sigOf(row) };
+      return { key: nextKey++, ...row, raw: i.raw, sig: sigOf(row), verified: !("verified" in i) || i.verified };
     });
     problem = "";
     editing = true;
@@ -58,13 +65,29 @@
 
   function addRow() {
     // A new ingredient starts in the section of the previous one.
-    rows.push({ key: nextKey++, section: rows.at(-1)?.section ?? "", amount: "", unit: "", name: "", note: "", raw: null, sig: "" });
+    rows.push({ key: nextKey++, section: rows.at(-1)?.section ?? "", amount: "", unit: "", name: "", note: "", raw: null, sig: "", verified: true });
   }
 
   function cancel() {
     if (isBlank(recipe!)) closeSheet();
     else editing = false;
   }
+
+  async function recognize() {
+    drafting = true;
+    sourceHint = "";
+    app.error = "";
+    try {
+      startEdit(await api.draftRecipe(dishId));
+    } catch (err) {
+      app.error = err instanceof Error ? err.message : String(err);
+    } finally {
+      drafting = false;
+    }
+  }
+
+  // A line the AI changed or made up is marked until the user touches it.
+  const suspicious = (r: Row) => !r.verified && r.sig === sigOf(r);
 
   // Replaces the saved original text; with one already there only after a second tap.
   async function getSource() {
@@ -125,6 +148,11 @@
     <p class="status">Lade …</p>
   {:else if editing}
     <form onsubmit={save} novalidate>
+      {#if draftMode}
+        <p class="draft-note">
+          Entwurf der KI. Bitte mit dem Originaltext unten vergleichen, bevor du speicherst: Die KI kann Zeilen weglassen oder verändern.
+        </p>
+      {/if}
       <label>
         Portionen (optional)
         <input type="text" inputmode="numeric" placeholder="z. B. 4" maxlength="2" bind:value={servings} autocomplete="off" />
@@ -133,7 +161,8 @@
       <fieldset class="ingredients">
         <legend>Zutaten</legend>
         {#each rows as r, n (r.key)}
-          <div class="ing-row">
+          <div class="ing-row" class:suspicious={suspicious(r)}>
+            {#if suspicious(r)}<p class="ing-warn">Nicht so im Originaltext gefunden. Bitte prüfen.</p>{/if}
             <div class="ing-main">
               <input type="text" inputmode="decimal" aria-label="Menge" placeholder="Menge" maxlength="12" bind:value={r.amount} autocomplete="off" />
               <select aria-label="Einheit" bind:value={r.unit}>
@@ -161,7 +190,7 @@
         <textarea rows="6" maxlength="10000" bind:value={instructions} placeholder="Ein Schritt pro Zeile"></textarea>
       </label>
       {#if recipe.source_text}
-        <details class="source">
+        <details class="source" open={draftMode}>
           <summary>Originaltext vom Link</summary>
           <p class="source-text">{recipe.source_text}</p>
         </details>
@@ -198,6 +227,16 @@
         {#if recipe.source_truncated}<p class="status">Der Text ist evtl. gekürzt. Bei Bedarf den vollständigen Text von Hand ergänzen.</p>{/if}
       {/if}
     </article>
+    {#if recipe.source_text}
+      {#if ai.ai}
+        <button type="button" class="btn primary wide" disabled={drafting} onclick={recognize}>
+          {drafting ? "Erkenne Zutaten …" : "Zutaten erkennen"}
+        </button>
+        <small class="field-hint">Der Text wird an den KI-Dienst von Home Assistant geschickt. Du prüfst das Ergebnis, bevor es gespeichert wird.</small>
+      {:else if ai.reason === "no_entity"}
+        <small class="field-hint">Zum automatischen Erkennen braucht Home Assistant eine „AI Task“-Entität (Einstellungen, System, KI-Aufgaben).</small>
+      {/if}
+    {/if}
     {#if hasLink}
       <button type="button" class="btn outline wide" disabled={fetching} onclick={getSource}>
         {fetching ? "Hole Rezept …" : confirmReplace ? "Vorhandenen Text ersetzen?" : "Rezept aus Link holen"}
@@ -206,7 +245,7 @@
     {#if sourceHint}<p class="status" aria-live="polite">{sourceHint}</p>{/if}
     <div class="actions">
       <button type="button" class="btn outline" onclick={closeSheet}>Schließen</button>
-      <button type="button" class="btn primary" onclick={startEdit}>{isEmpty(recipe) ? "Von Hand eintragen" : "Bearbeiten"}</button>
+      <button type="button" class="btn primary" onclick={() => startEdit()}>{isEmpty(recipe) ? "Von Hand eintragen" : "Bearbeiten"}</button>
     </div>
   {/if}
 </Sheet>

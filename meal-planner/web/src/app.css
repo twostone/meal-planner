@@ -799,3 +799,22 @@ details.source summary {
   font-weight: 600;
   color: var(--muted);
 }
+
+.draft-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: #fff3d6;
+  font-size: 14px;
+  font-weight: 500;
+}
+.ing-row.suspicious {
+  background: #fde8e6;
+  box-shadow: 0 0 0 1.5px var(--danger);
+}
+.ing-warn {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--danger);
+}
