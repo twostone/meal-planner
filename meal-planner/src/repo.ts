@@ -36,6 +36,26 @@ export type DishInput = {
   tags?: string[];
 };
 
+// The recipe columns (servings, instructions) are loaded on their own, never with the catalog.
+const DISH_COLS = "id, title, url, note, image, created_at";
+
+export const UNITS = ["g", "kg", "ml", "l", "EL", "TL", "Prise", "Zehe", "Bund", "Dose", "Packung", "Becher", "Scheibe", "Handvoll"] as const;
+
+export type Ingredient = {
+  section: string | null; // heading in the recipe, e.g. "Für den Dip"
+  amount: number | null; // null = "etwas", "nach Geschmack"
+  amount_max: number | null; // only for ranges ("1-2 Zehen")
+  unit: string | null; // one of UNITS; null = counted without unit ("1 Zwiebel") or no amount
+  name: string;
+  note: string | null;
+  raw: string; // original line; built from amount/unit/name when entered by hand
+};
+export type Recipe = {
+  servings: number | null;
+  instructions: string | null; // one step per line
+  ingredients: Ingredient[];
+};
+
 export class NotFoundError extends Error {}
 export class ConflictError extends Error {}
 
@@ -63,7 +83,7 @@ export function createRepo(db: DatabaseSync) {
   }
 
   function getDish(id: number): Dish {
-    const d = one<DishRow>("SELECT * FROM dish WHERE id = ?", id);
+    const d = one<DishRow>(`SELECT ${DISH_COLS} FROM dish WHERE id = ?`, id);
     if (!d) throw new NotFoundError("dish");
     return withTags([d])[0]!;
   }
@@ -105,12 +125,47 @@ export function createRepo(db: DatabaseSync) {
     return getDish(id);
   }
 
+  const num = (n: number) => String(n).replace(".", ",");
+  const rawLine = (i: Omit<Ingredient, "raw">) =>
+    [i.amount === null ? "" : num(i.amount) + (i.amount_max === null ? "" : `-${num(i.amount_max)}`), i.unit, i.name]
+      .filter(Boolean)
+      .join(" ");
+
   const self = {
+    getRecipe(dishId: number): Recipe {
+      const d = one<{ servings: number | null; instructions: string | null }>(
+        "SELECT servings, instructions FROM dish WHERE id = ?",
+        dishId,
+      );
+      if (!d) throw new NotFoundError("dish");
+      const ingredients = all<Ingredient>(
+        "SELECT section, amount, amount_max, unit, name, note, raw FROM dish_ingredient WHERE dish_id = ? ORDER BY pos",
+        dishId,
+      );
+      return { servings: d.servings, instructions: d.instructions, ingredients };
+    },
+
+    // Replaces the whole recipe (like setTags). An empty recipe removes it.
+    setRecipe(dishId: number, recipe: Omit<Recipe, "ingredients"> & { ingredients: (Omit<Ingredient, "raw"> & { raw?: string | null })[] }): Recipe {
+      return transaction(db, () => {
+        getDish(dishId);
+        db.prepare("UPDATE dish SET servings = ?, instructions = ? WHERE id = ?").run(recipe.servings, recipe.instructions, dishId);
+        db.prepare("DELETE FROM dish_ingredient WHERE dish_id = ?").run(dishId);
+        const ins = db.prepare(
+          "INSERT INTO dish_ingredient (dish_id, pos, section, amount, amount_max, unit, name, note, raw) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        );
+        recipe.ingredients.forEach((i, pos) =>
+          ins.run(dishId, pos, i.section, i.amount, i.amount_max, i.unit, i.name, i.note, i.raw?.trim() || rawLine(i)),
+        );
+        return self.getRecipe(dishId);
+      });
+    },
+
     listDishes(q?: string): Dish[] {
-      if (!q?.trim()) return withTags(all<DishRow>("SELECT * FROM dish ORDER BY title COLLATE NOCASE"));
+      if (!q?.trim()) return withTags(all<DishRow>(`SELECT ${DISH_COLS} FROM dish ORDER BY title COLLATE NOCASE`));
       const like = `%${q.trim().replace(/[\\%_]/g, "\\$&")}%`;
       return withTags(
-        all<DishRow>("SELECT * FROM dish WHERE title LIKE ? ESCAPE '\\' ORDER BY title COLLATE NOCASE", like),
+        all<DishRow>(`SELECT ${DISH_COLS} FROM dish WHERE title LIKE ? ESCAPE '\\' ORDER BY title COLLATE NOCASE`, like),
       );
     },
 
@@ -271,7 +326,7 @@ export function createRepo(db: DatabaseSync) {
         if ("dish_id" in input) {
           dishId = getDish(input.dish_id).id;
         } else {
-          const existing = one<DishRow>("SELECT * FROM dish WHERE title = ? COLLATE NOCASE", input.title.trim());
+          const existing = one<DishRow>(`SELECT ${DISH_COLS} FROM dish WHERE title = ? COLLATE NOCASE`, input.title.trim());
           if (existing) {
             dishId = existing.id;
             // Fill in a link/note if the catalog entry has none yet.

@@ -1,4 +1,4 @@
-import type { Dish, DishInput, Entry, PlanDetail, PlanSummary, Preview } from "./types";
+import type { Dish, DishInput, Entry, PlanDetail, PlanSummary, Preview, Recipe } from "./types";
 
 // All URLs are resolved against the document URL (never "/api/..."), so the app
 // keeps working under the HA ingress prefix.
@@ -34,6 +34,11 @@ export const listDishes = () => request<Dish[]>("GET", "api/dishes");
 export const createDish = (d: DishInput) => request<Dish>("POST", "api/dishes", d);
 export const updateDish = (id: number, d: DishInput) => request<Dish>("PATCH", `api/dishes/${id}`, d);
 export const deleteDish = (id: number) => request<void>("DELETE", `api/dishes/${id}`);
+
+export const getRecipe = (dishId: number) => request<Recipe>("GET", `api/dishes/${dishId}/recipe`);
+// Replaces the whole recipe. An empty one (no servings, steps or ingredients) removes it.
+export const putRecipe = (dishId: number, r: Omit<Recipe, "ingredients"> & { ingredients: (Omit<Recipe["ingredients"][number], "raw"> & { raw?: string | null })[] }) =>
+  request<Recipe>("PUT", `api/dishes/${dishId}/recipe`, r);
 
 export const listPlans = () => request<PlanSummary[]>("GET", "api/plans");
 export const getPlan = (id: number) => request<PlanDetail>("GET", `api/plans/${id}`);

@@ -710,3 +710,76 @@ fieldset.suggestions legend {
   color: #fff;
   font-weight: 600;
 }
+
+/* recipe */
+select {
+  min-height: 44px;
+  min-width: 0;
+  border-radius: 14px;
+  border: 1px solid var(--field);
+  background: var(--surface);
+  padding: 0 12px;
+  font: inherit;
+  font-size: 16px;
+  color: var(--ink);
+}
+fieldset.ingredients {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+fieldset.ingredients legend {
+  padding: 0;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.ing-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 14px;
+  background: var(--green-soft);
+}
+.ing-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px;
+  gap: 8px;
+}
+.ing-extra {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+.recipe h3 {
+  margin: 12px 0 4px;
+  font-family: var(--display);
+  font-size: 18px;
+}
+.recipe h4 {
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+.recipe ul,
+.recipe ol {
+  margin: 4px 0 0;
+  padding-left: 22px;
+}
+.recipe li {
+  padding: 4px 0;
+  overflow-wrap: anywhere;
+}
+.recipe .servings {
+  margin: 0;
+  font-weight: 600;
+  color: var(--muted);
+}
+.ing-note {
+  color: var(--muted);
+}

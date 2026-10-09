@@ -3,7 +3,7 @@
   import * as api from "./api";
   import Icon from "./Icon.svelte";
   import Sheet from "./Sheet.svelte";
-  import { app, deleteDish, removeEntry, saveDish, type SheetState } from "./store.svelte";
+  import { app, deleteDish, openRecipe, removeEntry, saveDish, type SheetState } from "./store.svelte";
   import { isUrl, sameTag } from "./util";
 
   let { sheet }: { sheet: Extract<SheetState, { kind: "dish" }> } = $props();
@@ -206,6 +206,10 @@
       </div>
     </fieldset>
     {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
+
+    {#if start.dishId !== null}
+      <button type="button" class="btn outline wide" onclick={() => openRecipe(start.dishId!)}>Rezept</button>
+    {/if}
 
     <div class="actions">
       <button type="submit" class="btn primary" disabled={busy}>Speichern</button>

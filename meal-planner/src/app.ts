@@ -5,7 +5,7 @@ import * as z from "zod";
 import type { HaEventInput, HaUser } from "./ha-notify.ts";
 import { IMAGE_NAME, type ImageStore } from "./images.ts";
 import type { PreviewResult } from "./preview.ts";
-import { ConflictError, NotFoundError, type Entry, type Repo } from "./repo.ts";
+import { ConflictError, NotFoundError, UNITS, type Entry, type Repo } from "./repo.ts";
 
 const title = z.string().trim().min(1).max(200);
 // Only http(s): links are rendered as <a href>, so javascript: etc. must never get in.
@@ -58,6 +58,27 @@ const planPatch = z
     message: "end_date before start_date",
     path: ["end_date"],
   });
+// Text fields of a recipe: "" or null means "not set".
+const text = (max: number) => z.union([z.literal("").transform(() => null), z.string().trim().max(max), z.null()]);
+const ingredient = z
+  .object({
+    section: text(80),
+    amount: z.number().min(0).max(100000).nullable(),
+    amount_max: z.number().min(0).max(100000).nullable(),
+    unit: z.enum(UNITS).nullable(),
+    name: z.string().trim().min(1).max(80),
+    note: text(200),
+    raw: z.string().trim().max(200).nullish(), // built from amount/unit/name when missing
+  })
+  .refine((v) => v.amount_max === null || (v.amount !== null && v.amount_max >= v.amount), {
+    message: "amount_max needs an amount and must not be smaller",
+    path: ["amount_max"],
+  });
+const recipeBody = z.object({
+  servings: z.number().int().min(1).max(50).nullable(),
+  instructions: text(10000),
+  ingredients: z.array(ingredient).max(60),
+});
 const entryBody = z.union([z.object({ dish_id: id }), dishBody]);
 // note: only for this entry (dish in one plan); "" or null clears it
 const entryPatch = z.object({
@@ -155,6 +176,13 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
     sweep();
     return c.body(null, 204);
   });
+
+  app.get("/api/dishes/:id/recipe", zValidator("param", z.object({ id })), (c) =>
+    c.json(repo.getRecipe(c.req.valid("param").id)),
+  );
+  app.put("/api/dishes/:id/recipe", zValidator("param", z.object({ id })), zValidator("json", recipeBody), (c) =>
+    c.json(repo.setRecipe(c.req.valid("param").id, c.req.valid("json"))),
+  );
 
   if (opts.images) {
     const images = opts.images;
