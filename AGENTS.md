@@ -29,10 +29,11 @@ meal-planner/            das Add-on (Docker-Build-Kontext)
     net-guard.ts           Adress-Sperre (SSRF)
     safe-fetch.ts          der einzige Weg, fremde URLs abzurufen
     preview.ts             Titel und Bild aus HTML (og:-Tags, schema.org-Rezept)
+    title-suggest.ts       Titelvorschläge aus Captions (Regeln) und Bereinigung der KI-Titel
     images.ts              Bildspeicher (/data/images, Dateiname = Hash)
     ha-api.ts, ha-state.ts  Zweiter Listener (Token) und Zustand für die HA-Integration
     ha-notify.ts            Bus-Events an Home Assistant (über den Supervisor)
-    ha-ai.ts                ai_task.generate_data über den Supervisor (Rezept in Zutaten zerlegen)
+    ha-ai.ts                ai_task.generate_data über den Supervisor (Rezept in Zutaten zerlegen, Titel vorschlagen)
     recipe-draft.ts         prüft und bereinigt die LLM-Antwort, gleicht sie mit dem Originaltext ab
     ha-discovery.ts         Meldung von Host, Port und Token per Supervisor-Discovery
   web/                   Frontend: Svelte 5 + Vite (Runes, TypeScript)
@@ -129,6 +130,25 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   kommt aus `og:image`, sonst aus dem Rezept. Login- und Bot-Prüfseiten („Login • Instagram“, „Just a moment...“) ergeben
   keinen Titel. Eine Vorschau darf nie etwas blockieren: jeder Fehler wird zu `{title: null, image: null, reason}`,
   der Nutzer trägt den Titel dann selbst ein. Ein getippter Titel wird nie überschrieben.
+- **Titelvorschläge** (`titleSuggestions` der Vorschau plus KI): Die Vorschau liefert höchstens **zwei Regelvorschläge**, den
+  besten aus `suggestTitles` (`title-suggest.ts`, erste sinnvolle Caption-Zeile; der Link-Slug zählt nur, wenn es keine
+  erste Zeile gibt) und immer den Originaltitel. Dazu kommen höchstens **zwei KI-Titel**: Das Bearbeiten-Blatt ruft nach
+  **jeder** Vorschau (Einfügen, Linkänderung, Knopf) `POST /api/title-suggestions {title, text, lang}` auf, nie vorher und
+  nie blockierend. `text` ist `sourceText`, sonst der Titel; `lang` ist `navigator.language`. Solange die Antwort aussteht,
+  zeigt das Blatt zwei Platzhalter mit „KI“-Kennzeichen, bei Fehler oder Zeitüberschreitung verschwinden sie still. Der
+  Titel im Feld wird dadurch nie ersetzt, man tippt einen Chip an. Die Platzhalter gibt es nur, wenn
+  `GET /api/recipe/status` `ai: true` meldet; ohne AI-Task-Entität (oder ohne Token) gibt es die Route nicht.
+  `titles()` in `ha-ai.ts` (eigener `task_name` `meal_planner_title`, 15 s Zeitlimit, ein Textfeld, ein Titel pro Zeile) wie
+  beim Rezept über den Supervisor, ohne Tools. Die Antwort gilt als Nutzereingabe (`cleanAiTitles`): Nummerierung, Anführungs-
+  zeichen, Emojis und Hashtags weg, höchstens 80 Zeichen und 2 Titel, Duplikate ohne Groß-/Kleinschreibung weg, Zeilen
+  ohne Buchstaben oder nur mit Link fallen heraus. Anders als bei den Zutaten gibt es **keinen Abgleich mit dem Quelltext**: Ein
+  guter Titel verdichtet, er steht selten wörtlich im Text. Geschützt ist man dadurch, dass der Titel nur als Chip erscheint und
+  man ihn selbst wählt. **Sprache:** nur der von `languageName()` (`Intl.DisplayNames`) erzeugte Name gelangt in den Prompt, nie
+  der Code vom Client; als `lang` gilt nur ein schlichter Sprachcode, sonst Deutsch. Die Titel folgen der Browsersprache, nicht
+  der HA-Sprache (`/api/config` liefert laut Doku kein `language`-Feld, nicht am System geprüft). Die Rezepterkennung bleibt
+  im Wortlaut der Quelle und wird nicht übersetzt (der Abgleich von `raw` und `section` braucht das). Höchstens 2 parallele
+  Anfragen (sonst 429). **Datenschutz:** Anders als „Zutaten erkennen“ läuft das automatisch: Jede Vorschau schickt Seitentitel
+  und Text (höchstens 10 000 Zeichen) an den in HA eingerichteten (evtl. Cloud-)Dienst: im README vermerkt.
 - **Bilder** lädt der Server einmal herunter und speichert sie unter `/data/images/<hash>.<ext>` (max. 3 MB, kein SVG,
   Typ nach den Datei-Bytes). Nie fremde Bild-URLs im Frontend einbinden (Adressen, besonders bei Instagram, laufen ab,
   und der Browser würde Drittserver anfragen). Nicht mehr verwendete Dateien räumt `ImageStore.sweep` auf (Dateien unter
@@ -267,6 +287,11 @@ Kategorien umbenennen/zusammenführen, Mehrfachauswahl im Kategorie-Filter.
   und nicht gegen Instagram. Seiten hinter Cloudflare oder Login liefern keinen Titel (dann trägt der Nutzer ihn ein).
   Das Add-on-Protokoll zeigt pro Abruf eine Zeile `[preview] <host> title=… image=… reason=…` (nur der Host, nie die URL).
 - Ob HA-Ingress die `X-Remote-User-*`-Header wirklich liefert, ist gegen die Doku, aber nicht am echten System geprüft.
+- Der Prompt der KI-Titel (`titlesPrompt` in `ha-ai.ts`) ist **nur gegen eine Fake-AI getestet, nie gegen ein echtes Modell**:
+  offen ist, ob er Aufmerksamkeitsfänger („Das BESTE Abendessen …“) zuverlässig verwirft, ob er bei englischen Captions
+  die Browsersprache einhält und wie lange die Antwort dauert (Zeitlimit 15 s). Am echten System mit ein paar Captions
+  ausprobieren und den Prompt danach anpassen. Auch das `ai_task`-Feld `titles` (ein Textfeld, ein Titel pro Zeile) ist nicht
+  an einer echten Entität bestätigt.
 - Die Releases laufen über Release Please (siehe „CI und Releases“). Der Stand des Pakets auf ghcr.io ist hier nicht
   festgehalten.
 - Voraussetzung im Repository (gesetzt): Einstellungen → Actions → General → „Allow GitHub Actions to create and approve pull requests“.

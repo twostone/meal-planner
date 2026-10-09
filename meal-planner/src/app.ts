@@ -8,6 +8,7 @@ import { IMAGE_NAME, type ImageStore } from "./images.ts";
 import type { PreviewResult } from "./preview.ts";
 import { buildDraft, DraftError } from "./recipe-draft.ts";
 import { ConflictError, NotFoundError, UNITS, type Entry, type Repo } from "./repo.ts";
+import { cleanAiTitles } from "./title-suggest.ts";
 
 const title = z.string().trim().min(1).max(200);
 // Only http(s): links are rendered as <a href>, so javascript: etc. must never get in.
@@ -85,6 +86,12 @@ const recipeBody = z.object({
   instructions: text(10000),
   ingredients: z.array(ingredient).max(60),
 });
+// Input of the AI title suggestions: the page title and the text found at the link (or, without one, the title again).
+// `lang` comes from the browser; anything that is not a plain language code ("de", "en-GB") counts as missing.
+const LANG = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
+const titleSuggestBody = z
+  .object({ title: z.string().trim().max(200).optional(), text: z.string().max(10000).optional(), lang: z.string().max(35).optional() })
+  .refine((v) => !!(v.title || v.text?.trim()), { message: "title or text needed" });
 const entryBody = z.union([z.object({ dish_id: id }), dishBody]);
 // note: only for this entry (dish in one plan); "" or null clears it
 const entryPatch = z.object({
@@ -111,6 +118,7 @@ export type AppOptions = {
 
 const MAX_PARALLEL_PREVIEWS = 4;
 const MAX_PARALLEL_DRAFTS = 2;
+const MAX_PARALLEL_TITLES = 2;
 
 export function createApp(repo: Repo, opts: AppOptions = {}) {
   const app = new Hono();
@@ -214,6 +222,32 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
         throw e;
       } finally {
         drafting--;
+      }
+    });
+
+    // Up to two title candidates from the AI, shown next to the rule-based ones. Nothing is stored. Every failure is a
+    // plain 502: the sheet just shows no AI suggestions.
+    let suggesting = 0;
+    app.post("/api/title-suggestions", zValidator("json", titleSuggestBody), async (c) => {
+      const body = c.req.valid("json");
+      if (suggesting >= MAX_PARALLEL_TITLES) return c.json({ error: "busy" }, 429);
+      suggesting++;
+      try {
+        const title = body.title ?? "";
+        const raw = await ai.titles({
+          title,
+          text: body.text?.trim() || title,
+          lang: body.lang && LANG.test(body.lang) ? body.lang : "de",
+        });
+        return c.json({ titles: cleanAiTitles(raw) });
+      } catch (e) {
+        if (e instanceof AiError) {
+          console.error("[title-suggestions] failed:", e.reason);
+          return c.json({ error: "ai failed", reason: e.reason }, 502);
+        }
+        throw e;
+      } finally {
+        suggesting--;
       }
     });
   }
