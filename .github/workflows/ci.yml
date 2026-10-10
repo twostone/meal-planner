@@ -26,7 +26,7 @@ jobs:
       - name: Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22 # same major as the image (node:22-alpine); node:sqlite needs >= 22.13
+          node-version: 24 # same major as the image (node:22-alpine); node:sqlite needs >= 22.13
           cache: npm
           cache-dependency-path: meal-planner/package-lock.json
 
