@@ -22,6 +22,12 @@
       "groupName": "Docker-Basisimages"
     },
     {
+      "description": "Node.js in einem PR: Docker-Basisimage, Version in der CI und @types/node (steht nach den Gruppen oben, damit diese Gruppe gewinnt)",
+      "matchPackageNames": ["node", "@types/node"],
+      "matchManagers": ["dockerfile", "github-actions", "npm"],
+      "groupName": "Node.js"
+    },
+    {
       "description": "svelte-check unterstützt TypeScript 7 noch nicht (siehe AGENTS.md)",
       "matchPackageNames": ["typescript"],
       "allowedVersions": "<7"
