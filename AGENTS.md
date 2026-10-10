@@ -277,6 +277,7 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
 Einkaufsliste, Nährwerte, Anbindung an HA-Todo/Kalender, Tageszuordnung, Drag-and-Drop, OAuth, Instagram-oEmbed,
 Bildverkleinerung, Image-Signatur/SBOM,
 Kategorien umbenennen/zusammenführen, Mehrfachauswahl im Kategorie-Filter.
+Rezept-Text einfügen und per KI zerlegen sowie Portionen umrechnen (beides am 10.10.2026 aus `docs/plan-rezepte.md` gestrichen).
 
 ## Stand und offene Punkte
 
