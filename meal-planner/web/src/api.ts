@@ -33,6 +33,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 }
 
 export const listDishes = () => request<Dish[]>("GET", "api/dishes");
+// Dishes with an ingredient whose name contains `text` (case-insensitive).
+export const listDishesWithIngredient = (text: string) =>
+  request<Dish[]>("GET", `api/dishes?ingredient=${encodeURIComponent(text)}`);
 export const createDish = (d: DishInput) => request<Dish>("POST", "api/dishes", d);
 export const updateDish = (id: number, d: DishInput) => request<Dish>("PATCH", `api/dishes/${id}`, d);
 export const deleteDish = (id: number) => request<void>("DELETE", `api/dishes/${id}`);

@@ -190,12 +190,27 @@ export function createRepo(db: DatabaseSync) {
       });
     },
 
-    listDishes(q?: string): Dish[] {
-      if (!q?.trim()) return withTags(all<DishRow>(`SELECT ${DISH_COLS} FROM dish ORDER BY title COLLATE NOCASE`));
-      const like = `%${q.trim().replace(/[\\%_]/g, "\\$&")}%`;
-      return withTags(
-        all<DishRow>(`SELECT ${DISH_COLS} FROM dish WHERE title LIKE ? ESCAPE '\\' ORDER BY title COLLATE NOCASE`, like),
-      );
+    // q: substring of the title. ingredient: substring of the name of an ingredient of the dish's recipe.
+    // Both given -> both must match. Ingredient names are compared in JS: SQLite's LIKE only folds ASCII,
+    // and "Möhre" must find "möhre" (the catalog of a household is small).
+    listDishes(q?: string, ingredient?: string): Dish[] {
+      const needle = ingredient?.trim().toLocaleLowerCase("de");
+      let rows: DishRow[];
+      if (!q?.trim()) {
+        rows = all<DishRow>(`SELECT ${DISH_COLS} FROM dish ORDER BY title COLLATE NOCASE`);
+      } else {
+        const like = `%${q.trim().replace(/[\\%_]/g, "\\$&")}%`;
+        rows = all<DishRow>(`SELECT ${DISH_COLS} FROM dish WHERE title LIKE ? ESCAPE '\\' ORDER BY title COLLATE NOCASE`, like);
+      }
+      if (needle) {
+        const ids = new Set(
+          all<{ dish_id: number; name: string }>("SELECT DISTINCT dish_id, name FROM dish_ingredient")
+            .filter((r) => r.name.toLocaleLowerCase("de").includes(needle))
+            .map((r) => r.dish_id),
+        );
+        rows = rows.filter((d) => ids.has(d.id));
+      }
+      return withTags(rows);
     },
 
     getDish,

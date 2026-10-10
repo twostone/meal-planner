@@ -22,6 +22,7 @@ dieselbe Liste.
 - Rezepte: Zutaten (Menge, Einheit, Zutat), Portionen und Zubereitung pro Gericht, von Hand oder aus dem Text, den die
   App beim Link-Abruf sichert (Rezeptseite oder Instagram-Caption). Optional zerlegt die KI von Home Assistant den Text in
   Zutaten und Schritte. Das Ergebnis ist ein Entwurf, den man mit dem Originaltext vergleicht und erst dann speichert.
+- Die Suche im Katalog findet Gerichte auch über ihre Zutaten („Zucchini“ zeigt alle Gerichte mit Zucchini im Rezept).
 - Bedienung für das Handy ausgelegt, auch in der Home-Assistant-Companion-App.
 
 ## Installation
