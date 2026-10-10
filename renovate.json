@@ -23,7 +23,7 @@
     },
     {
       "description": "Node.js in einem PR: Docker-Basisimage, Version in der CI und @types/node (steht nach den Gruppen oben, damit diese Gruppe gewinnt)",
-      "matchPackageNames": ["node", "@types/node"],
+      "matchPackageNames": ["node", "@types/node", "actions/node-versions"],
       "matchManagers": ["dockerfile", "github-actions", "npm"],
       "groupName": "Node.js"
     },
