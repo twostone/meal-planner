@@ -163,7 +163,7 @@ test("migration v4 -> v5 keeps plans and entries and adds the name column", asyn
     old.close();
 
     const db = openDb(file);
-    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 7);
+    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 8);
     const repo = createRepo(db);
     const p = repo.getPlan(1);
     assert.deepEqual([p.title, p.start_date, p.entries.length], [null, "2026-09-26", 1]);

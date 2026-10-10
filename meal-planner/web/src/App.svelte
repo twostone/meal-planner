@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import CatalogView from "./CatalogView.svelte";
   import { fmtRange } from "./dates";
+  import CookView from "./CookView.svelte";
   import DishSheet from "./DishSheet.svelte";
   import Icon from "./Icon.svelte";
   import ListView from "./ListView.svelte";
@@ -64,6 +65,8 @@
     <DishSheet sheet={app.sheet} />
   {:else if app.sheet.kind === "recipe"}
     <RecipeSheet dishId={app.sheet.dishId} />
+  {:else if app.sheet.kind === "cook"}
+    <CookView />
   {:else if app.sheet.kind === "periods"}
     <PeriodSheet />
   {/if}

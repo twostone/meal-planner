@@ -867,3 +867,144 @@ details.source summary {
   font-weight: 600;
   color: var(--danger);
 }
+
+/* cook mode: full screen over the shell */
+.cook {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+.cook-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 16px 8px;
+}
+.cook-bar strong {
+  font-family: var(--display);
+  font-size: 20px;
+}
+.cook-tabs {
+  flex: none;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 16px 8px;
+}
+.cook-tab {
+  flex: none;
+  min-height: 44px;
+  max-width: 70vw;
+  padding: 0 14px;
+  border-radius: 22px;
+  border: 1px solid var(--field);
+  background: var(--surface);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.cook-tab-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cook-tab small {
+  flex: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.cook-tab[aria-current="true"] {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+}
+.cook-tab[aria-current="true"] small {
+  color: #e4f0e8;
+}
+.cook-tab.done:not([aria-current="true"]) {
+  color: var(--muted);
+}
+.cook-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 16px calc(32px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cook-body h2 {
+  margin: 8px 0 0;
+  font-family: var(--display);
+  font-size: 22px;
+  overflow-wrap: anywhere;
+}
+.cook-body h3 {
+  margin: 12px 0 0;
+  font-family: var(--display);
+  font-size: 18px;
+}
+.cook-body h4 {
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+.cook-body .servings,
+.cook-note {
+  margin: 0;
+  font-weight: 600;
+  color: var(--muted);
+}
+.cook-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.tick {
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 0;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  text-align: left;
+  font-size: 16px;
+}
+.tick .box {
+  flex: none;
+  margin-top: 8px;
+}
+.tick-text {
+  min-width: 0;
+  padding-top: 9px;
+  overflow-wrap: anywhere;
+}
+.tick[aria-pressed="true"] .box {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+}
+.tick[aria-pressed="true"] .tick-text {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+.cook-finished {
+  margin: 16px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--green);
+}
+a.btn {
+  text-decoration: none;
+}

@@ -75,6 +75,15 @@ const MIGRATIONS = [
   // v7: the recipe text exactly as found at the link (kept apart from the structured recipe)
   `ALTER TABLE dish ADD COLUMN source_text TEXT;
   ALTER TABLE dish ADD COLUMN source_truncated INTEGER NOT NULL DEFAULT 0;`,
+  // v8: what is ticked off in cook mode, shared between phones. Belongs to the plan entry (this dish in this plan),
+  // so the next week starts clean. One row per tick; idx is the position of the ingredient (dish_ingredient.pos)
+  // or the number of the step. PUT recipe deletes the ticks of the dish (the indexes would point at other lines).
+  `CREATE TABLE cook_check (
+    entry_id INTEGER NOT NULL REFERENCES plan_entry(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('ingredient', 'step')),
+    idx INTEGER NOT NULL CHECK (idx >= 0),
+    PRIMARY KEY (entry_id, kind, idx)
+  ) STRICT;`,
 ];
 
 function migrate(db: DatabaseSync): void {

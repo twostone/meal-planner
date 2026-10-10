@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import * as api from "./api";
   import Icon from "./Icon.svelte";
-  import { fmtAmount, groupBySection, ingredientText, parseAmount } from "./recipe";
+  import { fmtAmount, groupBySection, ingredientText, parseAmount, stepLines } from "./recipe";
   import Sheet from "./Sheet.svelte";
   import { app, closeSheet } from "./store.svelte";
   import { UNITS, type AiStatus, type Recipe, type RecipeDraft } from "./types";
@@ -32,7 +32,7 @@
   // Structured part only: a recipe that has just the original text is still shown, not edited.
   const isEmpty = (r: Recipe) => r.servings === null && !r.instructions && r.ingredients.length === 0;
   const isBlank = (r: Recipe) => isEmpty(r) && !r.source_text;
-  const steps = $derived((recipe?.instructions ?? "").split("\n").map((s) => s.trim()).filter(Boolean));
+  const steps = $derived(stepLines(recipe?.instructions ?? null));
 
   onMount(async () => {
     try {

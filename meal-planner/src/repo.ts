@@ -64,6 +64,23 @@ export type Recipe = Omit<RecipeInput, "ingredients"> & {
   source_truncated: boolean; // the caption may have been cut off
 };
 
+export type CheckKind = "ingredient" | "step";
+export type Checks = { ingredients: number[]; steps: number[] };
+export type CookEntry = {
+  entry_id: number;
+  dish_id: number;
+  title: string;
+  url: string | null;
+  note: string | null; // note of the list entry
+  done: boolean;
+  recipe: Recipe;
+  checks: Checks;
+};
+
+// The steps of a recipe: non-empty lines. The frontend splits the same way, so step numbers agree.
+export const stepLines = (instructions: string | null): string[] =>
+  (instructions ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
+
 export class NotFoundError extends Error {}
 export class ConflictError extends Error {}
 
@@ -106,6 +123,21 @@ export function createRepo(db: DatabaseSync) {
       const known = one<{ tag: string }>("SELECT tag FROM dish_tag WHERE tag = ? LIMIT 1", t)?.tag ?? t;
       db.prepare("INSERT OR IGNORE INTO dish_tag (dish_id, tag) VALUES (?, ?)").run(dishId, known);
     }
+  }
+
+  // Ticks of all entries of a plan, sorted by number.
+  function checkMap(planId: number): Map<number, Checks> {
+    const m = new Map<number, Checks>();
+    for (const r of all<{ entry_id: number; kind: CheckKind; idx: number }>(
+      `SELECT c.entry_id, c.kind, c.idx FROM cook_check c JOIN plan_entry e ON e.id = c.entry_id
+       WHERE e.plan_id = ? ORDER BY c.idx`,
+      planId,
+    )) {
+      let c = m.get(r.entry_id);
+      if (!c) m.set(r.entry_id, (c = { ingredients: [], steps: [] }));
+      (r.kind === "ingredient" ? c.ingredients : c.steps).push(r.idx);
+    }
+    return m;
   }
 
   function getEntry(id: number): Entry {
@@ -178,6 +210,8 @@ export function createRepo(db: DatabaseSync) {
     setRecipe(dishId: number, recipe: RecipeInput): Recipe {
       return transaction(db, () => {
         getDish(dishId);
+        // The ticks of cook mode point at ingredient/step numbers, which change with the recipe.
+        db.prepare("DELETE FROM cook_check WHERE entry_id IN (SELECT id FROM plan_entry WHERE dish_id = ?)").run(dishId);
         db.prepare("UPDATE dish SET servings = ?, instructions = ? WHERE id = ?").run(recipe.servings, recipe.instructions, dishId);
         db.prepare("DELETE FROM dish_ingredient WHERE dish_id = ?").run(dishId);
         const ins = db.prepare(
@@ -336,6 +370,57 @@ export function createRepo(db: DatabaseSync) {
         },
       }));
       return { ...p, entries };
+    },
+
+    // Everything cook mode needs in one go: the entries of the plan in list order, each with its recipe and ticks.
+    getCook(planId: number): { plan_id: number; entries: CookEntry[] } {
+      const plan = self.getPlan(planId);
+      const ticks = checkMap(planId);
+      return {
+        plan_id: planId,
+        entries: plan.entries.map((e) => ({
+          entry_id: e.id,
+          dish_id: e.dish_id,
+          title: e.dish.title,
+          url: e.dish.url,
+          note: e.note,
+          done: e.done,
+          recipe: self.getRecipe(e.dish_id),
+          checks: ticks.get(e.id) ?? { ingredients: [], steps: [] },
+        })),
+      };
+    },
+
+    // The part of cook mode that changes while cooking (polled by every phone): done flag and ticks per entry.
+    getChecks(planId: number): { entries: { entry_id: number; done: boolean; checks: Checks }[] } {
+      if (!one("SELECT 1 FROM plan WHERE id = ?", planId)) throw new NotFoundError("plan");
+      const ticks = checkMap(planId);
+      return {
+        entries: all<{ id: number; done: number }>("SELECT id, done FROM plan_entry WHERE plan_id = ? ORDER BY position", planId).map((e) => ({
+          entry_id: e.id,
+          done: !!e.done,
+          checks: ticks.get(e.id) ?? { ingredients: [], steps: [] },
+        })),
+      };
+    },
+
+    // Sets (checked) or removes a tick; idempotent, so two phones never undo each other. A new tick must point at
+    // an existing ingredient/step.
+    setCheck(entryId: number, kind: CheckKind, idx: number, checked: boolean): Checks {
+      return transaction(db, () => {
+        const entry = getEntry(entryId);
+        if (checked) {
+          const count =
+            kind === "ingredient"
+              ? one<{ n: number }>("SELECT COUNT(*) AS n FROM dish_ingredient WHERE dish_id = ?", entry.dish_id)!.n
+              : stepLines(one<{ instructions: string | null }>("SELECT instructions FROM dish WHERE id = ?", entry.dish_id)!.instructions).length;
+          if (idx >= count) throw new RangeError(`${kind} ${idx} does not exist`);
+          db.prepare("INSERT OR IGNORE INTO cook_check (entry_id, kind, idx) VALUES (?, ?, ?)").run(entryId, kind, idx);
+        } else {
+          db.prepare("DELETE FROM cook_check WHERE entry_id = ? AND kind = ? AND idx = ?").run(entryId, kind, idx);
+        }
+        return checkMap(entry.plan_id).get(entryId) ?? { ingredients: [], steps: [] };
+      });
     },
 
     deletePlan(id: number): void {

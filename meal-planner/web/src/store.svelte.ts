@@ -12,6 +12,7 @@ export type SheetState =
       prefill: { title: string; url: string; tags: string[] };
     }
   | { kind: "recipe"; dishId: number }
+  | { kind: "cook" }
   | { kind: "periods" };
 
 export const app = $state({
@@ -114,6 +115,14 @@ export function openRecipe(dishId: number) {
   app.sheet = { kind: "recipe", dishId };
 }
 
+// Cook mode is a full-screen view, not a dialog, but it owns a history entry like a sheet ("back" leaves it).
+export function openCook() {
+  if (!app.plan) return;
+  app.error = "";
+  pushSheetEntry();
+  app.sheet = { kind: "cook" };
+}
+
 export function openPeriods() {
   app.error = "";
   pushSheetEntry();
@@ -175,6 +184,13 @@ export async function toggleDone(entry: Entry) {
   });
   if (!ok) entry.done = !next;
 }
+
+// "Fertig" in cook mode: ticks the dish off in the list (the same as the checkbox there).
+export const finishEntry = (entryId: number) =>
+  guard(async () => {
+    await api.setDone(entryId, true);
+    await reload();
+  });
 
 export const removeEntry = (id: number) =>
   guard(async () => {

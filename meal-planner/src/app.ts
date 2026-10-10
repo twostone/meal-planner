@@ -92,6 +92,7 @@ const LANG = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
 const titleSuggestBody = z
   .object({ title: z.string().trim().max(200).optional(), text: z.string().max(10000).optional(), lang: z.string().max(35).optional() })
   .refine((v) => !!(v.title || v.text?.trim()), { message: "title or text needed" });
+const checkBody = z.object({ kind: z.enum(["ingredient", "step"]), idx: z.number().int().min(0).max(1000), checked: z.boolean() });
 const entryBody = z.union([z.object({ dish_id: id }), dishBody]);
 // note: only for this entry (dish in one plan); "" or null clears it
 const entryPatch = z.object({
@@ -304,6 +305,9 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
     notifyHa({ type: "plan_created", plan: { id: plan.id, start_date: plan.start_date, end_date: plan.end_date }, user: haUser(c) });
     return c.json(plan, 201);
   });
+  // Cook mode: all recipes of the plan once, then only the ticks (polled, see CookView).
+  app.get("/api/plans/:id/cook", zValidator("param", z.object({ id })), (c) => c.json(repo.getCook(c.req.valid("param").id)));
+  app.get("/api/plans/:id/checks", zValidator("param", z.object({ id })), (c) => c.json(repo.getChecks(c.req.valid("param").id)));
   app.get("/api/plans/:id", zValidator("param", z.object({ id })), (c) => c.json(repo.getPlan(c.req.valid("param").id)));
   app.patch("/api/plans/:id", zValidator("param", z.object({ id })), zValidator("json", planPatch), (c) => {
     const { before, plan } = repo.updatePlan(c.req.valid("param").id, c.req.valid("json"));
@@ -336,6 +340,16 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
     const entry = repo.updateEntry(id, c.req.valid("json"));
     if (entry.done !== before.done) entryEvent(entry.done ? "entry_done" : "entry_undone", entry, haUser(c));
     return c.json(entry);
+  });
+  // Sets or removes one tick of cook mode (no toggle: see repo.setCheck). Fires no HA event.
+  app.put("/api/entries/:id/checks", zValidator("param", z.object({ id })), zValidator("json", checkBody), (c) => {
+    const { kind, idx, checked } = c.req.valid("json");
+    try {
+      return c.json(repo.setCheck(c.req.valid("param").id, kind, idx, checked));
+    } catch (e) {
+      if (e instanceof RangeError) return c.json({ error: "no such ingredient or step" }, 400);
+      throw e;
+    }
   });
   app.delete("/api/entries/:id", zValidator("param", z.object({ id })), (c) => {
     const before = repo.getEntry(c.req.valid("param").id);

@@ -5,6 +5,7 @@
     addByTitle,
     addDishToPlan,
     app,
+    openCook,
     openDishSheet,
     openPeriods,
     toggleDone,
@@ -85,6 +86,10 @@
         {/if}
       </div>
     </section>
+
+    {#if entries.length}
+      <button type="button" class="btn outline wide" onclick={openCook}>Kochen</button>
+    {/if}
 
     {#snippet row(e: (typeof entries)[number])}
       <li class="row" class:done={e.done}>

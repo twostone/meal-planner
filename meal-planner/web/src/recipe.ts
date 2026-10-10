@@ -38,3 +38,8 @@ export function groupBySection(list: Ingredient[]): { section: string | null; it
   }
   return out;
 }
+
+// The steps of a recipe: non-empty lines. The server splits the same way (stepLines in repo.ts), so the step
+// numbers ticked in cook mode agree on both sides.
+export const stepLines = (instructions: string | null): string[] =>
+  (instructions ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
