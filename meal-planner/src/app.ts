@@ -174,7 +174,7 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
   };
   app.get("/api/me", (c) => c.json({ user: haUser(c) }));
 
-  app.get("/api/dishes", (c) => c.json(repo.listDishes(c.req.query("q"))));
+  app.get("/api/dishes", (c) => c.json(repo.listDishes(c.req.query("q"), c.req.query("ingredient"))));
   app.post("/api/dishes", zValidator("json", dishBody), async (c) => {
     const body = c.req.valid("json");
     if (await imageMissing(body.image)) return c.json({ error: "unknown image" }, 400);

@@ -72,7 +72,7 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   `POST /api/plans` prüft dieselbe Regel (`overlapsOther` in `repo.ts`): Überschneidung -> 409 `plan overlaps`, es wird
   nichts angelegt und kein Event gesendet. Berühren ohne gemeinsamen Tag ist erlaubt. Bereits überlappende Altdaten
   bleiben unverändert bestehen.
-- **Rezept** (Plan: `docs/plan-rezepte.md`, Stufe 1 bis 3 gebaut): gehört zum Gericht, nicht zum Listeneintrag. `dish.servings`
+- **Rezept** (Plan: `docs/plan-rezepte.md`, Stufe 1 bis 3 und 5 gebaut): gehört zum Gericht, nicht zum Listeneintrag. `dish.servings`
   (1–50) und `dish.instructions` (ein Schritt pro Zeile, höchstens 10 000 Zeichen) plus `dish_ingredient` (Reihenfolge `pos`,
   `section`, `amount`/`amount_max`, `unit`, `name`, `note`, `raw`). `GET/PUT /api/dishes/:id/recipe`: PUT ersetzt alles in einer
   Transaktion (wie `setTags`), ein leeres Rezept löscht es. Höchstens 60 Zutaten. `unit` nur aus `UNITS` in `repo.ts`
@@ -98,6 +98,10 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   steuert, ob die UI den Knopf zeigt. Ohne Token ist `ai` nicht gesetzt: die Entwurfsroute gibt es dann nicht. Ablauf: 30 s
   Zeitlimit, kein Wiederholen, höchstens 2 parallele Entwürfe, Fehler -> 502 `ai failed` und im UI „Von Hand eintragen“.
   Das LLM hat keine Tools. Der Text geht an den in HA eingerichteten (evtl. Cloud-)Dienst: im README vermerkt.
+  **Zutatensuche (Stufe 5):** `GET /api/dishes?ingredient=zucchini` liefert Gerichte, in deren Rezept eine Zutat (`dish_ingredient.name`)
+  den Text enthält. Der Vergleich läuft in JS (`toLocaleLowerCase("de")`), weil SQLite-`LIKE` nur ASCII ohne Beachtung der
+  Schreibweise vergleicht; `q` und `ingredient` zusammen verlangen beides. Der Katalog fragt ab zwei Zeichen (250 ms Pause) nach und zeigt Gerichte, deren
+  Titel **oder** Zutat passt; schlägt die Anfrage fehl, bleibt die Titelsuche. Gesucht wird nur im strukturierten Rezept, nicht in `source_text`.
 - Ein Gericht kann pro Zeitraum nur einmal vorkommen. Der Titel ist im Katalog eindeutig (ohne Groß-/Kleinschreibung).
   Ein Eintrag per Titel legt das Gericht an oder verwendet ein vorhandenes wieder. Löschen eines Gerichts, das noch
   in einer Liste steht, ist absichtlich gesperrt (409).

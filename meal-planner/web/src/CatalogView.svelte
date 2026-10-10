@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { imageSrc } from "./api";
+  import { imageSrc, listDishesWithIngredient } from "./api";
   import Icon from "./Icon.svelte";
   import { addDishToPlan, app, openDishSheet } from "./store.svelte";
   import type { Dish } from "./types";
@@ -17,12 +17,36 @@
   // The chip disappears when its last dish loses the tag: fall back to "Alle".
   const activeFilter = $derived(filter && allTags.some((t) => sameTag(t, filter!)) ? filter : null);
 
+  // Dishes with a matching ingredient: the search box finds them as well as titles. A failed request just
+  // leaves the title search. The response of an older search text is ignored.
+  let byIngredient = $state(new Set<number>());
+  $effect(() => {
+    const needle = s.trim();
+    if (needle.length < 2) {
+      byIngredient = new Set();
+      return;
+    }
+    let current = true;
+    const timer = setTimeout(async () => {
+      try {
+        const found = await listDishesWithIngredient(needle);
+        if (current) byIngredient = new Set(found.map((d) => d.id));
+      } catch {
+        if (current) byIngredient = new Set();
+      }
+    }, 250);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  });
+
   const inPlan = $derived(new Set(app.plan?.entries.map((e) => e.dish_id) ?? []));
 
   const groups = $derived.by(() => {
     const needle = s.trim().toLowerCase();
     const shown = app.dishes
-      .filter((d) => !needle || d.title.toLowerCase().includes(needle))
+      .filter((d) => !needle || d.title.toLowerCase().includes(needle) || byIngredient.has(d.id))
       .filter((d) => !activeFilter || d.tags.some((t) => sameTag(t, activeFilter)))
       .sort((a, b) => a.title.localeCompare(b.title, "de"));
     const out: { letter: string; dishes: Dish[] }[] = [];
@@ -40,7 +64,7 @@
 <main>
   <div class="search">
     <span class="search-icon"><Icon name="search" size={22} /></span>
-    <input type="search" aria-label="Gerichte suchen" placeholder="Gerichte suchen" autocomplete="off" bind:value={s} />
+    <input type="search" aria-label="Gerichte oder Zutaten suchen" placeholder="Gericht oder Zutat suchen" autocomplete="off" bind:value={s} />
   </div>
 
   {#if allTags.length}
