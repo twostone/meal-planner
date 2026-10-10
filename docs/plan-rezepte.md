@@ -22,6 +22,10 @@ App liegen.
   keinen eigenen API-Key, aber eine AI-Task-Entität in HA.
 - **Prüfansicht immer vor dem Speichern.** Ohne LLM (keine Entität, Fehler, Zeitüberschreitung) bleibt die Handeingabe.
 - **Zubereitungsschritte** und ein **Kochmodus** gehören dazu. Wake Lock wird vorher am Handy getestet.
+- **Kochmodus (Entscheidungen vom 10.10.2026):** Es wird meist für die ganze Woche vorgekocht, mehrere Gerichte
+  gleichzeitig. Der Kochmodus öffnet **alle Gerichte der Liste** nebeneinander, schneller Wechsel zwischen ihnen. **Keine
+  größere Schrift.** Gekocht wird oft **mit zwei Handys**: Abgehakte Zutaten und Schritte sind deshalb **geteilt** (auf dem
+  Server gespeichert). **Kein** Sammelreiter „Alle Zutaten“. **„Fertig“** hakt das Gericht auch in der Liste ab.
 - **Keine Nährwerte**, **kein Feld „fehlende Zutaten“** (im Test unzuverlässig, Abschnitt 4).
 - **Umsetzung in Stufen** (Abschnitt 8), jede ein PR und für sich nutzbar. **Gestrichen am 10.10.2026:** Stufe 4
   (Text einfügen) und Stufe 6 (Portionen umrechnen). Die Nummern der übrigen Stufen bleiben. `servings` bleibt als
@@ -56,6 +60,24 @@ CREATE INDEX dish_ingredient_dish ON dish_ingredient(dish_id, pos);
 ALTER TABLE dish ADD COLUMN source_text TEXT;                          -- Originaltext aus dem Link, unverändert
 ALTER TABLE dish ADD COLUMN source_truncated INTEGER NOT NULL DEFAULT 0; -- 1 = Caption evtl. gekürzt
 ```
+
+**Stufe 7:**
+
+```sql
+-- Abgehakt im Kochmodus, geteilt zwischen den Handys. Gehört zum Listeneintrag (dieses Gericht in dieser Liste),
+-- nicht zum Gericht: in der nächsten Woche beginnt man wieder bei null.
+CREATE TABLE cook_check (
+  entry_id INTEGER NOT NULL REFERENCES plan_entry(id) ON DELETE CASCADE,
+  kind     TEXT NOT NULL CHECK (kind IN ('ingredient', 'step')),
+  idx      INTEGER NOT NULL CHECK (idx >= 0),   -- Position der Zutat (pos) bzw. Nummer des Schritts
+  PRIMARY KEY (entry_id, kind, idx)
+) STRICT;
+```
+
+- Eine Zeile pro Haken, kein Haken = keine Zeile. Über Indizes, nicht über IDs der Zutaten: `PUT …/recipe` legt die Zutaten
+  neu an, IDs wären danach ohnehin falsch.
+- **Rezept geändert = Haken weg:** `PUT /api/dishes/:id/recipe` löscht die `cook_check`-Zeilen aller Einträge dieses
+  Gerichts in derselben Transaktion. Sonst zeigen die Haken nach dem Bearbeiten auf die falschen Zeilen.
 
 Begründungen:
 
@@ -165,9 +187,14 @@ fehlend, obwohl sie in der Liste standen).
 | `POST /api/dishes/:id/recipe/draft` | 3 | `source_text` → LLM → **Entwurf** (wird nicht gespeichert) mit pro Zutat `verified` (Abgleich) |
 | `GET /api/recipe/status` | 3 | `{ai: true/false, reason}`. `false` ohne `SUPERVISOR_TOKEN` oder ohne `ai_task.*`-Entität (`GET /core/api/states`, gegen die REST-Doku prüfen). Die UI zeigt die LLM-Knöpfe nur bei `true`, sonst einen Hinweis zur Einrichtung |
 | ~~`POST /api/recipe/parse {text}`~~ | ~~4~~ | **gestrichen.**  eingefügter Text → LLM → Entwurf, gleiche Form. Text höchstens 10 000 Zeichen. Beim Speichern wird der Text zu `source_text` |
+| `GET /api/plans/:id/cook` | 7 | Alles für den Kochmodus in einem Abruf: pro Eintrag (Reihenfolge der Liste) `entry_id`, `dish_id`, `title`, `url`, `done`, das Rezept (wie `GET …/recipe`) und die Haken `{ingredients: [idx], steps: [idx]}` |
+| `GET /api/plans/:id/checks` | 7 | Nur der veränderliche Teil, für das Abfragen alle paar Sekunden: pro Eintrag `done` und die Haken. Klein, kein Rezepttext |
+| `PUT /api/entries/:id/checks {kind, idx, checked}` | 7 | **Setzt** einen Haken (oder entfernt ihn), schaltet nicht um: Tippen zwei Handys gleichzeitig, gilt das letzte, und keiner hebt den anderen versehentlich auf. Idempotent. `idx` muss im Rezept existieren (sonst 400) |
+| `PATCH /api/entries/:id {done: true}` (bestehend) | 7 | „Fertig“: hakt in der Liste ab und sendet wie bisher `entry_done` an HA. Die Haken bleiben stehen |
 | `GET /api/dishes?ingredient=zucchini` | 5 | Suche über `dish_ingredient.name` (`LIKE`, ohne Groß-/Kleinschreibung) |
 
-Kein HA-Event für Rezept-Änderungen (Katalog-Änderungen feuern bewusst nichts).
+Kein HA-Event für Rezept-Änderungen (Katalog-Änderungen feuern bewusst nichts) und keins für Haken im Kochmodus
+(nur „Fertig“ löst über `done` das bestehende `entry_done` aus).
 
 ## 7. UI
 
@@ -175,7 +202,7 @@ Kein HA-Event für Rezept-Änderungen (Katalog-Änderungen feuern bewusst nichts
   zusätzlich „Rezept aus Link holen“ (nur mit Link; überschreibt ein vorhandenes `source_text` erst nach zweistufiger
   Bestätigung). Die Zeile in der Liste bleibt unverändert schlank (höchstens ein kleines Symbol, wenn ein Rezept da ist).
 - **Rezept-Ansicht** (eigene Ansicht, kein Blatt, sonst wird es zu eng): strukturiertes Rezept (Portionen, Zutaten nach
-  Abschnitt, Schritte), Knöpfe „Bearbeiten“ und ab Stufe 7 „Kochmodus“. Gibt es nur `source_text`, wird der Originaltext
+  Abschnitt, Schritte), Knopf „Bearbeiten“ (der Kochmodus startet aus der Liste, siehe unten). Gibt es nur `source_text`, wird der Originaltext
   angezeigt (Zeilenumbrüche erhalten), ab Stufe 3 mit Knopf „Zutaten erkennen“. Hinweis bei `source_truncated`.
 - **Editor = Prüfansicht** (ab Stufe 1 als Editor, ab Stufe 3 auch für Entwürfe): Jede Zutat ist eine Zeile mit Menge,
   Einheit (Auswahl) und Zutat, dazu die Originalzeile klein darunter. Nicht im Text gefundene Zeilen/Abschnitte sind
@@ -183,8 +210,26 @@ Kein HA-Event für Rezept-Änderungen (Katalog-Änderungen feuern bewusst nichts
   Zeilen auffallen. Zeile löschen, Zeile hinzufügen, Schritte als Textfeld. Erst „Speichern“ schreibt. Auf 360 px ist eine
   Zeile mit drei Feldern eng → im Browser bei 390 px prüfen, notfalls Menge+Einheit über der Zutat.
 - ~~**Umrechnen** (Stufe 6)~~: **gestrichen** (Idee war `amount × (gewählte / servings)` mit Rundung je Einheit, nur Anzeige).
-- **Kochmodus** (Stufe 7): große Schrift, Zutaten abhakbar (nur im Speicher, nicht gespeichert), Schritte einzeln oder als
-  Liste, Bildschirm bleibt an (Wake Lock, falls der Test grün ist, sonst stiller Rückfall).
+- **Kochmodus** (Stufe 7, Entscheidungen in Abschnitt 1):
+  - **Einstieg:** Knopf „Kochen“ in der Listenansicht (nur wenn die Liste Einträge hat). Öffnet eine **eigene Vollbild-Ansicht**
+    (kein Blatt), die wie ein Blatt einen History-Eintrag belegt: „Zurück“ verlässt den Kochmodus, nicht die App.
+  - **Welche Gerichte:** alle Einträge der aktuellen Liste in ihrer Reihenfolge, auch schon abgehakte (die stehen hinten und
+    sind als fertig gekennzeichnet). Gerichte ohne Rezept zeigen den Originaltext oder, ohne beides, „Kein Rezept“ und den Link.
+  - **Wechseln:** Reiter oben, fest stehend, waagerecht scrollbar, je mindestens 44 px. Am Reiter der Titel (gekürzt) und der
+    Fortschritt der Schritte („3/7“), bei fertigen ein Haken. Alle Rezepte kommen beim Start in einem Abruf, ein Wechsel lädt
+    nichts. Jedes Gericht behält seine Scrollposition (nur auf diesem Gerät).
+  - **Pro Gericht:** Portionen (falls bekannt), Zutaten nach Abschnitt zum Abhaken, Schritte zum Abhaken, normale Schrift.
+    Abgehaktes wird blass und durchgestrichen, bleibt aber an seinem Platz. Am Ende „Fertig“ (zweistufig: „Wirklich fertig?“),
+    das das Gericht in der Liste abhakt. Ein fertiges Gericht lässt sich dort wie gewohnt wieder aufheben.
+  - **Zwei Handys:** Ein Haken geht sofort an den Server (optimistisch angezeigt, bei Fehler zurückgenommen und Meldung).
+    Solange der Kochmodus offen und die Seite sichtbar ist (`visibilitychange`), fragt die App **alle 4 s**
+    `GET /api/plans/:id/checks` ab und übernimmt die Haken des anderen Handys. Ein eigener Haken, dessen Antwort noch aussteht,
+    wird dabei nicht vom Abfrageergebnis überschrieben. Bewusst **Abfragen statt Server-Sent Events oder WebSocket**: einfach,
+    und ob HA-Ingress lange offene Antworten zuverlässig durchreicht, ist nicht geprüft. 4 s Verzug sind am Herd egal.
+  - **Bildschirm bleibt an** (Wake Lock), falls der Test grün ist, sonst stiller Rückfall. Nach dem Zurückkehren in die
+    Seite neu anfordern (der Browser gibt die Sperre beim Verlassen frei).
+  - **Nicht dabei:** größere Schrift, Timer, Sammelreiter „Alle Zutaten“, Mengen über Gerichte zusammenrechnen (Weg zur
+    Einkaufsliste), Portionen umrechnen (gestrichen).
 - **Katalog** (Stufe 5): Suchfeld findet auch Zutaten („zucchini“ zeigt alle Gerichte mit Zucchini).
 
 ## 8. Stufen (je ein PR und ein Release)
@@ -199,7 +244,7 @@ Regel: Jede Stufe ist für sich nutzbar. Nach jeder Stufe entscheiden, ob die n�
 | ~~**4 Text einfügen**~~ | – | **gestrichen (10.10.2026)** | – | – |
 | **5 Zutatensuche** | `feat/zutatensuche` | `?ingredient=`, Suchfeld im Katalog | „Was koche ich mit Zucchini?“ | 1 |
 | ~~**6 Portionen umrechnen**~~ | – | **gestrichen (10.10.2026)** | – | – |
-| **7 Kochmodus** | `feat/kochmodus` | große Ansicht, abhaken, Wake Lock | Komfort am Herd | 1 |
+| **7 Kochmodus** | `feat/kochmodus` | Migration `cook_check`, `…/cook`, `…/checks`, Vollbild-Ansicht mit Reitern für alle Gerichte der Liste, geteilte Haken (Abfrage alle 4 s), „Fertig“ hakt in der Liste ab, Wake Lock | Mehrere Gerichte gleichzeitig vorkochen, zu zweit mit zwei Handys | 1 |
 | **8 Screenshot** | `feat/rezept-bild` | Bild als Anhang an `ai_task`, derselbe Entwurf | jedes dritte Instagram-Rezept | 3 |
 
 Hinweise:
@@ -215,7 +260,7 @@ Hinweise:
 |---|---|
 | 2 | Captions über 1 500 Zeichen (Kürzungserkennung greift sonst). schema.org auf echten Seiten (Chefkoch & Co.): Kommt `recipeIngredient` durch oder blockt Cloudflare? |
 | 3 | Aus dem Add-on heraus: `ai_task` über den **Supervisor-Proxy** mit `?return_response`, reicht `homeassistant_api`? `GET /core/api/states` für die Statusprüfung. `servings_quote` und „jede Zutatenzeile übernehmen“ mit den 4 Captions testen. 2 Rezeptseiten durchs LLM |
-| 7 | Wake Lock (`navigator.wakeLock.request("screen")`) in der Companion-App im Ingress-iframe. Erwartung: Same-Origin, Permissions-Policy `self` erlaubt es. Unklar, ob die WebView die API kennt |
+| 7 | Wake Lock (`navigator.wakeLock.request("screen")`) in der Companion-App im Ingress-iframe. Erwartung: Same-Origin, Permissions-Policy `self` erlaubt es. Unklar, ob die WebView die API kennt. Danach mit zwei Handys: kommen Haken innerhalb weniger Sekunden an, läuft das Abfragen weiter, wenn ein Handy kurz gesperrt war |
 | 8 | Wie übergibt die App ein Bild als `attachments` (`media_content_id`) an `ai_task`? Laut Doku gibt es Anhänge, der Weg aus einem Add-on ist ungeklärt |
 
 **Tests je Stufe** (zusätzlich zu den üblichen aus `AGENTS.md`):
@@ -226,6 +271,8 @@ Hinweise:
   Attributreihenfolge), schema.org-Seite mit `HowToStep`/`HowToSection`, Seite ohne Rezept.
 - 3: Fake-Supervisor mit den Antworten aus Abschnitt 4 (fehlerfrei, erfundene Portionen, „Auflerdin“, weggelassene Zeilen,
   kein JSON, Zeitüberschreitung, kein Token), Abgleich und Aufräumen als Unit-Tests.
+- 7: Migration gegen den alten Stand, `PUT …/checks` (setzen/entfernen idempotent, `idx` außerhalb des Rezepts 400, unbekannter
+  Eintrag 404), Löschen der Haken bei `PUT …/recipe` und beim Löschen des Eintrags, Form von `…/cook` und `…/checks`.
 
 ## 9. Risiken
 
