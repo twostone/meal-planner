@@ -3,7 +3,7 @@
 # The runtime stage is built per target architecture. Plain Node image instead of the HA base image: no
 # s6/bashio needed (the add-on has no options), and Node >= 22.13 is guaranteed, which node:sqlite needs.
 
-FROM --platform=$BUILDPLATFORM node:22-alpine AS web
+FROM --platform=$BUILDPLATFORM node:24-alpine AS web
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -11,7 +11,7 @@ COPY vite.config.ts ./
 COPY web ./web
 RUN npm run build
 
-FROM node:22-alpine
+FROM node:24-alpine
 WORKDIR /app
 
 COPY package.json package-lock.json ./
