@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.0](https://github.com/twostone/meal-planner/compare/v0.11.0...v0.12.0) (2026-10-10)
+
+
+### Neu
+
+* **katalog:** Gerichte nach Zutat suchen ([#37](https://github.com/twostone/meal-planner/issues/37)) ([a792a6b](https://github.com/twostone/meal-planner/commit/a792a6b2207fad9a32c6743b4c1b63fc062a74f8))
+* **kochmodus:** mehrere Gerichte gleichzeitig kochen, Haken auf allen Handys ([#40](https://github.com/twostone/meal-planner/issues/40)) ([c45200d](https://github.com/twostone/meal-planner/commit/c45200dba8558231c4a95c46cd7680e275db1918))
+
 ## [0.11.0](https://github.com/twostone/meal-planner/compare/v0.10.1...v0.11.0) (2026-10-09)
 
 
