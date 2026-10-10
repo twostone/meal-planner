@@ -1,4 +1,4 @@
-import type { Dish, DishInput, Entry, PlanDetail, AiStatus, PlanSummary, Preview, Recipe, RecipeDraft } from "./types";
+import type { Dish, DishInput, Entry, PlanDetail, AiStatus, CheckState, CookEntry, PlanSummary, Preview, Recipe, RecipeDraft } from "./types";
 
 // All URLs are resolved against the document URL (never "/api/..."), so the app
 // keeps working under the HA ingress prefix.
@@ -52,6 +52,13 @@ export const fetchSource = (dishId: number) => request<Recipe | { reason: string
 export const getRecipeStatus = () => request<AiStatus>("GET", "api/recipe/status");
 // Splits the saved original text into a draft (nothing is stored). Takes a few seconds.
 export const draftRecipe = (dishId: number) => request<RecipeDraft>("POST", `api/dishes/${dishId}/recipe/draft`);
+
+// Cook mode: all recipes of a plan once, then only the ticks and done flags (polled).
+export const getCook = (planId: number) => request<{ plan_id: number; entries: CookEntry[] }>("GET", `api/plans/${planId}/cook`);
+export const getChecks = (planId: number) => request<{ entries: CheckState[] }>("GET", `api/plans/${planId}/checks`);
+// Sets or removes a tick (never toggles, so two phones cannot undo each other).
+export const putCheck = (entryId: number, kind: "ingredient" | "step", idx: number, checked: boolean) =>
+  request<unknown>("PUT", `api/entries/${entryId}/checks`, { kind, idx, checked });
 
 export const listPlans = () => request<PlanSummary[]>("GET", "api/plans");
 export const getPlan = (id: number) => request<PlanDetail>("GET", `api/plans/${id}`);

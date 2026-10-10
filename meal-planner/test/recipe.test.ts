@@ -129,7 +129,7 @@ test("migration v5 keeps dishes and adds the recipe tables", async () => {
     old.close();
 
     const db = openDb(file);
-    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 7);
+    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 8);
     const repo = createRepo(db);
     assert.deepEqual(repo.listDishes().map((d) => d.title), ["Linsensuppe"]);
     assert.deepEqual(repo.getRecipe(1), { servings: null, instructions: null, ingredients: [], source_text: null, source_truncated: false });

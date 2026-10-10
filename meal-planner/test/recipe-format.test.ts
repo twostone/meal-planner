@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fmtAmount, groupBySection, ingredientText, parseAmount } from "../web/src/recipe.ts";
+import { fmtAmount, groupBySection, ingredientText, parseAmount, stepLines } from "../web/src/recipe.ts";
 
 test("parseAmount: comma, dot, range, empty, garbage", () => {
   assert.deepEqual(parseAmount("1,5"), { amount: 1.5, amount_max: null });
@@ -23,4 +23,9 @@ test("groupBySection groups neighbours with the same section", () => {
   const mk = (section: string | null, name: string) => ({ section, amount: null, amount_max: null, unit: null, name, note: null, raw: name });
   const g = groupBySection([mk(null, "a"), mk(null, "b"), mk("Dip", "c"), mk(null, "d")]);
   assert.deepEqual(g.map((x) => [x.section, x.items.map((i) => i.name)]), [[null, ["a", "b"]], ["Dip", ["c"]], [null, ["d"]]]);
+});
+
+test("stepLines: non-empty trimmed lines (the server splits the same way)", () => {
+  assert.deepEqual(stepLines("Schneiden.\n\n  Kochen.\nServieren.\n"), ["Schneiden.", "Kochen.", "Servieren."]);
+  assert.deepEqual(stepLines(null), []);
 });

@@ -72,7 +72,7 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   `POST /api/plans` prüft dieselbe Regel (`overlapsOther` in `repo.ts`): Überschneidung -> 409 `plan overlaps`, es wird
   nichts angelegt und kein Event gesendet. Berühren ohne gemeinsamen Tag ist erlaubt. Bereits überlappende Altdaten
   bleiben unverändert bestehen.
-- **Rezept** (Plan: `docs/plan-rezepte.md`, Stufe 1 bis 3 und 5 gebaut): gehört zum Gericht, nicht zum Listeneintrag. `dish.servings`
+- **Rezept** (Plan: `docs/plan-rezepte.md`, Stufe 1 bis 3, 5 und 7 gebaut): gehört zum Gericht, nicht zum Listeneintrag. `dish.servings`
   (1–50) und `dish.instructions` (ein Schritt pro Zeile, höchstens 10 000 Zeichen) plus `dish_ingredient` (Reihenfolge `pos`,
   `section`, `amount`/`amount_max`, `unit`, `name`, `note`, `raw`). `GET/PUT /api/dishes/:id/recipe`: PUT ersetzt alles in einer
   Transaktion (wie `setTags`), ein leeres Rezept löscht es. Höchstens 60 Zutaten. `unit` nur aus `UNITS` in `repo.ts`
@@ -102,6 +102,23 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   den Text enthält. Der Vergleich läuft in JS (`toLocaleLowerCase("de")`), weil SQLite-`LIKE` nur ASCII ohne Beachtung der
   Schreibweise vergleicht; `q` und `ingredient` zusammen verlangen beides. Der Katalog fragt ab zwei Zeichen (250 ms Pause) nach und zeigt Gerichte, deren
   Titel **oder** Zutat passt; schlägt die Anfrage fehl, bleibt die Titelsuche. Gesucht wird nur im strukturierten Rezept, nicht in `source_text`.
+- **Kochmodus** (Stufe 7): Knopf „Kochen“ in der Liste öffnet `CookView.svelte`, eine Vollbild-Ansicht (kein Blatt) über der
+  Shell mit **allen Einträgen der Liste** als Reiter (offene zuerst, fertige hinten, einmal beim Öffnen sortiert).
+  Sie belegt einen History-Eintrag wie ein Blatt (`openCook` in `store.svelte.ts`, Sheet-Art `cook`; „Zurück“ verlässt den
+  Kochmodus). Keine größere Schrift, kein Sammelreiter, keine Timer. `GET /api/plans/:id/cook` liefert beim Öffnen alle Rezepte
+  samt Haken und Listen-Notiz in einem Abruf (Wechsel zwischen Reitern lädt nichts). **Haken sind zwischen Handys geteilt:**
+  Tabelle `cook_check` (`entry_id`, `kind` `ingredient`/`step`, `idx`), gehört zum Listeneintrag, also beginnt jede Liste bei
+  null; Index = Position der Zutat bzw. Nummer des Schritts (nicht leere Zeilen, `stepLines` in `repo.ts` und `recipe.ts`,
+  beide müssen gleich zählen). `PUT /api/entries/:id/checks {kind, idx, checked}` **setzt oder entfernt** (kein Umschalten:
+  zwei Handys heben sich so nicht gegenseitig auf; idempotent); ein neuer Haken muss auf eine vorhandene Zutat/einen Schritt
+  zeigen (sonst 400), kein HA-Event. `PUT …/recipe` löscht die Haken aller Einträge des Gerichts (die Indizes passten sonst
+  nicht mehr). **Abgleich durch Abfragen:** solange der Kochmodus offen und die Seite sichtbar ist, holt jedes Handy alle
+  4 s `GET /api/plans/:id/checks` (nur `done` und Haken pro Eintrag); Haken mit laufender Anfrage werden dabei nicht
+  überschrieben, ein verpasster Abruf bleibt still. Bewusst nicht SSE/WebSocket: ob HA-Ingress lange Verbindungen
+  zuverlässig durchreicht, ist ungeprüft. „Fertig“ (zweistufig) hakt den Eintrag über das bestehende `PATCH …/entries/:id`
+  ab (löst `entry_done` aus), die Haken bleiben. Wake Lock (`navigator.wakeLock`) wird gehalten, wenn der Browser ihn kennt,
+  sonst still ohne; nach dem Zurückkehren in die Seite neu angefordert. **Nicht am echten System geprüft:** Wake Lock in der
+  Companion-App im Ingress-iframe und der Abgleich zwischen zwei echten Handys.
 - Ein Gericht kann pro Zeitraum nur einmal vorkommen. Der Titel ist im Katalog eindeutig (ohne Groß-/Kleinschreibung).
   Ein Eintrag per Titel legt das Gericht an oder verwendet ein vorhandenes wieder. Löschen eines Gerichts, das noch
   in einer Liste steht, ist absichtlich gesperrt (409).
@@ -253,7 +270,7 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   gibt es keinen Release und HA zeigt kein Update.
 - **Datenbank nur über Migrationen ändern:** in `src/db.ts` einen Eintrag an `MIGRATIONS` **anhängen**, nie ändern oder
   umsortieren (`PRAGMA user_version` zählt sie). Neue Migrationen mit einem Test gegen eine Datenbank im alten Stand.
-  Die Tests, die die Schema-Version prüfen (`dish-image`, `tags`, `entry-note`, `plan-edit`, `recipe`), bei jeder neuen Migration
+  Die Tests, die die Schema-Version prüfen (`dish-image`, `tags`, `entry-note`, `plan-edit`, `recipe`, `recipe-source`, `cook`), bei jeder neuen Migration
   mit anheben.
 - **Add-on-Build:** Kein `build.yaml`, kein `BUILD_FROM` (beides gilt seit Supervisor 2026.04 nicht mehr). HA baut nicht
   selbst, es lädt das Image aus `image:`. Das Dockerfile ist zweistufig: Das Frontend wird auf der Architektur des Builders
@@ -267,7 +284,7 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
 - Sheets nutzen das native `<dialog>`. Kein `alert()`/`confirm()` (in der HA-Companion-App unzuverlässig), stattdessen
   zweistufige Bestätigung im UI.
 - **Zurück-Taste:** Ein offenes Blatt belegt einen History-Eintrag (`pushSheetEntry`/`closeSheet` in `store.svelte.ts`), damit
-  „Zurück“ das Blatt schließt statt die App zu verlassen. Blätter nur über `openDishSheet`/`openPeriods` öffnen
+  „Zurück“ das Blatt schließt statt die App zu verlassen. Blätter nur über `openDishSheet`/`openPeriods`/`openCook` öffnen
   und über `closeSheet` schließen, nie `app.sheet` direkt setzen. Getestet im Browser mit der App in einem iframe, in der
   HA-Companion-App auf dem Handy noch nicht.
 - **APIs und Schnittstellen vor der Nutzung gegen die aktuelle Dokumentation prüfen** (HA-Add-on-Konfiguration, Hono,

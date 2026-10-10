@@ -23,6 +23,10 @@ dieselbe Liste.
   App beim Link-Abruf sichert (Rezeptseite oder Instagram-Caption). Optional zerlegt die KI von Home Assistant den Text in
   Zutaten und Schritte. Das Ergebnis ist ein Entwurf, den man mit dem Originaltext vergleicht und erst dann speichert.
 - Die Suche im Katalog findet Gerichte auch über ihre Zutaten („Zucchini“ zeigt alle Gerichte mit Zucchini im Rezept).
+- Kochmodus: „Kochen“ in der Liste zeigt alle Gerichte der Liste mit ihren Rezepten, zwischen denen man per Reiter
+  wechselt (praktisch zum Vorkochen mehrerer Gerichte). Zutaten und Schritte lassen sich abhaken, auf allen Handys
+  gleichzeitig (Abgleich alle paar Sekunden). „Fertig“ hakt das Gericht auch in der Liste ab. Der Bildschirm bleibt an,
+  soweit die App das zulässt.
 - Bedienung für das Handy ausgelegt, auch in der Home-Assistant-Companion-App.
 
 ## Installation
