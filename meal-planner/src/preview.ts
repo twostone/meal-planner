@@ -1,6 +1,7 @@
 import type { ImageStore } from "./images.ts";
 import { FetchError, type FetchFailure } from "./net-guard.ts";
 import { fetchLimited, type Fetched } from "./safe-fetch.ts";
+import { clip } from "./text.ts";
 import { PREFIX, suggestTitles } from "./title-suggest.ts";
 
 export type Parsed = { title: string | null; imageUrl: string | null };
@@ -28,7 +29,8 @@ export function decodeEntities(s: string): string {
   return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z][a-z0-9]*);/gi, (m, e: string) => {
     if (e.startsWith("#")) {
       const code = e[1]?.toLowerCase() === "x" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
-      return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : m;
+      // Not the surrogate range: "&#xD83D;" would become half a character (see text.ts). It stays as text.
+      return code > 0 && code <= 0x10ffff && !(code >= 0xd800 && code <= 0xdfff) ? String.fromCodePoint(code) : m;
     }
     return NAMED[e] ?? m;
   });
@@ -40,7 +42,7 @@ const GENERIC_TITLE = /^(instagram|log ?in|login\s*[•·|-]\s*instagram|anmelde
 function cleanTitle(s: string | null | undefined): string | null {
   if (!s) return null;
   const t = decodeEntities(s).replace(/\s+/g, " ").trim();
-  return t && !GENERIC_TITLE.test(t) ? t.slice(0, 200) : null;
+  return t && !GENERIC_TITLE.test(t) ? clip(t, 200) : null;
 }
 
 const META_TAG = /<meta\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
@@ -161,7 +163,7 @@ function extractSource(recipe: Record<string, unknown> | null, ogTitle: string |
     }
   }
   if (!text) return null;
-  if (text.length > MAX_SOURCE_CHARS) return { text: text.slice(0, MAX_SOURCE_CHARS), truncated: true };
+  if (text.length > MAX_SOURCE_CHARS) return { text: clip(text, MAX_SOURCE_CHARS), truncated: true };
   return { text, truncated };
 }
 

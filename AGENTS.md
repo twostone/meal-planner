@@ -35,6 +35,7 @@ meal-planner/            das Add-on (Docker-Build-Kontext)
     ha-notify.ts            Bus-Events an Home Assistant (über den Supervisor)
     ha-ai.ts                ai_task.generate_data über den Supervisor (Rezept in Zutaten zerlegen, Titel vorschlagen)
     recipe-draft.ts         prüft und bereinigt die LLM-Antwort, gleicht sie mit dem Originaltext ab
+    text.ts                 clip (Kürzen ohne halbes Zeichen) und toJson (JSON für Home Assistant)
     ha-discovery.ts         Meldung von Host, Port und Token per Supervisor-Discovery
   web/                   Frontend: Svelte 5 + Vite (Runes, TypeScript)
     public/favicon.svg     Favicon der App, Vorlage für icon.png
@@ -291,6 +292,11 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   Svelte, Vite, Node). HA nennt Add-ons inzwischen „Apps“.
 - Neue Backend-Logik bekommt Tests in `test/` (`app.request(...)` mit `node:test`). Für Netzwerkcode gilt: gegen einen
   lokalen Testserver testen, nie gegen das Internet. Bei UI-Änderungen zusätzlich im Browser bei 390 px Breite prüfen.
+- **Text kürzen und an Home Assistant senden:** Texte aus fremden Seiten mit `clip()` aus `text.ts` kürzen, nie mit `.slice`
+  (JavaScript zählt UTF-16-Einheiten, ein Schnitt mitten in einem Emoji lässt ein halbes Zeichen übrig). Was an Home Assistant
+  geht, wird mit `toJson()` statt `JSON.stringify` serialisiert (`ha-ai.ts`): HA liest den Body mit orjson und antwortet auf ein
+  einzelnes Surrogat mit 400 „Data should be valid JSON“. `ha-notify.ts` braucht das nicht (seine Texte laufen vorher durch
+  SQLite, das sie in UTF-8 wandelt). Fehler von HA loggt `ha-ai.ts` mit dem Body (auf 300 Zeichen gekürzt).
 - UI-Texte deutsch, Code und Kommentare englisch. Bedienelemente mindestens 44 px, echte `<button>`/`<a>`.
 
 ## Bewusst nicht gebaut (nur auf ausdrücklichen Wunsch)
