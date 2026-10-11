@@ -71,6 +71,19 @@ die Antwort oder dauert sie länger als 15 Sekunden, verschwinden die Platzhalte
 Sprache der Titel ist die Sprache des Browsers (auf dem Handy: die Systemsprache). Ein Titel wird nie ungefragt
 überschrieben: Man wählt einen Vorschlag selbst.
 
+## Protokoll
+
+Die App schreibt eine Zeile pro Ereignis ins Protokoll der App (*Einstellungen → Apps → Essensplanung → Protokoll*), mit
+Uhrzeit und Abweichung zur UTC-Zeit, Stufe, Bereich und Ereignis:
+
+```
+2026-10-11T14:41:03.123+02:00 ERROR ha-ai task_failed task=meal_planner_title status=400 ms=812 body="Data should be valid JSON."
+```
+
+In der App-Konfiguration stellt `log_level` ein, wie viel geschrieben wird (`debug`, `info`, `warning`, `error`; Standard
+`info`). Eine Änderung gilt nach einem Neustart der App. Anfragen an die App erscheinen nur, wenn sie fehlschlagen (Status ab
+400) oder länger als 2 Sekunden dauern. Rezepttexte, vollständige Links und Zugangsdaten stehen nie im Protokoll.
+
 ## Datenschutz und Sicherheit
 
 - Die App ist nur über Home-Assistant-Ingress erreichbar. Der Server nimmt ausschließlich Verbindungen von Supervisor

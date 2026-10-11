@@ -1,9 +1,10 @@
-import { mock, test } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { createApp } from "../src/app.ts";
 import { openDb } from "../src/db.ts";
+import { setLogSink } from "../src/log.ts";
 import { AiError, createHaAi, languageName, PROMPT, titlesPrompt, type RecipeAi } from "../src/ha-ai.ts";
 import { createRepo } from "../src/repo.ts";
 
@@ -100,20 +101,51 @@ test("generate and titles: a lone surrogate in the text never reaches Home Assis
   }
 });
 
+// Captures what the logger writes (instead of stdout/stderr) for the length of `fn`.
+async function captureLog(fn: () => Promise<void>): Promise<string[]> {
+  const lines: string[] = [];
+  setLogSink((_level, line) => lines.push(line));
+  try {
+    await fn();
+  } finally {
+    setLogSink(null);
+  }
+  return lines;
+}
+
 test("a failed call logs what Home Assistant said, shortened to 300 characters", async () => {
   const f = await fakeSupervisor(() => ({ status: 400, json: { message: "Data should be valid JSON.", pad: "x".repeat(1000) } }));
-  const err = mock.method(console, "error", () => {});
   try {
-    await assert.rejects(createHaAi("tok", f.base).generate("t"), (e: AiError) => e.reason === "unreachable");
-    const line = String(err.mock.calls[0]!.arguments[0]);
-    assert.match(line, /meal_planner_recipe failed: supervisor responded 400: /);
-    assert.match(line, /Data should be valid JSON\./);
-    assert.ok(line.length < 450, `the body is cut short, got ${line.length} characters`);
-    // a status check that fails logs the reason too
-    await createHaAi("tok", f.base).status();
-    assert.match(String(err.mock.calls[1]!.arguments[0]), /status check failed: supervisor responded 400: .*Data should be valid JSON\./);
+    const lines = await captureLog(async () => {
+      await assert.rejects(createHaAi("tok", f.base).generate("t"), (e: AiError) => e.reason === "unreachable");
+      await createHaAi("tok", f.base).status(); // a failing status check logs the reason too
+    });
+    assert.equal(lines.length, 2);
+    assert.match(lines[0]!, / ERROR ha-ai task_failed task=meal_planner_recipe status=400 ms=\d+ body="/);
+    assert.match(lines[0]!, /Data should be valid JSON\./);
+    assert.ok(lines[0]!.length < 450, `the body is cut short, got ${lines[0]!.length} characters`);
+    assert.match(lines[1]!, / WARN ha-ai status_check_failed status=400 body=".*Data should be valid JSON\./);
   } finally {
-    err.mock.restore();
+    f.close();
+  }
+});
+
+test("a successful call logs how long it took; a timeout and an unreachable supervisor are told apart", async () => {
+  let hang = false;
+  const f = await fakeSupervisor(() => (hang ? { hang: true } : { json: { service_response: { data: { titles: "x" } } } }));
+  try {
+    const lines = await captureLog(async () => {
+      const ai = createHaAi("tok", f.base, 100, 100);
+      await ai.titles({ title: "t", text: "t", lang: "de" });
+      hang = true;
+      await assert.rejects(ai.titles({ title: "t", text: "t", lang: "de" }), (e: AiError) => e.reason === "timeout");
+      await assert.rejects(createHaAi("tok", "http://127.0.0.1:1/core/api/").generate("t"), (e: AiError) => e.reason === "unreachable");
+    });
+    assert.match(lines[0]!, / INFO ha-ai task_done task=meal_planner_title ms=\d+$/);
+    assert.match(lines[1]!, / WARN ha-ai task_timeout task=meal_planner_title ms=\d+ limit_ms=100$/);
+    assert.match(lines[2]!, / ERROR ha-ai task_unreachable task=meal_planner_recipe ms=\d+ err=/);
+    assert.ok(lines.every((l) => !l.includes("\n")));
+  } finally {
     f.close();
   }
 });

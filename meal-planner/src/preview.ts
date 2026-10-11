@@ -1,5 +1,6 @@
 import type { ImageStore } from "./images.ts";
 import { FetchError, type FetchFailure } from "./net-guard.ts";
+import { logger } from "./log.ts";
 import { fetchLimited, type Fetched } from "./safe-fetch.ts";
 import { clip } from "./text.ts";
 import { PREFIX, suggestTitles } from "./title-suggest.ts";
@@ -227,10 +228,12 @@ const IMAGE_ACCEPT = "image/avif,image/webp,image/png,image/jpeg,image/gif;q=0.8
 export const MAX_PAGE_BYTES = 1_500_000;
 export const MAX_IMAGE_BYTES = 3_000_000;
 
-type Deps = { images: ImageStore; fetcher?: typeof fetchLimited; log?: (line: string) => void };
+type Deps = { images: ImageStore; fetcher?: typeof fetchLimited };
+
+const log = logger("preview");
 
 // Never throws: a preview is a convenience, so every failure becomes { title: null, image: null, titleSuggestions: [], reason }.
-export function createPreviewService({ images, fetcher = fetchLimited, log = console.log }: Deps) {
+export function createPreviewService({ images, fetcher = fetchLimited }: Deps) {
   return async function preview(rawUrl: string): Promise<PreviewResult> {
     const host = (() => {
       try {
@@ -239,9 +242,17 @@ export function createPreviewService({ images, fetcher = fetchLimited, log = con
         return "?";
       }
     })();
+    const t0 = performance.now();
     const result = await run(rawUrl);
     // Host only: full links can carry tokens.
-    log(`[preview] ${host} title=${result.title ? "yes" : "no"} image=${result.image ? "yes" : "no"} source=${result.sourceText ? "yes" : "no"} reason=${result.reason ?? "-"}`);
+    log.info("fetched", {
+      host,
+      title: !!result.title,
+      image: !!result.image,
+      source: !!result.sourceText,
+      reason: result.reason,
+      ms: Math.round(performance.now() - t0),
+    });
     return result;
   };
 

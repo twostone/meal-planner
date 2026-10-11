@@ -116,7 +116,7 @@ const fakeFetcher = (pages: Record<string, Page>) => async (input: string | URL)
 };
 const html = (s: string): Partial<Fetched> => ({ body: Buffer.from(s) });
 const service = (pages: Record<string, Page>, store: ImageStore) =>
-  createPreviewService({ images: store, fetcher: fakeFetcher(pages) as never, log: () => {} });
+  createPreviewService({ images: store, fetcher: fakeFetcher(pages) as never });
 
 test("preview service: title and image are found, the image is stored under its hash", async () => {
   const { store, done } = await tmpStore();

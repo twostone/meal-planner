@@ -1,3 +1,7 @@
+import { logger } from "./log.ts";
+
+const log = logger("ha-discovery");
+
 export const SUPERVISOR_URL = "http://supervisor";
 
 type Opts = {
@@ -35,14 +39,16 @@ export async function announceToHomeAssistant(o: Opts): Promise<boolean> {
         body: JSON.stringify({ service: "meal_planner", config: { host, port: o.port, token: o.apiToken } }),
       });
       if (!res.ok) throw new Error(`discovery responded ${res.status}`);
+      log.info("announced", { host, port: o.port, attempt: attempt + 1 }); // never the token
       return true;
     } catch (e) {
-      console.error("[ha-discovery] failed:", e instanceof Error ? e.message : e);
+      log.warn("announce_failed", { attempt: attempt + 1, of: retries + 1, err: e });
       if (attempt < retries) {
         await new Promise((r) => setTimeout(r, delay));
         delay *= 2;
       }
     }
   }
+  log.error("announce_gave_up", { attempts: retries + 1 });
   return false;
 }

@@ -15,7 +15,7 @@ import type { Fetched } from "../src/safe-fetch.ts";
 const store = new ImageStore(path.join(os.tmpdir(), "mp-src-never-used"));
 const page = (body: string) => ({ url: new URL("https://example.com/x"), contentType: "text/html", charset: null, body: Buffer.from(body) }) as Fetched;
 const preview = (body: string) =>
-  createPreviewService({ images: store, fetcher: (async () => page(body)) as never, log: () => {} })("https://example.com/x");
+  createPreviewService({ images: store, fetcher: (async () => page(body)) as never })("https://example.com/x");
 const og = (content: string) => `<meta property="og:title" content="${content}">`;
 
 test("source: Instagram caption between the first and the last quote, line breaks and entities kept", async () => {
