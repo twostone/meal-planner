@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.13.0](https://github.com/twostone/meal-planner/compare/v0.12.0...v0.13.0) (2026-10-11)
+
+
+### Neu
+
+* **log:** strukturiertes Protokoll mit Zeitstempel und einstellbarer Stufe ([#46](https://github.com/twostone/meal-planner/issues/46)) ([471f588](https://github.com/twostone/meal-planner/commit/471f588d47a36619f0af2088bf06cb098e66de1e))
+
+
+### Behoben
+
+* **ki:** Texte ohne halbe Zeichen an Home Assistant senden ([#44](https://github.com/twostone/meal-planner/issues/44)) ([b78b3a1](https://github.com/twostone/meal-planner/commit/b78b3a101ee0282e0126cc2649d26704d7e5e580))
+
 ## [0.12.0](https://github.com/twostone/meal-planner/compare/v0.11.0...v0.12.0) (2026-10-10)
 
 
