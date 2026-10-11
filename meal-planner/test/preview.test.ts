@@ -16,6 +16,17 @@ test("decodeEntities: named, decimal and hex entities; unknown ones stay", () =>
   assert.equal(decodeEntities("Shakshuka &amp; Fladenbrot &#8211; K&auml;se &#x2713; &foo;"), "Shakshuka & Fladenbrot – Käse ✓ &foo;");
 });
 
+test("decodeEntities: surrogate code points stay as text instead of becoming half a character", () => {
+  assert.equal(decodeEntities("a &#xD83D; b &#56834; c &#x1F600;"), "a &#xD83D; b &#56834; c 😀");
+});
+
+test("parsePreview: a title cut inside an emoji ends before it (a lone surrogate makes Home Assistant answer 400)", () => {
+  const html = `<meta property="og:title" content="${"x".repeat(199)}😀tail">`;
+  const title = parsePreview(html, base).title!;
+  assert.ok(title.isWellFormed());
+  assert.equal(title, "x".repeat(199));
+});
+
 test("parsePreview: schema.org recipe name beats the og:title with site suffix; og:image is resolved and unescaped", () => {
   const html = `<html><head><title>Käsespätzle Rezept | Chefkoch</title>
     <meta property="og:title" content="Käsespätzle Rezept | Chefkoch">
@@ -164,6 +175,23 @@ test("preview service: honours the page's charset (ISO-8859-1 umlauts)", async (
       store,
     )("https://example.com/m");
     assert.equal(meta.title, "Käse");
+  } finally {
+    await done();
+  }
+});
+
+test("preview service: a long caption cut inside an emoji keeps a well-formed source text", async () => {
+  const { store, done } = await tmpStore();
+  try {
+    const caption = "a".repeat(9999) + "😀tail"; // the emoji straddles the 10 000 character limit
+    const r = await service(
+      { "https://example.com/c": html(`<meta property="og:title" content="Kim auf Instagram: &quot;${caption}&quot;">`) },
+      store,
+    )("https://example.com/c");
+    assert.ok(r.sourceText!.isWellFormed());
+    assert.equal(r.sourceText, "a".repeat(9999));
+    assert.equal(r.sourceTruncated, true);
+    assert.ok(r.title!.isWellFormed());
   } finally {
     await done();
   }

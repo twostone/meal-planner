@@ -1,5 +1,6 @@
 import type { RawDraft } from "./recipe-draft.ts";
 import { UNITS } from "./repo.ts";
+import { clip, toJson } from "./text.ts";
 
 export const SUPERVISOR_CORE_URL = "http://supervisor/core/api/";
 const STATUS_TIMEOUT_MS = 5000;
@@ -87,7 +88,8 @@ export function createHaAi(
           method: "POST",
           headers: { "Content-Type": "application/json" },
           // No entity_id: Home Assistant uses the preferred AI task entity. The model gets no tools.
-          body: JSON.stringify({ task_name: taskName, instructions, structure }),
+          // toJson, not JSON.stringify: Home Assistant answers 400 to a lone surrogate (see text.ts).
+          body: toJson({ task_name: taskName, instructions, structure }),
         },
         token,
         baseUrl,
@@ -97,7 +99,7 @@ export function createHaAi(
       throw new AiError(e instanceof Error && e.name === "AbortError" ? "timeout" : "unreachable");
     }
     if (!res.ok) {
-      console.error(`[ha-ai] ${taskName} failed: supervisor responded ${res.status}`);
+      console.error(`[ha-ai] ${taskName} failed: supervisor responded ${res.status}${await errorBody(res)}`);
       throw new AiError("unreachable");
     }
     let body: any;
@@ -118,7 +120,7 @@ export function createHaAi(
       try {
         const res = await request("states", { method: "GET" }, token, baseUrl, STATUS_TIMEOUT_MS);
         if (!res.ok) {
-          console.error(`[ha-ai] status check failed: supervisor responded ${res.status}`);
+          console.error(`[ha-ai] status check failed: supervisor responded ${res.status}${await errorBody(res)}`);
           return { ai: false, reason: "unreachable" };
         }
         const states = (await res.json()) as { entity_id?: unknown; state?: unknown }[];
@@ -139,6 +141,18 @@ export function createHaAi(
       return (await run("meal_planner_title", instructions, TITLES_STRUCTURE, titlesTimeoutMs)).titles;
     },
   };
+}
+
+// The reason Home Assistant gives for an error ("Data should be valid JSON.", a validation message), as ": <text>" for
+// the log line, or "" when there is none. Short, one line and never waiting longer than 2 s: it is only a hint.
+async function errorBody(res: Response): Promise<string> {
+  try {
+    const wait = new Promise<string>((done) => setTimeout(() => done(""), 2000).unref());
+    const text = (await Promise.race([res.text(), wait])).replace(/\s+/g, " ").trim();
+    return text ? `: ${clip(text, 300)}` : "";
+  } catch {
+    return "";
+  }
 }
 
 async function request(path: string, init: RequestInit, token: string, baseUrl: string, timeoutMs: number): Promise<Response> {

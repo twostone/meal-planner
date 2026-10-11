@@ -1,4 +1,5 @@
 import { UNITS } from "./repo.ts";
+import { clip } from "./text.ts";
 
 // What the LLM returns (ha-ai.ts) is untrusted input: this module turns it into a draft the user reviews,
 // never into stored data. Nothing here talks to the network.
@@ -31,7 +32,7 @@ export const normalizeForCompare = (s: string) => s.normalize("NFC").replace(IGN
 const str = (v: unknown, max: number): string | null => {
   if (typeof v !== "string") return null;
   const t = v.replace(/\s+/g, " ").trim();
-  return t ? t.slice(0, max) : null;
+  return t ? clip(t, max) : null;
 };
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 100000 ? v : null);
 
@@ -46,7 +47,7 @@ function cleanInstructions(v: unknown): string | null {
     .split(/\r?\n/)
     .map((l) => l.replace(STEP_PREFIX, "").replace(/\s+/g, " ").trim())
     .filter(Boolean);
-  const text = lines.join("\n").slice(0, MAX_INSTRUCTIONS).trim();
+  const text = clip(lines.join("\n"), MAX_INSTRUCTIONS).trim();
   return text || null;
 }
 

@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -8,13 +8,13 @@ import { AiError, createHaAi, languageName, PROMPT, titlesPrompt, type RecipeAi 
 import { createRepo } from "../src/repo.ts";
 
 // A fake Supervisor core proxy on 127.0.0.1 (never the real network).
-type Seen = { method: string; url: string; auth: string | undefined; body: any };
+type Seen = { method: string; url: string; auth: string | undefined; body: any; raw: string };
 async function fakeSupervisor(handler: (req: Seen) => { status?: number; json?: unknown; hang?: boolean }) {
   const seen: Seen[] = [];
   const server: Server = createServer(async (req: IncomingMessage, res) => {
     let text = "";
     for await (const chunk of req) text += chunk;
-    const s: Seen = { method: req.method!, url: req.url!, auth: req.headers.authorization, body: text ? JSON.parse(text) : null };
+    const s: Seen = { method: req.method!, url: req.url!, auth: req.headers.authorization, body: text ? JSON.parse(text) : null, raw: text };
     seen.push(s);
     const r = handler(s);
     if (r.hang) return;
@@ -82,6 +82,38 @@ test("generate: errors map to AiError reasons (disabled, unreachable, bad_respon
     mode = "hang";
     await assert.rejects(ai.generate("t"), (e: AiError) => e.reason === "timeout");
   } finally {
+    f.close();
+  }
+});
+
+test("generate and titles: a lone surrogate in the text never reaches Home Assistant (it answers 400 to it)", async () => {
+  const f = await fakeSupervisor(() => ({ json: { service_response: { data: { ingredients: "[]", titles: "x" } } } }));
+  try {
+    const ai = createHaAi("tok", f.base);
+    await ai.generate("Zutaten \ud83d Ende");
+    await ai.titles({ title: "Titel \ude02", text: "Text \ud83d", lang: "de" });
+    assert.equal(f.seen.length, 2);
+    for (const s of f.seen) assert.doesNotMatch(s.raw, /\\ud[89a-f][0-9a-f]{2}/i, "no escaped surrogate in the body");
+    assert.ok(f.seen[0]!.body.instructions.endsWith("Zutaten � Ende"));
+  } finally {
+    f.close();
+  }
+});
+
+test("a failed call logs what Home Assistant said, shortened to 300 characters", async () => {
+  const f = await fakeSupervisor(() => ({ status: 400, json: { message: "Data should be valid JSON.", pad: "x".repeat(1000) } }));
+  const err = mock.method(console, "error", () => {});
+  try {
+    await assert.rejects(createHaAi("tok", f.base).generate("t"), (e: AiError) => e.reason === "unreachable");
+    const line = String(err.mock.calls[0]!.arguments[0]);
+    assert.match(line, /meal_planner_recipe failed: supervisor responded 400: /);
+    assert.match(line, /Data should be valid JSON\./);
+    assert.ok(line.length < 450, `the body is cut short, got ${line.length} characters`);
+    // a status check that fails logs the reason too
+    await createHaAi("tok", f.base).status();
+    assert.match(String(err.mock.calls[1]!.arguments[0]), /status check failed: supervisor responded 400: .*Data should be valid JSON\./);
+  } finally {
+    err.mock.restore();
     f.close();
   }
 });

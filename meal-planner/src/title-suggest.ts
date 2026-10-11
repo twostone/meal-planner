@@ -3,6 +3,8 @@
 // This turns such a caption into a few short title candidates. Plain rules, no network, no guessing:
 // where nothing sensible can be derived, fewer candidates come back (possibly none).
 
+import { clip } from "./text.ts";
+
 // The word before "Instagram" follows the request language (the app asks for German), not the caption's.
 export const PREFIX = /^[^\r\n]{1,120}? (?:auf|on) Instagram: /;
 const QUOTES_AT_EDGES = /^["„“”]+|["“”]+$/g;
@@ -20,7 +22,7 @@ function shorten(s: string): string {
   // A whole first sentence beats a cut in the middle of one.
   const sentence = /^.+?[.!?](?=\s|$)/.exec(s)?.[0];
   if (sentence && sentence.length <= MAX_SUGGESTION_LENGTH) return sentence;
-  return `${s.slice(0, MAX_SUGGESTION_LENGTH).replace(/\s+\S*$/, "")}…`;
+  return `${clip(s, MAX_SUGGESTION_LENGTH).replace(/\s+\S*$/, "")}…`;
 }
 
 // First line that still says something once emojis, hashtags and decoration are gone.
