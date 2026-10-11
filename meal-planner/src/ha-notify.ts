@@ -1,4 +1,8 @@
-export type HaEventType = "plan_created" | "plan_updated" | "entry_added" | "entry_removed" | "entry_done" | "entry_undone";
+import { logger } from "./log.ts";
+
+const log = logger("ha-notify");
+
+export type HaEventType ="plan_created" | "plan_updated" | "entry_added" | "entry_removed" | "entry_done" | "entry_undone";
 // Any field is null when Ingress did not send it (unknown session, or unset on the HA user).
 export type HaUser = { id: string; name: string | null; display_name: string | null };
 export type HaEventInput = {
@@ -28,8 +32,11 @@ export function createHaNotify(token: string | null, baseUrl = SUPERVISOR_EVENTS
     if (!token) return Promise.resolve();
     const { type, ...data } = ev;
     chain = chain
-      .then(() => post(`${baseUrl}meal_planner_${type}`, token, data))
-      .catch((e) => console.error("[ha-notify] event failed:", e instanceof Error ? e.message : e));
+      .then(async () => {
+        await post(`${baseUrl}meal_planner_${type}`, token, data);
+        log.debug("event_sent", { type });
+      })
+      .catch((e) => log.warn("event_failed", { type, err: e }));
     return Promise.resolve();
   };
 }

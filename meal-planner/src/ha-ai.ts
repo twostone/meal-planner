@@ -1,6 +1,9 @@
 import type { RawDraft } from "./recipe-draft.ts";
 import { UNITS } from "./repo.ts";
+import { logger } from "./log.ts";
 import { clip, toJson } from "./text.ts";
+
+const log = logger("ha-ai");
 
 export const SUPERVISOR_CORE_URL = "http://supervisor/core/api/";
 const STATUS_TIMEOUT_MS = 5000;
@@ -80,6 +83,8 @@ export function createHaAi(
   // plan's test), tolerating a layer keyed by the entity id.
   async function run(taskName: string, instructions: string, structure: object, timeout: number): Promise<Record<string, unknown>> {
     if (!token) throw new AiError("disabled");
+    const t0 = performance.now();
+    const ms = () => Math.round(performance.now() - t0);
     let res: Response;
     try {
       res = await request(
@@ -96,21 +101,31 @@ export function createHaAi(
         timeout,
       );
     } catch (e) {
-      throw new AiError(e instanceof Error && e.name === "AbortError" ? "timeout" : "unreachable");
+      if (e instanceof Error && e.name === "AbortError") {
+        log.warn("task_timeout", { task: taskName, ms: ms(), limit_ms: timeout });
+        throw new AiError("timeout");
+      }
+      log.error("task_unreachable", { task: taskName, ms: ms(), err: e });
+      throw new AiError("unreachable");
     }
     if (!res.ok) {
-      console.error(`[ha-ai] ${taskName} failed: supervisor responded ${res.status}${await errorBody(res)}`);
+      log.error("task_failed", { task: taskName, status: res.status, ms: ms(), body: await errorBody(res) });
       throw new AiError("unreachable");
     }
     let body: any;
     try {
       body = await res.json();
     } catch {
+      log.warn("task_bad_response", { task: taskName, ms: ms(), why: "not_json" });
       throw new AiError("bad_response");
     }
     const sr = body?.service_response;
     const data = sr?.data ?? Object.values(sr ?? {}).map((v: any) => v?.data).find((d) => d && typeof d === "object");
-    if (!data || typeof data !== "object") throw new AiError("bad_response");
+    if (!data || typeof data !== "object") {
+      log.warn("task_bad_response", { task: taskName, ms: ms(), why: "no_data" });
+      throw new AiError("bad_response");
+    }
+    log.info("task_done", { task: taskName, ms: ms() });
     return data as Record<string, unknown>;
   }
 
@@ -120,14 +135,14 @@ export function createHaAi(
       try {
         const res = await request("states", { method: "GET" }, token, baseUrl, STATUS_TIMEOUT_MS);
         if (!res.ok) {
-          console.error(`[ha-ai] status check failed: supervisor responded ${res.status}${await errorBody(res)}`);
+          log.warn("status_check_failed", { status: res.status, body: await errorBody(res) });
           return { ai: false, reason: "unreachable" };
         }
         const states = (await res.json()) as { entity_id?: unknown; state?: unknown }[];
         const has = Array.isArray(states) && states.some((s) => typeof s.entity_id === "string" && s.entity_id.startsWith("ai_task.") && s.state !== "unavailable");
         return has ? { ai: true, reason: null } : { ai: false, reason: "no_entity" };
       } catch (e) {
-        console.error("[ha-ai] status check failed:", e instanceof Error ? e.message : e);
+        log.warn("status_check_failed", { err: e });
         return { ai: false, reason: "unreachable" };
       }
     },
@@ -143,15 +158,16 @@ export function createHaAi(
   };
 }
 
-// The reason Home Assistant gives for an error ("Data should be valid JSON.", a validation message), as ": <text>" for
-// the log line, or "" when there is none. Short, one line and never waiting longer than 2 s: it is only a hint.
-async function errorBody(res: Response): Promise<string> {
+// The reason Home Assistant gives for an error ("Data should be valid JSON.", a validation message) for the log line,
+// or undefined when there is none (the field is then left out). At most 300 characters and never waiting longer than
+// 2 s: it is only a hint.
+async function errorBody(res: Response): Promise<string | undefined> {
   try {
     const wait = new Promise<string>((done) => setTimeout(() => done(""), 2000).unref());
     const text = (await Promise.race([res.text(), wait])).replace(/\s+/g, " ").trim();
-    return text ? `: ${clip(text, 300)}` : "";
+    return text ? clip(text, 300) : undefined;
   } catch {
-    return "";
+    return undefined;
   }
 }
 

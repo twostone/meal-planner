@@ -21,3 +21,8 @@ panel_admin: false
 homeassistant_api: true
 discovery:
   - meal_planner
+# Only one option: how much the app writes to its log (Supervisor writes it to /data/options.json; a change needs a restart).
+options:
+  log_level: info
+schema:
+  log_level: list(debug|info|warning|error)

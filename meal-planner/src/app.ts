@@ -5,6 +5,7 @@ import * as z from "zod";
 import { AiError, type RecipeAi } from "./ha-ai.ts";
 import type { HaEventInput, HaUser } from "./ha-notify.ts";
 import { IMAGE_NAME, type ImageStore } from "./images.ts";
+import { logger } from "./log.ts";
 import type { PreviewResult } from "./preview.ts";
 import { buildDraft, DraftError } from "./recipe-draft.ts";
 import { ConflictError, NotFoundError, UNITS, type Entry, type Repo } from "./repo.ts";
@@ -117,6 +118,10 @@ export type AppOptions = {
   ai?: RecipeAi;
 };
 
+const log = logger("app");
+// A request is only logged when it failed or took this long: cook mode polls every 4 s and would flood the log.
+const SLOW_REQUEST_MS = 2000;
+
 const MAX_PARALLEL_PREVIEWS = 4;
 const MAX_PARALLEL_DRAFTS = 2;
 const MAX_PARALLEL_TITLES = 2;
@@ -140,6 +145,17 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
     notifyHa({ type, plan: { id, start_date, end_date }, entry: { id: e.id, dish_id: e.dish_id, title: e.dish.title }, user });
   };
 
+  // First in line, so refused (403) requests show up as well. Path only, never the query string.
+  app.use("*", async (c, next) => {
+    const t0 = performance.now();
+    await next();
+    const ms = Math.round(performance.now() - t0);
+    const status = c.res.status;
+    if (status >= 400 || ms >= SLOW_REQUEST_MS) {
+      (status >= 500 ? log.error : log.warn)("request", { method: c.req.method, path: c.req.path, status, ms });
+    }
+  });
+
   if (opts.allowedIp) {
     app.use("*", async (c, next) => {
       let addr: string | undefined;
@@ -156,7 +172,7 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
   app.onError((err, c) => {
     if (err instanceof NotFoundError) return c.json({ error: `${err.message} not found` }, 404);
     if (err instanceof ConflictError) return c.json({ error: err.message }, 409);
-    console.error(err);
+    log.error("unhandled", { method: c.req.method, path: c.req.path, err, stack: err instanceof Error ? err.stack : undefined });
     return c.json({ error: "internal error" }, 500);
   });
 
@@ -217,8 +233,9 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
         return c.json(buildDraft(await ai.generate(source_text), source_text));
       } catch (e) {
         if (e instanceof AiError || e instanceof DraftError) {
-          console.error("[recipe-draft] failed:", e instanceof AiError ? e.reason : e.message);
-          return c.json({ error: "ai failed", reason: e instanceof AiError ? e.reason : "bad_response" }, 502);
+          const reason = e instanceof AiError ? e.reason : "bad_response";
+          log.warn("draft_failed", { reason, detail: e instanceof DraftError ? e.message : undefined });
+          return c.json({ error: "ai failed", reason }, 502);
         }
         throw e;
       } finally {
@@ -243,7 +260,7 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
         return c.json({ titles: cleanAiTitles(raw) });
       } catch (e) {
         if (e instanceof AiError) {
-          console.error("[title-suggestions] failed:", e.reason);
+          log.warn("titles_failed", { reason: e.reason });
           return c.json({ error: "ai failed", reason: e.reason }, 502);
         }
         throw e;

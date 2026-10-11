@@ -6,7 +6,8 @@ Anleitung für Coding-Agents und Mitwirkende. Kurz halten, bei Änderungen an Ar
 
 Essensplanung für einen Haushalt als Home-Assistant-Add-on (Ingress). Eine gemeinsame Liste pro Zeitraum (z. B. Sa–Fr),
 ein Katalog aller bisherigen Gerichte mit Rezept-Link, Autocomplete beim Eintragen. Aus einem Link holt der Server Titel
-und Vorschaubild. Grundsatz: **KISS und YAGNI**. Nichts bauen, was nicht ausdrücklich gebraucht wird.
+und Vorschaubild. Grundsatz: **KISS und YAGNI**. Nichts bauen, was nicht ausdrücklich gebraucht wird. Dazu Clean-Code-Regeln und der Vorrang
+etablierter Bibliotheken (beides unter „Regeln beim Ändern“).
 
 ## Layout
 
@@ -22,7 +23,7 @@ meal-planner/            das Add-on (Docker-Build-Kontext)
   config.yaml            Add-on-Konfiguration (Version pflegt Release Please)
   icon.png               Icon im App-Store (128×128 PNG, aus web/public/favicon.svg erzeugt)
   CHANGELOG.md           entsteht und wächst durch Release Please, nicht von Hand ändern
-  Dockerfile             zweistufig, node:22-alpine
+  Dockerfile             zweistufig, node:24-alpine
   src/                   Backend: Hono + node:sqlite
     db.ts, repo.ts         Datenbank (Migrationen) und Zugriff
     app.ts, server.ts      API, Ingress-Sperre, Start
@@ -36,6 +37,7 @@ meal-planner/            das Add-on (Docker-Build-Kontext)
     ha-ai.ts                ai_task.generate_data über den Supervisor (Rezept in Zutaten zerlegen, Titel vorschlagen)
     recipe-draft.ts         prüft und bereinigt die LLM-Antwort, gleicht sie mit dem Originaltext ab
     text.ts                 clip (Kürzen ohne halbes Zeichen) und toJson (JSON für Home Assistant)
+    log.ts                  Logger: eine logfmt-Zeile pro Ereignis, Stufe aus der App-Option `log_level`
     ha-discovery.ts         Meldung von Host, Port und Token per Supervisor-Discovery
   web/                   Frontend: Svelte 5 + Vite (Runes, TypeScript)
     public/favicon.svg     Favicon der App, Vorlage für icon.png
@@ -280,8 +282,20 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   damit ein Wechsel (z. B. `better-sqlite3`) klein bleibt.
 - **TypeScript 6 ist gepinnt**, weil `svelte-check` TypeScript 7 noch nicht unterstützt. Erst umstellen, wenn es geht.
 - `tsx` ist absichtlich eine Runtime-Dependency (der Server läuft im Container per `node --import tsx`).
+- **Das Rad nicht neu erfinden:** Bevor eine Funktion selbst entsteht, erst prüfen, ob es eine etablierte, gepflegte Bibliothek
+  (oder einen Node-/Hono-Baustein) dafür gibt, und das Ergebnis kurz im PR festhalten. Selbst schreiben nur, wenn nichts passt
+  oder die Bibliothek mehr kostet als sie spart. Dann steht der Grund dabei (Beispiel: `log.ts` ist selbst geschrieben, weil weder
+  winston, pino noch consola logfmt mit Ortszeit samt Offset und Stufe aus der HA-Option liefern, geprüft am 11.10.2026).
 - Neue Abhängigkeiten nur mit Grund: jede ändert `package-lock.json` und damit den Image-Build.
   Die Link-Vorschau kommt bewusst ohne HTML-Parser-Bibliothek und ohne Bildverarbeitung (`sharp`) aus.
+- **Clean Code** gilt zusätzlich zu KISS und YAGNI:
+  - Sprechende Namen statt Abkürzungen; Funktionen klein halten, jede mit einer Aufgabe.
+  - Keine Magic Numbers: Grenzen und Zeitlimits als benannte Konstanten (z. B. `SLOW_REQUEST_MS`).
+  - Doppelten Code zusammenführen, aber erst bei der zweiten echten Wiederholung und ohne Abstraktion auf Vorrat (YAGNI).
+  - Kommentare erklären das Warum, nicht das Was; veraltete Kommentare mit dem Code ändern.
+  - Fehler nie still verschlucken: behandeln, loggen oder bewusst begründet ignorieren.
+  - Ein Ort pro Zuständigkeit (Datenzugriff in `repo.ts`, Abruf fremder URLs in `safe-fetch.ts`), keine Querzugriffe.
+  - Beim Anfassen von Code die Umgebung ein Stück sauberer hinterlassen, aber keine fremden Umbauten im selben PR.
 - Sheets nutzen das native `<dialog>`. Kein `alert()`/`confirm()` (in der HA-Companion-App unzuverlässig), stattdessen
   zweistufige Bestätigung im UI.
 - **Zurück-Taste:** Ein offenes Blatt belegt einen History-Eintrag (`pushSheetEntry`/`closeSheet` in `store.svelte.ts`), damit
@@ -297,6 +311,15 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   geht, wird mit `toJson()` statt `JSON.stringify` serialisiert (`ha-ai.ts`): HA liest den Body mit orjson und antwortet auf ein
   einzelnes Surrogat mit 400 „Data should be valid JSON“. `ha-notify.ts` braucht das nicht (seine Texte laufen vorher durch
   SQLite, das sie in UTF-8 wandelt). Fehler von HA loggt `ha-ai.ts` mit dem Body (auf 300 Zeichen gekürzt).
+- **Logging** (`log.ts`): Im Backend kein `console.*`, sondern `const log = logger("modul")` und `log.info("ereignis", { feld: wert })`.
+  Eine Zeile je Ereignis: `<Zeit mit Offset> <STUFE> <modul> <ereignis> key=value …` (logfmt), Ereignisnamen in `snake_case`,
+  Werte mit Leerzeichen, Anführungszeichen oder Zeilenumbruch werden als JSON-Text gequotet (die Zeile bleibt eine Zeile).
+  Stufen: `debug` (z. B. gesendete Events), `info` (Start, Ergebnisse mit `ms`), `warn` (Fehler, die die App abfängt),
+  `error` (Unerwartetes, HA-Fehler). Die Stufe kommt aus der App-Option `log_level` (`config.yaml`, `/data/options.json`,
+  „warning“ = `warn`), sonst `LOG_LEVEL`, sonst `info`; geändert wird sie nur durch Neustart. Anfragen an die App loggt eine
+  Middleware in `app.ts` nur bei Status ab 400 oder ab 2 s (der Kochmodus fragt alle 4 s ab). Tests fangen Zeilen mit
+  `setLogSink` ab. **Nie ins Log:** vollständige Links (nur der Host), Tokens, Rezept- oder Caption-Text, Query-Strings,
+  Namen aus den `X-Remote-User-*`-Headern; Antworten von HA nur gekürzt (`clip`).
 - UI-Texte deutsch, Code und Kommentare englisch. Bedienelemente mindestens 44 px, echte `<button>`/`<a>`.
 
 ## Bewusst nicht gebaut (nur auf ausdrücklichen Wunsch)
@@ -313,7 +336,11 @@ Rezept-Text einfügen und per KI zerlegen sowie Portionen umrechnen (beides am 1
   ist hier nicht festgehalten.
 - Die Link-Vorschau ist gegen eine lokale Testseite und im Browser geprüft, **nicht gegen echte Seiten** (Chefkoch & Co.)
   und nicht gegen Instagram. Seiten hinter Cloudflare oder Login liefern keinen Titel (dann trägt der Nutzer ihn ein).
-  Das Add-on-Protokoll zeigt pro Abruf eine Zeile `[preview] <host> title=… image=… reason=…` (nur der Host, nie die URL).
+  Das Add-on-Protokoll zeigt pro Abruf eine Zeile `preview fetched host=… title=… image=… source=… reason=… ms=…` (nur der Host, nie die URL).
+- Das Protokoll (`log.ts`) ist nur gegen Tests geprüft, nicht im echten Add-on-Protokoll: offen ist, ob die Option `log_level`
+  bei einer bestehenden Installation den Standard `info` bekommt, ob der Zeitstempel dort `+02:00` zeigt (also `TZ` im
+  Container gesetzt ist und Node ohne `tzdata` richtig rechnet; sonst `tzdata` ins Image) und ob die Protokollansicht
+  eigene Zeitstempel davorsetzt. Die Startzeile `server starting … tz=…` zeigt, was der Container als `TZ` bekommt.
 - Ob HA-Ingress die `X-Remote-User-*`-Header wirklich liefert, ist gegen die Doku, aber nicht am echten System geprüft.
 - Der Prompt der KI-Titel (`titlesPrompt` in `ha-ai.ts`) ist **nur gegen eine Fake-AI getestet, nie gegen ein echtes Modell**:
   offen ist, ob er Aufmerksamkeitsfänger („Das BESTE Abendessen …“) zuverlässig verwirft, ob er bei englischen Captions
