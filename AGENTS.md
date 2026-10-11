@@ -6,7 +6,8 @@ Anleitung für Coding-Agents und Mitwirkende. Kurz halten, bei Änderungen an Ar
 
 Essensplanung für einen Haushalt als Home-Assistant-Add-on (Ingress). Eine gemeinsame Liste pro Zeitraum (z. B. Sa–Fr),
 ein Katalog aller bisherigen Gerichte mit Rezept-Link, Autocomplete beim Eintragen. Aus einem Link holt der Server Titel
-und Vorschaubild. Grundsatz: **KISS und YAGNI**. Nichts bauen, was nicht ausdrücklich gebraucht wird.
+und Vorschaubild. Grundsatz: **KISS und YAGNI**. Nichts bauen, was nicht ausdrücklich gebraucht wird. Dazu Clean-Code-Regeln und der Vorrang
+etablierter Bibliotheken (beides unter „Regeln beim Ändern“).
 
 ## Layout
 
@@ -281,8 +282,20 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   damit ein Wechsel (z. B. `better-sqlite3`) klein bleibt.
 - **TypeScript 6 ist gepinnt**, weil `svelte-check` TypeScript 7 noch nicht unterstützt. Erst umstellen, wenn es geht.
 - `tsx` ist absichtlich eine Runtime-Dependency (der Server läuft im Container per `node --import tsx`).
+- **Das Rad nicht neu erfinden:** Bevor eine Funktion selbst entsteht, erst prüfen, ob es eine etablierte, gepflegte Bibliothek
+  (oder einen Node-/Hono-Baustein) dafür gibt, und das Ergebnis kurz im PR festhalten. Selbst schreiben nur, wenn nichts passt
+  oder die Bibliothek mehr kostet als sie spart. Dann steht der Grund dabei (Beispiel: `log.ts` ist selbst geschrieben, weil weder
+  winston, pino noch consola logfmt mit Ortszeit samt Offset und Stufe aus der HA-Option liefern, geprüft am 11.10.2026).
 - Neue Abhängigkeiten nur mit Grund: jede ändert `package-lock.json` und damit den Image-Build.
   Die Link-Vorschau kommt bewusst ohne HTML-Parser-Bibliothek und ohne Bildverarbeitung (`sharp`) aus.
+- **Clean Code** gilt zusätzlich zu KISS und YAGNI:
+  - Sprechende Namen statt Abkürzungen; Funktionen klein halten, jede mit einer Aufgabe.
+  - Keine Magic Numbers: Grenzen und Zeitlimits als benannte Konstanten (z. B. `SLOW_REQUEST_MS`).
+  - Doppelten Code zusammenführen, aber erst bei der zweiten echten Wiederholung und ohne Abstraktion auf Vorrat (YAGNI).
+  - Kommentare erklären das Warum, nicht das Was; veraltete Kommentare mit dem Code ändern.
+  - Fehler nie still verschlucken: behandeln, loggen oder bewusst begründet ignorieren.
+  - Ein Ort pro Zuständigkeit (Datenzugriff in `repo.ts`, Abruf fremder URLs in `safe-fetch.ts`), keine Querzugriffe.
+  - Beim Anfassen von Code die Umgebung ein Stück sauberer hinterlassen, aber keine fremden Umbauten im selben PR.
 - Sheets nutzen das native `<dialog>`. Kein `alert()`/`confirm()` (in der HA-Companion-App unzuverlässig), stattdessen
   zweistufige Bestätigung im UI.
 - **Zurück-Taste:** Ein offenes Blatt belegt einen History-Eintrag (`pushSheetEntry`/`closeSheet` in `store.svelte.ts`), damit
