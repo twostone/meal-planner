@@ -27,6 +27,9 @@
   const steps = (e: CookEntry) => stepLines(e.recipe.instructions);
   const stepsDone = (e: CookEntry) => steps(e).filter((_, i) => checked[key(e.entry_id, "step", i)]).length;
 
+  const ticked = (e: CookEntry) =>
+    e.recipe.ingredients.filter((_, i) => checked[key(e.entry_id, "ingredient", i)]).length + stepsDone(e);
+
   // Ingredients keep their position (the tick refers to it) and are grouped by neighbouring section.
   function groups(e: CookEntry): { section: string | null; items: { i: Ingredient; idx: number }[] }[] {
     const out: { section: string | null; items: { i: Ingredient; idx: number }[] }[] = [];
@@ -148,6 +151,12 @@
   <div class="cook-bar">
     <button type="button" class="btn outline" onclick={closeSheet}>Beenden</button>
     <strong>Kochen</strong>
+    {#if current}
+      {@const total = current.recipe.ingredients.length + steps(current).length}
+      {#if total}
+        <span class="cook-progress">{ticked(current)} von {total} erledigt</span>
+      {/if}
+    {/if}
   </div>
 
   {#if app.error}
@@ -227,6 +236,11 @@
           {/if}
         {/if}
 
+      {/if}
+    </div>
+    {#if current}
+      {@const e = current}
+      <div class="cook-footer">
         {#if e.done}
           <p class="cook-finished"><Icon name="check" size={16} /> Fertig und in der Liste abgehakt</p>
         {:else}
@@ -234,7 +248,7 @@
             {confirmFinish === e.entry_id ? "Wirklich fertig? In der Liste abhaken" : "Fertig"}
           </button>
         {/if}
-      {/if}
-    </div>
+      </div>
+    {/if}
   {/if}
 </div>

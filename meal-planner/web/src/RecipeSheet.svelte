@@ -174,10 +174,13 @@
               </button>
             </div>
             <input type="text" aria-label="Zutat" placeholder="Zutat" maxlength="80" bind:value={r.name} autocomplete="off" />
-            <div class="ing-extra">
-              <input type="text" aria-label="Hinweis" placeholder="Hinweis, z. B. fein" maxlength="200" bind:value={r.note} autocomplete="off" />
-              <input type="text" aria-label="Abschnitt" placeholder="Abschnitt" maxlength="80" bind:value={r.section} autocomplete="off" />
-            </div>
+            <details class="more" open={!!(r.note || r.section)}>
+              <summary>Hinweis und Abschnitt</summary>
+              <div class="ing-extra">
+                <input type="text" aria-label="Hinweis" placeholder="Hinweis, z. B. fein" maxlength="200" bind:value={r.note} autocomplete="off" />
+                <input type="text" aria-label="Abschnitt" placeholder="Abschnitt" maxlength="80" bind:value={r.section} autocomplete="off" />
+              </div>
+            </details>
           </div>
         {/each}
         {#if rows.length < 60}
@@ -196,7 +199,7 @@
         </details>
       {/if}
       {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
-      <div class="actions">
+      <div class="actions sticky-actions">
         <button type="button" class="btn outline" onclick={cancel}>Abbrechen</button>
         <button type="submit" class="btn primary" disabled={busy}>Speichern</button>
       </div>
@@ -223,11 +226,15 @@
         </ol>
       {/if}
       {#if recipe.source_text}
-        <h3>{isEmpty(recipe) ? "Rezept vom Link" : "Originaltext vom Link"}</h3>
-        <p class="source-text">{recipe.source_text}</p>
-        {#if recipe.source_truncated}<p class="status">Der Text ist evtl. gekürzt. Bei Bedarf den vollständigen Text von Hand ergänzen.</p>{/if}
+        <details class="source" open={isEmpty(recipe)}>
+          <summary>{isEmpty(recipe) ? "Rezept vom Link" : "Originaltext vom Link"}</summary>
+          <p class="source-text">{recipe.source_text}</p>
+          {#if recipe.source_truncated}<p class="status">Der Text ist evtl. gekürzt. Bei Bedarf den vollständigen Text von Hand ergänzen.</p>{/if}
+        </details>
       {/if}
     </article>
+{#if recipe.source_text || hasLink}
+<section class="form-group">
     {#if recipe.source_text}
       {#if ai.ai}
         <button type="button" class="btn primary wide" disabled={drafting} onclick={recognize}>
@@ -244,7 +251,9 @@
       </button>
     {/if}
     {#if sourceHint}<p class="status" aria-live="polite">{sourceHint}</p>{/if}
-    <div class="actions">
+</section>
+{/if}
+    <div class="actions sticky-actions">
       <button type="button" class="btn outline" onclick={closeSheet}>Schließen</button>
       <button type="button" class="btn primary" onclick={() => startEdit()}>{isEmpty(recipe) ? "Von Hand eintragen" : "Bearbeiten"}</button>
     </div>

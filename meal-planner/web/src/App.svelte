@@ -8,7 +8,7 @@
   import ListView from "./ListView.svelte";
   import PeriodSheet from "./PeriodSheet.svelte";
   import RecipeSheet from "./RecipeSheet.svelte";
-  import { app, dismissError, init, openPeriods } from "./store.svelte";
+  import { app, dismissError, init, openCook, openPeriods } from "./store.svelte";
 
   onMount(() => {
     init();
@@ -21,29 +21,21 @@
 <div class="shell">
   <header>
     {#if app.view === "list"}
-      <button type="button" class="period" onclick={openPeriods}>
-        <span>{planLabel ?? "Zeitraum wählen"}</span>
-        <Icon name="chevron-down" />
-      </button>
+      <div class="topbar">
+        <button type="button" class="period" onclick={openPeriods}>
+          <span>{planLabel ?? "Zeitraum wählen"}</span>
+          <Icon name="chevron-down" />
+        </button>
+        {#if app.plan?.entries.length}
+          <button type="button" class="btn primary" onclick={openCook}>Kochen</button>
+        {/if}
+      </div>
     {:else}
       <h1>Katalog</h1>
       {#if planLabel}
         <p class="target">Hinzufügen zu: {planLabel}</p>
       {/if}
     {/if}
-
-    <nav class="segmented" aria-label="Ansicht">
-      <button type="button" aria-current={app.view === "list" ? "page" : undefined} onclick={() => (app.view = "list")}>
-        Liste
-      </button>
-      <button
-        type="button"
-        aria-current={app.view === "catalog" ? "page" : undefined}
-        onclick={() => (app.view = "catalog")}
-      >
-        Katalog
-      </button>
-    </nav>
   </header>
 
   {#if app.error && app.sheet.kind === "none"}
@@ -60,6 +52,15 @@
   {:else}
     <CatalogView />
   {/if}
+
+  <nav class="tabbar" aria-label="Ansicht">
+    <button type="button" aria-current={app.view === "list" ? "page" : undefined} onclick={() => (app.view = "list")}>
+      Liste
+    </button>
+    <button type="button" aria-current={app.view === "catalog" ? "page" : undefined} onclick={() => (app.view = "catalog")}>
+      Katalog
+    </button>
+  </nav>
 
   {#if app.sheet.kind === "dish"}
     <DishSheet sheet={app.sheet} />

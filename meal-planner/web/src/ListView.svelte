@@ -5,14 +5,11 @@
     addByTitle,
     addDishToPlan,
     app,
-    openCook,
     openDishSheet,
     openPeriods,
     toggleDone,
   } from "./store.svelte";
   import { domain, isUrl, matchParts } from "./util";
-
-  const CIRC = 2 * Math.PI * 26;
 
   let q = $state("");
 
@@ -55,41 +52,20 @@
       <button type="button" class="btn primary" onclick={openPeriods}>Zeitraum anlegen</button>
     </div>
   {:else}
-    <section class="progress">
-      <div class="ring">
-        <svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
-          <circle cx="32" cy="32" r="26" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="8" />
-          <circle
-            cx="32"
-            cy="32"
-            r="26"
-            fill="none"
-            stroke="var(--gold)"
-            stroke-width="8"
-            stroke-linecap="round"
-            stroke-dasharray="{ratio * CIRC} {CIRC}"
-            transform="rotate(-90 32 32)"
-          />
-        </svg>
-        <span>{done.length}/{entries.length}</span>
-      </div>
-      <div>
+    <section class="progress-line" aria-label="Fortschritt">
+      <p>
         {#if entries.length === 0}
-          <strong>Noch nichts geplant</strong>
-          <span>Unten ein Gericht eintippen.</span>
+          Noch nichts geplant. Unten ein Gericht eintippen.
         {:else if open.length === 0}
-          <strong>Alles gekocht</strong>
-          <span>{done.length} von {entries.length} Gerichten gekocht</span>
+          Alles gekocht · {done.length} von {entries.length}
         {:else}
-          <strong>{open.length} noch offen</strong>
-          <span>{done.length} von {entries.length} Gerichten gekocht</span>
+          <strong>{open.length} noch offen</strong> · {done.length} von {entries.length} gekocht
         {/if}
-      </div>
+      </p>
+      {#if entries.length}
+        <div class="bar" aria-hidden="true"><span style="width: {ratio * 100}%"></span></div>
+      {/if}
     </section>
-
-    {#if entries.length}
-      <button type="button" class="btn outline wide" onclick={openCook}>Kochen</button>
-    {/if}
 
     {#snippet row(e: (typeof entries)[number])}
       <li class="row" class:done={e.done}>
