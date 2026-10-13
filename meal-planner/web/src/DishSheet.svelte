@@ -169,112 +169,143 @@
 
 <Sheet title={creating ? "Neues Gericht" : "Gericht bearbeiten"}>
   <form onsubmit={submit} novalidate>
-    {#if image}
-      <img class="preview" src={api.imageSrc(image)} alt="Vorschaubild" />
-    {/if}
-    <label>
-      Titel
-      <input type="text" bind:value={title} autocomplete="off" />
-    </label>
-    {#if suggestions.length + aiTitles.length > 1 || aiLoading}
-      <fieldset class="suggestions">
-        <legend>Vorschläge vom Link</legend>
-        {#each suggestions as s (s)}
-          <button type="button" class="suggestion" aria-pressed={title === s} onclick={() => (title = s)}><span>{s}</span></button>
-        {/each}
-        {#each aiTitles as s (s)}
-          <button type="button" class="suggestion ai" aria-pressed={title === s} onclick={() => (title = s)}>
-            <span>{s}</span><small class="ai-tag">KI</small>
-          </button>
-        {/each}
-        {#if aiLoading}
-          {#each [0, 1] as i (i)}
-            <div class="suggestion ai placeholder" aria-hidden="true"><span></span><small class="ai-tag">KI</small></div>
-          {/each}
+    <section class="form-group">
+      <div class="title-row">
+        {#if image}
+          <div class="thumb-wrap">
+            <img class="thumb big" src={api.imageSrc(image)} alt="Vorschaubild" />
+            <button type="button" class="thumb-remove" aria-label="Bild entfernen" onclick={() => (image = null)}>×</button>
+          </div>
         {/if}
-      </fieldset>
-    {/if}
-    {#if start.entryId !== null}
+        <label class="grow-field">
+          Titel
+          <input type="text" bind:value={title} autocomplete="off" />
+        </label>
+      </div>
+      {#if suggestions.length + aiTitles.length > 1 || aiLoading}
+        <fieldset class="suggestions">
+          <legend>Vorschläge vom Link</legend>
+          {#each suggestions as s (s)}
+            <button type="button" class="suggestion" aria-pressed={title === s} onclick={() => (title = s)}><span>{s}</span></button>
+          {/each}
+          {#each aiTitles as s (s)}
+            <button type="button" class="suggestion ai" aria-pressed={title === s} onclick={() => (title = s)}>
+              <span>{s}</span><small class="ai-tag">KI</small>
+            </button>
+          {/each}
+          {#if aiLoading}
+            {#each [0, 1] as i (i)}
+              <div class="suggestion ai placeholder" aria-hidden="true"><span></span><small class="ai-tag">KI</small></div>
+            {/each}
+          {/if}
+        </fieldset>
+      {/if}
       <label>
-        Notiz für diese Liste
-        <textarea rows="2" maxlength="1000" bind:value={entryNote} placeholder="z. B. doppelte Portion, ohne Käse"></textarea>
-        <small class="field-hint">Gilt nur für diesen Eintrag in dieser Liste.</small>
+        Link (optional)
+        <div class="link-row">
+          <input
+            type="text"
+            inputmode="url"
+            placeholder="https://…"
+            bind:value={url}
+            onchange={() => loadPreview()}
+            autocomplete="off"
+            autocapitalize="off"
+          />
+          {#if previewable}
+            <button
+              type="button"
+              class="btn outline"
+              disabled={loading}
+              aria-label="Titel und Bild vom Link laden"
+              onclick={() => loadPreview(true)}
+            >
+              {loading ? "Lädt …" : "Laden"}
+            </button>
+          {/if}
+        </div>
       </label>
-    {/if}
-    <label>
-      Link (optional)
-      <input
-        type="text"
-        inputmode="url"
-        placeholder="https://…"
-        bind:value={url}
-        onchange={() => loadPreview()}
-        autocomplete="off"
-        autocapitalize="off"
-      />
-    </label>
-    {#if previewable}
-      <button type="button" class="btn outline" disabled={loading} onclick={() => loadPreview(true)}>
-        {loading ? "Lade Vorschau …" : "Titel und Bild vom Link laden"}
+      <p class="status" aria-live="polite">{loading ? "Lade Vorschau …" : aiLoading ? "KI-Vorschläge werden geladen …" : hint}</p>
+    </section>
+
+    {#if start.dishId !== null}
+      <button type="button" class="row-card" onclick={() => openRecipe(start.dishId!)}>
+        <span>Rezept</span>
+        <small>Zutaten und Zubereitung</small>
       </button>
     {/if}
-    <p class="status" aria-live="polite">{loading ? "Lade Vorschau …" : aiLoading ? "KI-Vorschläge werden geladen …" : hint}</p>
-    {#if image}
-      <button type="button" class="btn ghost-danger" onclick={() => (image = null)}>Bild entfernen</button>
-    {/if}
-    <label>
-      {start.entryId !== null ? "Notiz zum Gericht (gilt überall)" : "Notiz (optional)"}
-      <input type="text" bind:value={note} autocomplete="off" />
-    </label>
+
+    <section class="form-group">
+      {#if start.entryId !== null}
+        <label>
+          Notiz für diese Liste
+          <textarea rows="2" maxlength="1000" bind:value={entryNote} placeholder="z. B. doppelte Portion, ohne Käse"></textarea>
+          <small class="field-hint">Gilt nur für diesen Eintrag in dieser Liste.</small>
+        </label>
+      {/if}
+      <label>
+        {start.entryId !== null ? "Notiz zum Gericht (gilt überall)" : "Notiz (optional)"}
+        <input type="text" bind:value={note} autocomplete="off" />
+      </label>
+    </section>
+
     <fieldset class="tags">
       <legend>Kategorien (optional)</legend>
-      {#if knownTags.length}
+      {#if tags.length}
         <div class="chips">
-          {#each knownTags as t (t)}
-            <button type="button" class="tagchip" aria-pressed={hasTag(t)} onclick={() => toggleTag(t)}>{t}</button>
+          {#each tags as t (t)}
+            <button type="button" class="tagchip" aria-pressed="true" onclick={() => toggleTag(t)}>{t}</button>
           {/each}
         </div>
       {/if}
-      <div class="tag-add">
-        <input
-          type="text"
-          aria-label="Neue Kategorie"
-          placeholder="Neue Kategorie, z. B. Snack"
-          maxlength="30"
-          enterkeyhint="done"
-          autocomplete="off"
-          bind:value={newTag}
-          onkeydown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              addNewTag();
-            }
-          }}
-        />
-        <button type="button" class="btn outline square" aria-label="Kategorie hinzufügen" disabled={!newTag.trim()} onclick={addNewTag}><Icon name="plus" /></button>
-      </div>
+      <details class="more">
+        <summary>{tags.length ? "Kategorien ändern" : "Kategorien wählen"}</summary>
+        {#if knownTags.some((t) => !hasTag(t))}
+          <div class="chips">
+            {#each knownTags.filter((t) => !hasTag(t)) as t (t)}
+              <button type="button" class="tagchip" aria-pressed="false" onclick={() => toggleTag(t)}>{t}</button>
+            {/each}
+          </div>
+        {/if}
+        <div class="tag-add">
+          <input
+            type="text"
+            aria-label="Neue Kategorie"
+            placeholder="Neue Kategorie, z. B. Snack"
+            maxlength="30"
+            enterkeyhint="done"
+            autocomplete="off"
+            bind:value={newTag}
+            onkeydown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addNewTag();
+              }
+            }}
+          />
+          <button type="button" class="btn outline square" aria-label="Kategorie hinzufügen" disabled={!newTag.trim()} onclick={addNewTag}><Icon name="plus" /></button>
+        </div>
+      </details>
     </fieldset>
     {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
 
-    {#if start.dishId !== null}
-      <button type="button" class="btn outline wide" onclick={() => openRecipe(start.dishId!)}>Rezept</button>
-    {/if}
-
-    <div class="actions">
-      <button type="submit" class="btn primary" disabled={busy}>Speichern</button>
+    <div class="sticky-actions">
+      <button type="submit" class="btn primary wide" disabled={busy}>Speichern</button>
     </div>
 
-    {#if start.entryId !== null}
-      <button type="button" class="btn outline wide" onclick={() => removeEntry(start.entryId!)}>Aus Liste entfernen</button>
-    {/if}
-    {#if start.dishId !== null}
-      {#if confirmDelete}
-        <button type="button" class="btn danger wide" onclick={() => deleteDish(start.dishId!)}>
-          Wirklich aus Katalog löschen?
-        </button>
-      {:else}
-        <button type="button" class="btn ghost-danger wide" onclick={() => (confirmDelete = true)}>Aus Katalog löschen</button>
-      {/if}
+    {#if start.entryId !== null || start.dishId !== null}
+      <div class="danger-zone">
+        {#if start.entryId !== null}
+          <button type="button" class="btn ghost-danger" onclick={() => removeEntry(start.entryId!)}>Aus Liste entfernen</button>
+        {/if}
+        {#if start.dishId !== null}
+          {#if confirmDelete}
+            <button type="button" class="btn danger" onclick={() => deleteDish(start.dishId!)}>Wirklich aus Katalog löschen?</button>
+          {:else}
+            <button type="button" class="btn ghost-danger" onclick={() => (confirmDelete = true)}>Aus Katalog löschen</button>
+          {/if}
+        {/if}
+      </div>
     {/if}
   </form>
 </Sheet>

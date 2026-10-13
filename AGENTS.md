@@ -112,7 +112,7 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   den Text enthält. Der Vergleich läuft in JS (`toLocaleLowerCase("de")`), weil SQLite-`LIKE` nur ASCII ohne Beachtung der
   Schreibweise vergleicht; `q` und `ingredient` zusammen verlangen beides. Der Katalog fragt ab zwei Zeichen (250 ms Pause) nach und zeigt Gerichte, deren
   Titel **oder** Zutat passt; schlägt die Anfrage fehl, bleibt die Titelsuche. Gesucht wird nur im strukturierten Rezept, nicht in `source_text`.
-- **Kochmodus** (Stufe 7): Knopf „Kochen“ in der Liste öffnet `CookView.svelte`, eine Vollbild-Ansicht (kein Blatt) über der
+- **Kochmodus** (Stufe 7): Knopf „Kochen“ in der Kopfzeile der Liste öffnet `CookView.svelte`, eine Vollbild-Ansicht (kein Blatt) über der
   Shell mit **allen Einträgen der Liste** als Reiter (offene zuerst, fertige hinten, einmal beim Öffnen sortiert).
   Sie belegt einen History-Eintrag wie ein Blatt (`openCook` in `store.svelte.ts`, Sheet-Art `cook`; „Zurück“ verlässt den
   Kochmodus). Keine größere Schrift, kein Sammelreiter, keine Timer. `GET /api/plans/:id/cook` liefert beim Öffnen alle Rezepte
@@ -138,6 +138,10 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   und steht in der Liste unter dem Titel, auf zwei Zeilen gekürzt. Sie wird nicht in andere Listen übernommen und
   verschwindet mit dem Eintrag. Setzen/Löschen per `PATCH /api/entries/:id` (`note`: Text, `""` oder `null` löscht, fehlt =
   unverändert); das Blatt schickt das nur, wenn sich die Notiz geändert hat.
+- **Aufbau der Oberfläche:** Kopfzeile mit Listenname (öffnet das Zeitraum-Blatt) und „Kochen“, darunter eine Fortschrittszeile
+  mit dünnem Balken; „Liste | Katalog“ ist eine Tab-Leiste am unteren Rand (Schwebeknopf und Hinzufügen-Leiste sitzen darüber).
+  Das Bearbeiten-Blatt ist in Gruppen gegliedert (Titel/Link, Rezept-Karte, Notizen, Kategorien), „Speichern“ klebt unten,
+  Entfernen/Löschen stehen als leise Textknöpfe darunter. Im Kochmodus klebt „Fertig“ unten.
 - **Zeilen in der Liste bleiben schlank** (auf 360 px Breite ist es sonst zu eng): Checkbox, Vorschaubild, Titel mit Notiz und
   Kategorien darunter, am Ende nur ein Link-Symbol ohne Domainnamen. Keine weiteren Buttons in der Zeile, Bearbeiten läuft
   über Tippen auf den Titel. Lange Wörter im Titel brechen um (`overflow-wrap: anywhere`).

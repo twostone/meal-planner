@@ -80,7 +80,7 @@ const SHOTS: Shot[] = [
     name: "recipe",
     run: async (page) => {
       await pastaTitle(page).click();
-      await page.getByRole("button", { name: "Rezept", exact: true }).click();
+      await page.getByRole("button", { name: "Rezept Zutaten und Zubereitung" }).click();
     },
   },
   { name: "cook", run: (page) => page.getByRole("button", { name: "Kochen", exact: true }).click() },
