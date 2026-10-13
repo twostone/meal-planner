@@ -1,4 +1,4 @@
-name: Validate
+name: Integration
 
 on:
   push:
@@ -26,6 +26,8 @@ jobs:
       - uses: hacs/action@1ebf01c408f29afcb6406bd431bc98fd8cbb15aa # main, 2026-09
         with:
           category: integration
+          # Topics and description belong to the HACS mirror repo, not to this repository.
+          ignore: topics description
 
   test:
     runs-on: ubuntu-latest

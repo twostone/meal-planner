@@ -2,9 +2,11 @@
 
 <img src="custom_components/meal_planner/brand/icon.png" alt="Meal Planner" width="96" align="right">
 
-[![Validate](https://github.com/twostone/ha-meal-planner/actions/workflows/validate.yml/badge.svg)](https://github.com/twostone/ha-meal-planner/actions/workflows/validate.yml)
+[![Integration](https://github.com/twostone/meal-planner/actions/workflows/validate-integration.yml/badge.svg)](https://github.com/twostone/meal-planner/actions/workflows/validate-integration.yml)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
-[![License](https://img.shields.io/github/license/twostone/ha-meal-planner.svg)](LICENSE)
+[![License](https://img.shields.io/github/license/twostone/meal-planner.svg)](LICENSE)
+
+> Dieses Repository ist ein **Mirror nur für HACS**. Entwicklung, Issues und Pull Requests: [twostone/meal-planner](https://github.com/twostone/meal-planner).
 
 Zeigt die aktuelle Liste des [meal-planner](https://github.com/twostone/meal-planner)-Add-ons
 ("Essensplanung") als Sensoren und Lovelace-Karte im Home-Assistant-Dashboard an, zeigt auch die nächste

@@ -15,6 +15,16 @@
       "package-name": "meal-planner",
       "changelog-path": "CHANGELOG.md",
       "extra-files": [{ "type": "generic", "path": "config.yaml" }]
+    },
+    "custom_components/meal_planner": {
+      "release-type": "simple",
+      "component": "integration",
+      "include-component-in-tag": true,
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [
+        { "type": "json", "path": "manifest.json", "jsonpath": "$.version" },
+        "const.py"
+      ]
     }
   }
 }

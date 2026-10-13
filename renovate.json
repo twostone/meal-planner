@@ -17,6 +17,11 @@
       "groupName": "GitHub Actions"
     },
     {
+      "description": "Python-Abhängigkeiten der HA-Integration (uv.lock) in einem PR",
+      "matchManagers": ["pep621"],
+      "groupName": "Python-Abhängigkeiten"
+    },
+    {
       "description": "Node-Basisimage im Dockerfile",
       "matchManagers": ["dockerfile"],
       "groupName": "Docker-Basisimages"
