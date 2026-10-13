@@ -140,7 +140,8 @@ jobs:
         run: |
           git clone --depth 1 "git@github.com:${MIRROR_REPO}.git" /tmp/mirror
           cd /tmp/mirror
-          git rm -rq --ignore-unmatch custom_components .github/workflows
+          # Replace everything but .git so files removed here (or left over from the old repo) disappear there too.
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
           mkdir -p custom_components .github/workflows
           cp -r "$GITHUB_WORKSPACE/custom_components/meal_planner" custom_components/
           rm -rf custom_components/meal_planner/__pycache__ custom_components/meal_planner/CHANGELOG.md custom_components/meal_planner/version.txt
