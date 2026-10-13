@@ -350,13 +350,13 @@ raten (`async_update_reload_and_abort`, `HassioServiceInfo`, `StaticPathConfig`,
   in `config.yaml` nicht entfernen.
 - **Zwei Release-Ströme, Zuordnung nach Pfad:** Release Please ordnet Commits dem Paket zu, dessen Dateien sie ändern.
   `meal-planner/` = Add-on (Tag `vX.Y.Z`, Image), `custom_components/meal_planner/` = Integration (Tag
-  `integration-vX.Y.Z`, eigener Release-PR „chore(main): release integration x.y.z“, ändert `manifest.json`, `const.py` und
+  `integration-vX.Y.Z`, gemeinsamer Release-PR „chore: release main“ mit einem Abschnitt je Paket, ändert `manifest.json`, `const.py` und
   `custom_components/meal_planner/CHANGELOG.md`). Commit-Bereich `integration` für Integrationsänderungen
   (`feat(integration): …`). Nur Änderungen an `tests/`, `pyproject.toml` oder `uv.lock` lösen keinen Integrations-Release
   aus. `publish` läuft nur nach einem Add-on-Release. Release Please legt dabei `custom_components/meal_planner/version.txt`
   an (Eigenheit des Typs `simple`), sie wird nicht ins Mirror kopiert.
 - **HACS-Mirror:** HACS installiert aus dem neuesten GitHub-Release eines Repos, Add-on- und Integrations-Releases würden sich
-  dort mischen. Nach einem Integrations-Release kopiert der Job `mirror-integration` (`release.yml`) `custom_components/`,
+  dort mischen. Nach einem Integrations-Release ersetzt der Job `mirror-integration` (`release.yml`) den gesamten Inhalt des Mirrors (außer `.git`) durch `custom_components/`,
   `hacs.json`, `LICENSE`, `.github/integration-mirror/README.md` (wird dort zur `README.md`) und
   `.github/integration-mirror/workflows/` per Deploy-Key nach `twostone/ha-meal-planner`, pusht auf `main` und setzt dort den
   annotierten Tag `vX.Y.Z` (Nachricht = Release-Notes); `release-on-tag.yml` im Mirror macht daraus das Release. Das Mirror
