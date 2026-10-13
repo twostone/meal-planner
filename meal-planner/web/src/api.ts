@@ -1,4 +1,19 @@
-import type { Dish, DishInput, Entry, PlanDetail, AiStatus, CheckState, CookEntry, PlanSummary, Preview, Recipe, RecipeDraft } from "./types";
+import type {
+  Dish,
+  DishInput,
+  Entry,
+  PlanDetail,
+  AiStatus,
+  CheckState,
+  CookEntry,
+  PlanSummary,
+  Preview,
+  Recipe,
+  RecipeDraft,
+  SendResult,
+  ShoppingList,
+  ShoppingStatus,
+} from "./types";
 
 // All URLs are resolved against the document URL (never "/api/..."), so the app
 // keeps working under the HA ingress prefix.
@@ -9,6 +24,8 @@ const MESSAGES: Record<string, string> = {
   "plan overlaps": "Der Zeitraum überschneidet sich mit einer anderen Liste.",
   "ai failed": "Die Zutaten konnten nicht erkannt werden. Bitte von Hand eintragen.",
   busy: "Gerade beschäftigt. Bitte gleich noch einmal versuchen.",
+  "unknown list": "Diese Liste gibt es in Home Assistant nicht mehr. Bitte eine andere wählen.",
+  "todo failed": "Home Assistant ist gerade nicht erreichbar.",
 };
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -59,6 +76,18 @@ export const getChecks = (planId: number) => request<{ entries: CheckState[] }>(
 // Sets or removes a tick (never toggles, so two phones cannot undo each other).
 export const putCheck = (entryId: number, kind: "ingredient" | "step", idx: number, checked: boolean) =>
   request<unknown>("PUT", `api/entries/${entryId}/checks`, { kind, idx, checked });
+
+// Shopping list: which to-do lists Home Assistant has, the summed-up ingredients of the chosen entries (entries
+// undefined = the open ones), and sending the chosen items to a list.
+export const getShoppingStatus = () => request<ShoppingStatus>("GET", "api/shopping/status");
+export function getShopping(planId: number, entries: number[] | undefined, list: string | null) {
+  const q = new URLSearchParams();
+  if (entries) q.set("entries", entries.join(","));
+  if (list) q.set("list", list);
+  return request<ShoppingList>("GET", `api/plans/${planId}/shopping?${q}`);
+}
+export const sendShopping = (list: string, items: { name: string; spec: string | null }[]) =>
+  request<SendResult>("POST", "api/shopping/send", { list, items });
 
 export const listPlans = () => request<PlanSummary[]>("GET", "api/plans");
 export const getPlan = (id: number) => request<PlanDetail>("GET", `api/plans/${id}`);

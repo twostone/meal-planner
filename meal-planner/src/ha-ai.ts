@@ -1,11 +1,11 @@
 import type { RawDraft } from "./recipe-draft.ts";
 import { UNITS } from "./repo.ts";
 import { logger } from "./log.ts";
-import { clip, toJson } from "./text.ts";
+import { errorBody, isAbort, request, SUPERVISOR_CORE_URL } from "./ha-core.ts";
+import { toJson } from "./text.ts";
 
 const log = logger("ha-ai");
 
-export const SUPERVISOR_CORE_URL = "http://supervisor/core/api/";
 const STATUS_TIMEOUT_MS = 5000;
 export const GENERATE_TIMEOUT_MS = 30_000;
 // Title suggestions are a convenience next to the preview, so they get less time than a recipe draft.
@@ -69,9 +69,8 @@ const STRUCTURE = {
   instructions: { description: "Zubereitungsschritte, ein Schritt pro Zeile", required: false, selector: { text: {} } },
 };
 
-// Talks to Home Assistant's AI task (ai_task.generate_data) through the Supervisor's Core proxy
-// (needs `homeassistant_api: true`). Like ha-notify.ts, deliberately plain fetch and not fetchLimited: the
-// target is fixed in code and never user input. The recipe text goes to the LLM service configured in
+// Talks to Home Assistant's AI task (ai_task.generate_data) through the Supervisor's Core proxy (see ha-core.ts
+// for why this is plain fetch). The recipe text goes to the LLM service configured in
 // Home Assistant (possibly a cloud service). `token` null (dev, tests) -> disabled. `baseUrl` is for tests.
 export function createHaAi(
   token: string | null,
@@ -101,7 +100,7 @@ export function createHaAi(
         timeout,
       );
     } catch (e) {
-      if (e instanceof Error && e.name === "AbortError") {
+      if (isAbort(e)) {
         log.warn("task_timeout", { task: taskName, ms: ms(), limit_ms: timeout });
         throw new AiError("timeout");
       }
@@ -156,31 +155,4 @@ export function createHaAi(
       return (await run("meal_planner_title", instructions, TITLES_STRUCTURE, titlesTimeoutMs)).titles;
     },
   };
-}
-
-// The reason Home Assistant gives for an error ("Data should be valid JSON.", a validation message) for the log line,
-// or undefined when there is none (the field is then left out). At most 300 characters and never waiting longer than
-// 2 s: it is only a hint.
-async function errorBody(res: Response): Promise<string | undefined> {
-  try {
-    const wait = new Promise<string>((done) => setTimeout(() => done(""), 2000).unref());
-    const text = (await Promise.race([res.text(), wait])).replace(/\s+/g, " ").trim();
-    return text ? clip(text, 300) : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-async function request(path: string, init: RequestInit, token: string, baseUrl: string, timeoutMs: number): Promise<Response> {
-  const ctl = new AbortController();
-  const t = setTimeout(() => ctl.abort(), timeoutMs);
-  try {
-    return await fetch(`${baseUrl}${path}`, {
-      ...init,
-      headers: { ...(init.headers as Record<string, string> | undefined), Authorization: `Bearer ${token}` },
-      signal: ctl.signal,
-    });
-  } finally {
-    clearTimeout(t);
-  }
 }

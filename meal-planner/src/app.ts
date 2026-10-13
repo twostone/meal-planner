@@ -3,12 +3,14 @@ import { getConnInfo } from "@hono/node-server/conninfo";
 import { zValidator } from "@hono/zod-validator";
 import * as z from "zod";
 import { AiError, type RecipeAi } from "./ha-ai.ts";
+import { TodoError, type HaTodo } from "./ha-todo.ts";
 import type { HaEventInput, HaUser } from "./ha-notify.ts";
 import { IMAGE_NAME, type ImageStore } from "./images.ts";
 import { logger } from "./log.ts";
 import type { PreviewResult } from "./preview.ts";
 import { buildDraft, DraftError } from "./recipe-draft.ts";
 import { ConflictError, NotFoundError, UNITS, type Entry, type Repo } from "./repo.ts";
+import { buildShoppingList, nameKey } from "./shopping.ts";
 import { cleanAiTitles } from "./title-suggest.ts";
 
 const title = z.string().trim().min(1).max(200);
@@ -94,6 +96,14 @@ const titleSuggestBody = z
   .object({ title: z.string().trim().max(200).optional(), text: z.string().max(10000).optional(), lang: z.string().max(35).optional() })
   .refine((v) => !!(v.title || v.text?.trim()), { message: "title or text needed" });
 const checkBody = z.object({ kind: z.enum(["ingredient", "step"]), idx: z.number().int().min(0).max(1000), checked: z.boolean() });
+// A Home Assistant to-do entity id ("todo.essen"). Whether it exists is checked against Home Assistant before sending.
+const todoEntity = z.string().regex(/^todo\.[a-z0-9_]+$/);
+// entries: comma-separated entry ids of the plan; missing = all open entries, "" = none.
+const shoppingQuery = z.object({ entries: z.string().regex(/^(\d+(,\d+)*)?$/).optional(), list: todoEntity.optional() });
+const shoppingSend = z.object({
+  list: todoEntity,
+  items: z.array(z.object({ name: z.string().trim().min(1).max(80), spec: z.string().trim().max(200).nullable() })).min(1).max(200),
+});
 const entryBody = z.union([z.object({ dish_id: id }), dishBody]);
 // note: only for this entry (dish in one plan); "" or null clears it
 const entryPatch = z.object({
@@ -116,6 +126,8 @@ export type AppOptions = {
   // Splits recipe text into ingredients and steps via Home Assistant's AI task (see ha-ai.ts). Optional:
   // without it the recipe buttons stay hidden and the status says "disabled".
   ai?: RecipeAi;
+  // Sends the shopping list to a to-do list in Home Assistant, e.g. Bring (see ha-todo.ts). Optional like `ai`.
+  todo?: HaTodo;
 };
 
 const log = logger("app");
@@ -266,6 +278,72 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
         throw e;
       } finally {
         suggesting--;
+      }
+    });
+  }
+
+  app.get("/api/shopping/status", async (c) => {
+    if (!opts.todo) return c.json({ lists: [], selected: null, reason: "disabled" });
+    const status = await opts.todo.status();
+    const remembered = repo.getSetting("shopping_list_entity");
+    return c.json({ ...status, selected: status.lists.some((l) => l.entity_id === remembered) ? remembered : null });
+  });
+  if (opts.todo) {
+    const todo = opts.todo;
+    // The shopping list of a plan: the chosen entries (default: the open ones), their ingredients summed up per name,
+    // and which items are already on the to-do list. Reading the to-do list may fail: the list is shown anyway.
+    app.get("/api/plans/:id/shopping", zValidator("param", z.object({ id })), zValidator("query", shoppingQuery), async (c) => {
+      const { entries: chosen, list } = c.req.valid("query");
+      const ids = chosen === undefined ? null : new Set(chosen.split(",").filter(Boolean).map(Number));
+      const entries = repo.getPlanIngredients(c.req.valid("param").id).map((e) => ({ ...e, selected: ids ? ids.has(e.entry_id) : !e.done }));
+      const items = buildShoppingList(entries.filter((e) => e.selected));
+      let onList = new Set<string>();
+      let listError = false;
+      if (list && items.length) {
+        try {
+          onList = new Set((await todo.openItems(list)).map(nameKey));
+        } catch (e) {
+          if (!(e instanceof TodoError)) throw e;
+          listError = true;
+        }
+      }
+      return c.json({
+        entries: entries.map((e) => ({ entry_id: e.entry_id, title: e.title, done: e.done, selected: e.selected, has_recipe: e.ingredients.length > 0 })),
+        items: items.map((i) => ({ ...i, on_list: onList.has(nameKey(i.name)) })),
+        list_error: listError,
+      });
+    });
+
+    // Adds the chosen items one by one (the todo service takes one item per call) and stops at the first failure: the
+    // rest would most likely fail the same way. Nothing is remembered about what was sent, only which list was used.
+    let sending = false;
+    app.post("/api/shopping/send", zValidator("json", shoppingSend), async (c) => {
+      const body = c.req.valid("json");
+      if (sending) return c.json({ error: "busy" }, 429);
+      sending = true;
+      const t0 = performance.now();
+      try {
+        const status = await todo.status();
+        const list = status.lists.find((l) => l.entity_id === body.list);
+        if (!list) return status.reason === "unreachable" ? c.json({ error: "todo failed", reason: "unreachable" }, 502) : c.json({ error: "unknown list" }, 400);
+        repo.setSetting("shopping_list_entity", list.entity_id);
+        let added = 0;
+        let reason: string | null = null;
+        for (const item of body.items) {
+          try {
+            await todo.add(list, item.name, item.spec || null);
+            added++;
+          } catch (e) {
+            if (!(e instanceof TodoError)) throw e;
+            reason = e.reason;
+            break;
+          }
+        }
+        const ms = Math.round(performance.now() - t0);
+        (reason ? log.warn : log.info)("shopping_sent", { list: list.entity_id, items: body.items.length, added, reason: reason ?? undefined, ms });
+        return c.json({ added, failed: body.items.length - added, reason });
+      } finally {
+        sending = false;
       }
     });
   }

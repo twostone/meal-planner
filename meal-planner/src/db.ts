@@ -84,6 +84,8 @@ const MIGRATIONS = [
     idx INTEGER NOT NULL CHECK (idx >= 0),
     PRIMARY KEY (entry_id, kind, idx)
   ) STRICT;`,
+  // v9: small settings of the household, e.g. the to-do list the shopping list was last sent to
+  "CREATE TABLE setting (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;",
 ];
 
 function migrate(db: DatabaseSync): void {
