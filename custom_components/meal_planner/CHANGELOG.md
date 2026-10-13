@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/twostone/meal-planner/compare/integration-v1.3.0...integration-v1.3.1) (2026-10-13)
+
+
+### Behoben
+
+* **integration:** Dokumentations- und Issue-Link auf das gemeinsame Repository ([87f3277](https://github.com/twostone/meal-planner/commit/87f327735cfbb2a7c8755fb0d079fbfa1a8da0ea))
+
 ## [1.3.0](https://github.com/twostone/ha-meal-planner/compare/v1.2.2...v1.3.0) (2026-10-02)
 
 
