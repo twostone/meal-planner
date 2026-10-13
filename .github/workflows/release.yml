@@ -8,8 +8,10 @@ permissions:
   contents: read
 
 jobs:
-  # Opens/updates the release PR from the conventional commits. Merging that PR bumps the version
-  # (config.yaml, package.json), writes CHANGELOG.md, tags vX.Y.Z and creates the GitHub release.
+  # Opens/updates one release PR per package from the conventional commits (by changed path):
+  # the add-on (meal-planner/, tag vX.Y.Z) and the HA integration (custom_components/meal_planner/,
+  # tag integration-vX.Y.Z). Merging a PR bumps the version, writes the CHANGELOG, tags and creates
+  # the GitHub release.
   release-please:
     name: Release Please
     runs-on: ubuntu-latest
@@ -18,7 +20,8 @@ jobs:
       pull-requests: write
       issues: write
     outputs:
-      release_created: ${{ steps.rp.outputs.releases_created }}
+      addon_released: ${{ steps.rp.outputs['meal-planner--release_created'] }}
+      integration_released: ${{ steps.rp.outputs['custom_components/meal_planner--release_created'] }}
     steps:
       - id: rp
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
@@ -27,11 +30,11 @@ jobs:
           manifest-file: .release-please-manifest.json
 
   # Resources created with GITHUB_TOKEN do not trigger other workflows, so tests and the image build
-  # run here, in the same workflow run, and only when a release was just created.
+  # run here, in the same workflow run, and only when an add-on release was just created.
   ci:
     name: CI
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    if: ${{ needs.release-please.outputs.addon_released == 'true' }}
     uses: ./.github/workflows/ci.yml
     permissions:
       contents: read
@@ -39,7 +42,7 @@ jobs:
   publish:
     name: Image veröffentlichen
     needs: [release-please, ci]
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    if: ${{ needs.release-please.outputs.addon_released == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -99,3 +102,73 @@ jobs:
           provenance: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # HACS installs from the latest GitHub release of a repository, so add-on and integration releases
+  # cannot share one repo there. The released component is copied into the mirror repo, which gets a
+  # matching tag `vX.Y.Z` (its release-on-tag.yml turns that into a release). The mirror carries no
+  # hand-made changes.
+  mirror-integration:
+    name: HACS-Mirror aktualisieren
+    needs: release-please
+    if: ${{ needs.release-please.outputs.integration_released == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: integration-mirror
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    env:
+      MIRROR_REPO: twostone/ha-meal-planner
+      GIT_SSH_COMMAND: ssh -i ~/.ssh/mirror_key -o IdentitiesOnly=yes
+    steps:
+      - name: Checkout (Release-Commit)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Deploy-Key einrichten
+        env:
+          DEPLOY_KEY: ${{ secrets.INTEGRATION_MIRROR_DEPLOY_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf -- "%s\n" "$DEPLOY_KEY" > ~/.ssh/mirror_key
+          chmod 600 ~/.ssh/mirror_key
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Mirror klonen und Stand kopieren
+        run: |
+          git clone --depth 1 "git@github.com:${MIRROR_REPO}.git" /tmp/mirror
+          cd /tmp/mirror
+          git rm -rq --ignore-unmatch custom_components .github/workflows
+          mkdir -p custom_components .github/workflows
+          cp -r "$GITHUB_WORKSPACE/custom_components/meal_planner" custom_components/
+          rm -rf custom_components/meal_planner/__pycache__ custom_components/meal_planner/CHANGELOG.md custom_components/meal_planner/version.txt
+          cp "$GITHUB_WORKSPACE/hacs.json" "$GITHUB_WORKSPACE/LICENSE" .
+          cp "$GITHUB_WORKSPACE/.github/integration-mirror/README.md" README.md
+          cp "$GITHUB_WORKSPACE/.github/integration-mirror/workflows/"*.yml .github/workflows/
+
+      - name: Commit, Push und Tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=$(python3 -c "import json; print(json.load(open('custom_components/meal_planner/manifest.json'))['version'])")
+          # Idempotent: a re-run after a successful tag must not fail.
+          if [ -n "$(git -C /tmp/mirror ls-remote --tags origin "refs/tags/v${version}")" ]; then
+            echo "mirror tag v${version} already exists"
+            exit 0
+          fi
+          gh release view "integration-v${version}" --json body --jq .body > /tmp/notes.md
+          cd /tmp/mirror
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "mirror content already current"
+          else
+            git commit -m "Integration ${version} aus ${GITHUB_REPOSITORY}@${GITHUB_SHA}"
+            git push origin HEAD:main
+          fi
+          # Annotated tag; the message becomes the release notes. --cleanup=verbatim keeps lines starting with "#".
+          git tag -a "v${version}" -F /tmp/notes.md --cleanup=verbatim
+          git push origin "v${version}"

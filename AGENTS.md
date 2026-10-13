@@ -19,6 +19,10 @@ AGENTS.md                diese Datei
 release-please-config.json, .release-please-manifest.json   Release-Automatik (Version, Changelog)
 .github/workflows/       ci.yml (Tests, Docker-Build, Smoke-Test), release.yml (Release Please, Image)
 renovate.json            Renovate: hält Actions, npm und Docker-Basisimage aktuell (gruppierte PRs)
+custom_components/meal_planner/   HA-Integration + Lovelace-Karte (Details unter „HA-Integration und Lovelace-Karte“)
+tests/, pyproject.toml, uv.lock   Python-Tests der Integration (uv)
+hacs.json                         HACS-Metadaten, wird ins Mirror-Repo kopiert
+.github/integration-mirror/       README und Workflows, die ins Mirror-Repo kopiert werden
 meal-planner/            das Add-on (Docker-Build-Kontext)
   config.yaml            Add-on-Konfiguration (Version pflegt Release Please)
   icon.png               Icon im App-Store (128×128 PNG, aus web/public/favicon.svg erzeugt)
@@ -60,7 +64,8 @@ DB_PATH=./data/dev.db PORT=8099 npm start
 npm run dev:web                   # Vite-Dev-Server, /api geht per Proxy an :8099
 ```
 
-Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (genau das prüft auch die CI).
+Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (genau das prüft auch die CI). Bei Änderungen an
+`custom_components/` zusätzlich im Repo-Root `uv run pytest tests -q`.
 
 ## Architektur und bewusste Entscheidungen
 
@@ -186,7 +191,7 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   Metadaten. Vor einem Einbau am echten Gerät testen und die Bedingungen erneut lesen.
 - **Keine externen Anfragen aus dem Browser:** Schriften sind lokal eingebunden (`@fontsource-variable`), Bilder kommen
   vom eigenen Server. Extern ruft nur der Server ab, und nur Links, die der Nutzer eingegeben hat.
-- **Home-Assistant-Anbindung** (für die HA-Integration/Lovelace-Karte, separates Repo, per HACS installierbar; zwei Kanäle):
+- **Home-Assistant-Anbindung** (für die HA-Integration/Lovelace-Karte im selben Repo, per HACS über das Mirror-Repo installierbar; zwei Kanäle):
   - **Daten (Abruf):** Ein zweiter Listener (`HA_API_PORT`, im Dockerfile 8100, `ha-api.ts`) hat genau eine Route,
     `GET /ha/state` mit Bearer-Token, Antwort `{current, next, generated_at}` (Form `HaPlan` mit `title`, `ha-state.ts`).
     „Aktuell“ ist die Liste, die heute enthält, sonst `null` (`repo.getPlanOn`), „nächste“ die früheste mit Start nach heute
@@ -204,6 +209,106 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   - **Einrichtung:** Beim Start postet `ha-discovery.ts` `{service: "meal_planner", config: {host, port, token}}` an
     `http://supervisor/discovery` (`discovery: [meal_planner]`), mit Wiederholung, nie fatal. Der Dienstname muss der
     Domain der Integration entsprechen. Ohne `SUPERVISOR_TOKEN` (Entwicklung, Tests) sind Events und Discovery aus.
+
+## HA-Integration und Lovelace-Karte
+
+Begleitende Integration (`custom_components/meal_planner/`, Domain `meal_planner`) für das Add-on: bildet die aktuelle und
+nächste Liste als Entitäten ab, beschreibt die Events im Logbuch und liefert die Lovelace-Karte mit aus. Sie lebt im selben
+Repo, damit Add-on-Seite (`ha-api.ts`, `ha-notify.ts`, `ha-discovery.ts`) und Integration in einem PR geändert werden. Für
+HACS wird sie bei jedem Integrations-Release in das Mirror-Repo [twostone/ha-meal-planner](https://github.com/twostone/ha-meal-planner)
+kopiert (siehe „CI und Releases“); dort nie von Hand ändern, Issues und PRs gehören hierher. Python-Werkzeuge liegen im
+Repo-Root (`pyproject.toml`, `uv.lock`, `tests/`), `uv run pytest tests -q` prüft die Integration.
+
+### Architektur (Integration)
+
+- **Abruf mit Push-Anstoß (`local_polling`):** Das Add-on bietet auf einem zweiten Port (8100) genau eine Route,
+  `GET /ha/state` mit Bearer-Token, Antwort `{current, next, generated_at}`. `coordinator.py` holt sie alle
+  5 Minuten (`UPDATE_INTERVAL`, nur Sicherheitsnetz für Datumswechsel und Neustarts) und sofort, wenn das Add-on
+  eines seiner Bus-Events feuert. „Aktuell“/„nächste“ bestimmt das Add-on bei jedem Abruf aus dem Datum. Diese
+  Integration schreibt nie ins Add-on zurück. Die Add-on-Seite (Token, Events, Discovery, warum `fetch`
+  statt `fetchLimited`) steht oben unter „Home-Assistant-Anbindung“.
+- **Einrichtung per Supervisor-Discovery:** Das Add-on meldet `{host, port, token}` unter dem Dienstnamen
+  `meal_planner` (= Domain dieser Integration, das ist Voraussetzung: Core startet den Flow mit `service` als
+  Handler). `async_step_hassio` fragt nur nach Bestätigung und speichert zusätzlich `discovery_info.slug` (Slug der App, nicht Teil
+  der Add-on-Payload): daraus entsteht der Sidebar-Pfad `/<slug>` der App als Sensor-Attribut `app_url` (für den
+  „App öffnen“-Link der Karte) und als `configuration_url` (`homeassistant://<slug>`) des Geräts. Gibt es schon einen Eintrag (auch einen manuell
+  angelegten), wird er aktualisiert (Host, Port, Token, `unique_id` = neue Discovery-UUID) statt einen zweiten
+  anzulegen; `reload_even_if_entry_is_unchanged=False`, weil die Meldung bei jedem Start des Add-ons kommt.
+  Fallback: Schritt `user` mit Host, Port, Token und Verbindungstest. Ein abgelehntes Token (401) startet Reauth.
+- **Events:** Das Add-on feuert sie über die Core-API des Supervisors, diese Integration feuert nichts selbst.
+  `meal_planner_plan_created|plan_updated|entry_added|entry_removed|entry_done|entry_undone` (`EVENT_TYPES` in
+  `const.py`, jeder löst einen sofortigen Refresh aus). Daten: `plan`, `previous` (nur `plan_updated`: Name und
+  Zeitraum davor, `plan` trägt dort die neuen Werte samt `title`), `entry` (nur bei den `entry_*`-Events),
+  `user {id, name, display_name}` oder `null`. `logbook.py` beschreibt sie
+  („Anna hat „Pasta“ abgehakt“, Rückfall auf Benutzername, dann „Jemand“; bei `plan_updated` sagt es, ob Name, Zeitraum
+  oder beides geändert wurde, mit alten und neuen Daten). Ein verlorenes Event wird nicht nachgeholt, der Zustand
+  kommt beim nächsten Abruf.
+- **Listenname:** Das Attribut `title` der beiden Listen-Sensoren kommt aus `/ha/state` (`plan.title`, `None` ohne Namen).
+  Ein älteres Add-on sendet das Feld nicht, deshalb `plan.get("title")`. Die Karte zeigt den Namen vor dem Zeitraum.
+- **Karte wird als Lovelace-Resource geladen (Storage-Modus), nicht nur per `add_extra_js_url`:** Letzteres
+  lädt parallel zum Dashboard; die Companion App rendert die Karte dann teils vor der Definition von
+  `meal-planner-card` („Konfigurationsfehler“ nach jedem Neuladen, am echten System bestätigt: mit manueller
+  Resource weg). `__init__.py` legt die Resource selbst an bzw. zieht eine bestehende (auch manuelle) auf die
+  aktuelle `?v=` nach. Im YAML-Modus (Resources nutzergepflegt) bleibt `add_extra_js_url` als Rückfall.
+- **Karte ohne Bilder, bewusst:** `entry.image` ist nur ein Dateiname, den das Add-on hinter seiner
+  Ingress-only-API ausliefert (`api/images/<name>`). Der Browser, der die Lovelace-Karte zeigt, läuft
+  im HA-Frontend, nicht im Ingress-Iframe des Add-ons, und kann diese API nicht erreichen. Ein Weg
+  über die `hassio`-Ingress-Session wäre denkbar, ist aber ungeklärt (Supervisor-Token, den eine
+  gewöhnliche Custom-Integration nicht hat) – siehe Karte vorerst ohne Bilder.
+- **Bewusst nicht gebaut:** Bild-Anzeige in der Karte (s. o.), Schreibzugriff aus HA zurück ins
+  Add-on (abhaken etc. – es gibt keinen authentifizierten Schreib-Endpunkt am Add-on), mehrere Instanzen
+  (ein Haushalt, ein Add-on, eine Integration), Migration alter Webhook-Einträge (nie am echten System betrieben).
+- **Nicht am echten System geprüft:** Discovery, Erreichbarkeit des Add-on-Ports von Core aus und der Event-Weg
+  (siehe `docs/umbauplan-ha-integration.md`, Phase 0).
+
+### Layout (Integration)
+
+```
+custom_components/meal_planner/
+  __init__.py       Einrichtung, Event-Anstoß für den Coordinator, Karten-Resource-Registrierung
+  api.py            Abruf von /ha/state (CannotConnect, InvalidAuth)
+  coordinator.py    DataUpdateCoordinator (Intervall + Refresh bei Events)
+  config_flow.py    Discovery (hassio), manuell (user), Reauth
+  logbook.py        Beschreibung der Events im Logbuch
+  const.py
+  sensor.py         Vier Entitäten (aktuelle/nächste Liste, offen, erledigt), CoordinatorEntity
+  manifest.json
+  strings.json / translations/
+  www/meal-planner-card.js   Lovelace-Karte (reine Anzeige) mit visuellem Editor und Picker-Vorschau
+  brand/              icon.png (256×256) und icon@2x.png (512×512): Icon der Integration. Quelle ist
+                      meal-planner/web/public/favicon.svg, die PNGs sind daraus abgeleitet. HA ab 2026.3
+                      nutzt sie lokal, die HACS-Validierung („brands") verlangt sie
+tests/                pytest + pytest-homeassistant-custom-component (im Repo-Root, nicht unter meal-planner/)
+```
+
+### Entwickeln und Testen
+
+```
+uv run pytest tests -q
+```
+
+Stolpersteine, gegen die die Tests schon mal gelaufen sind (bei Änderungen im Hinterkopf behalten):
+
+- `pyproject.toml` braucht `[tool.pytest.ini_options] asyncio_mode = "auto"` und
+  `pythonpath = ["."]` – ohne Letzteres findet ein bloßes `pytest` (anders als `python -m pytest`)
+  `custom_components` in CI nicht.
+- Komponenten, die `__init__.py` per `hass.http` nutzt, müssen in `manifest.json` unter `dependencies`
+  stehen (`http`), sonst registriert HA die Route in Produktion nie – hassfest prüft das.
+- `manifest.json`-Schlüssel müssen alphabetisch sortiert sein (nach `domain`, `name`), sonst
+  schlägt hassfest fehl.
+- HACS verlangt am Repository gesetzte Topics und entweder einen Eintrag in
+  [home-assistant/brands](https://github.com/home-assistant/brands) oder lokale Assets unter
+  `custom_components/meal_planner/brand/icon.png`.
+- `add_extra_js_url`/`hass.http.async_register_static_paths` in Tests: `hass`-Fixture lädt weder
+  `http` noch `frontend` von selbst. `http` kommt inzwischen über die deklarierte Dependency mit;
+  für `frontend` reicht es, `hass.data[DATA_EXTRA_MODULE_URL]` direkt zu seeden, statt die (schwere,
+  separate) `home-assistant-frontend`-Paketabhängigkeit für Tests zu installieren.
+
+### APIs prüfen
+
+Wie beim Add-on: HA-APIs vor Nutzung gegen aktuelle Doku/Quellcode prüfen, nicht aus dem Training
+raten (`async_update_reload_and_abort`, `HassioServiceInfo`, `StaticPathConfig`, `add_extra_js_url`, Entity-Naming/
+`has_entity_name` ändern sich zwischen HA-Versionen).
 
 ## Sicherheit
 
@@ -229,7 +334,9 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   nur `GET /ha/state`, Token-Vergleich zeitkonstant, kein `ports:`-Mapping (nur im Supervisor-Netz erreichbar).
 - **Das Repository ist öffentlich:** keine Zugangsdaten, Tokens, privaten Hostnamen oder Adressen aus dem Heimnetz
   einchecken (auch nicht in Tests, Kommentaren oder Beispielen).
-- Workflows: keine eigenen Secrets. Veröffentlicht wird nur mit dem `GITHUB_TOKEN` im Job `publish` nach einem Release.
+- Workflows: keine eigenen Secrets, mit einer Ausnahme: `INTEGRATION_MIRROR_DEPLOY_KEY` (Deploy-Key mit Schreibrecht nur auf
+  `twostone/ha-meal-planner`), nur im Job `mirror-integration`. Veröffentlicht wird sonst nur mit dem `GITHUB_TOKEN`
+  (Job `publish` nach einem Add-on-Release).
 
 ## CI und Releases
 
@@ -241,18 +348,34 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   `package.json`, `package-lock.json` und `CHANGELOG.md`. **Mergen des PR ist der Release:** Tag `vX.Y.Z`, GitHub-Release,
   dann im selben Workflow-Lauf Tests und Bau des Images. Version, Tag und Changelog nie von Hand ändern, die Annotation
   in `config.yaml` nicht entfernen.
+- **Zwei Release-Ströme, Zuordnung nach Pfad:** Release Please ordnet Commits dem Paket zu, dessen Dateien sie ändern.
+  `meal-planner/` = Add-on (Tag `vX.Y.Z`, Image), `custom_components/meal_planner/` = Integration (Tag
+  `integration-vX.Y.Z`, eigener Release-PR „chore(main): release integration x.y.z“, ändert `manifest.json`, `const.py` und
+  `custom_components/meal_planner/CHANGELOG.md`). Commit-Bereich `integration` für Integrationsänderungen
+  (`feat(integration): …`). Nur Änderungen an `tests/`, `pyproject.toml` oder `uv.lock` lösen keinen Integrations-Release
+  aus. `publish` läuft nur nach einem Add-on-Release. Release Please legt dabei `custom_components/meal_planner/version.txt`
+  an (Eigenheit des Typs `simple`), sie wird nicht ins Mirror kopiert.
+- **HACS-Mirror:** HACS installiert aus dem neuesten GitHub-Release eines Repos, Add-on- und Integrations-Releases würden sich
+  dort mischen. Nach einem Integrations-Release kopiert der Job `mirror-integration` (`release.yml`) `custom_components/`,
+  `hacs.json`, `LICENSE`, `.github/integration-mirror/README.md` (wird dort zur `README.md`) und
+  `.github/integration-mirror/workflows/` per Deploy-Key nach `twostone/ha-meal-planner`, pusht auf `main` und setzt dort den
+  annotierten Tag `vX.Y.Z` (Nachricht = Release-Notes); `release-on-tag.yml` im Mirror macht daraus das Release. Das Mirror
+  bekommt nie Handarbeit. Neu einrichten: Deploy-Key (Schreibrecht) im Mirror, privater Schlüssel als Secret
+  `INTEGRATION_MIRROR_DEPLOY_KEY` hier.
 - **Warum alles in einem Workflow:** Was Release Please mit dem eingebauten `GITHUB_TOKEN` erzeugt (PR, Tag, Release),
   löst keine weiteren Workflows aus. Deshalb rufen `ci` und `publish` in `release.yml` erst nach einem Release an.
   Der Release-PR selbst bekommt dadurch keine automatischen Checks. Die Tests laufen auf `main` und beim Release.
   Release Please baut den Branch des Release-PR nur neu, wenn sich der Release-Inhalt ändert (`chore`/`docs` auf `main`
   zählen nicht). Ist die CI dort wegen eines inzwischen behobenen Fehlers rot, den Branch mit `main` aktualisieren.
+- **Integration prüfen** (`validate-integration.yml`): hassfest, HACS-Validierung (ohne Topics/Beschreibung, die gehören zum
+  Mirror) und `uv run --locked pytest tests -q`.
 - **CI** (`ci.yml`, bei Push auf `main`, bei Pull Requests und vor jedem Release): `npm ci`, `tsc`, `svelte-check`,
   Tests, Build. Dazu ein Docker-Build für amd64 mit **Smoke-Test** (Frontend und API antworten, SQLite funktioniert,
   ohne Ingress-Sperre; mit Standard-Konfiguration antwortet der Server Fremden mit 403) und ein Build für amd64 + arm64.
 - **Image:** `ghcr.io/twostone/meal-planner:<version>` und `:latest`, Tag = Version aus `config.yaml`. Das Paket muss
   **öffentlich** sein (Package settings → Change visibility), sonst kann Home Assistant es nicht ohne Zugangsdaten laden.
   Provenance und SBOM sind aus (KISS).
-- **Renovate** (`renovate.json`): npm (ohne Major), GitHub Actions und Docker-Basisimages je in einem gruppierten PR, Majors
+- **Renovate** (`renovate.json`): npm (ohne Major), Python (`uv.lock`), GitHub Actions und Docker-Basisimages je in einem gruppierten PR, Majors
   einzeln. TypeScript bleibt per `allowedVersions: "<7"` unter 7 (siehe „Regeln beim Ändern“). Config prüfen mit
   `npx --package renovate -- renovate-config-validator renovate.json`.
 - **Actions nur mit vollem Commit-SHA pinnen** (Kommentar mit der Version), Renovate aktualisiert sie (`helpers:pinGitHubActionDigests`, alle Actions in einem PR).
@@ -351,9 +474,9 @@ Rezept-Text einfügen und per KI zerlegen sowie Portionen umrechnen (beides am 1
   festgehalten.
 - Voraussetzung im Repository (gesetzt): Einstellungen → Actions → General → „Allow GitHub Actions to create and approve pull requests“.
 - Kein Dunkelmodus (HA-Theme dunkel, App bleibt hell).
-- Die HA-Integration + Lovelace-Karte lebt in [twostone/ha-meal-planner](https://github.com/twostone/ha-meal-planner)
-  (eigenes Repo, per HACS installierbar) und ist nicht von diesem Repo/dieser CI abgedeckt. Die Anbindung (Discovery,
-  zweiter Port, Events über den Supervisor) ist hier nur gegen lokale Testserver getestet, **nicht am echten System**:
+- Die HA-Integration + Lovelace-Karte lebt in `custom_components/meal_planner/` (HACS-Mirror: [twostone/ha-meal-planner](https://github.com/twostone/ha-meal-planner)).
+  Die Anbindung (Discovery,
+  zweiter Port, Events über den Supervisor) ist nur gegen lokale Testserver getestet, **nicht am echten System**:
   offen sind Hostname und Erreichbarkeit des Ports, der Event-Weg, die Zeitzone im Container und die Nutzer-Header
   (siehe `docs/umbauplan-ha-integration.md`, Phase 0). Die Lovelace-Karte zeigt bewusst keine Bilder (die
   Vorschaubilder liegen hinter der Ingress-only-API des Add-ons, für das HA-Frontend unerreichbar).

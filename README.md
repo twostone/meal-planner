@@ -54,8 +54,9 @@ Sobald eine neue Version veröffentlicht ist, zeigt der App-Store ein Update an.
 
 Die aktuelle Liste lässt sich zusätzlich im Home-Assistant-Dashboard anzeigen (Entitäten + Lovelace-Karte) und für
 Automatisierungen nutzen (Events bei neuer Liste sowie bei hinzugefügten, entfernten und abgehakten Gerichten, jeweils mit
-dem auslösenden Nutzer): siehe [twostone/ha-meal-planner](https://github.com/twostone/ha-meal-planner), per HACS
-installierbar. Die Integration wird von der App per Discovery gefunden; die App bietet dafür einen zweiten, nur lesenden
+dem auslösenden Nutzer): per HACS installierbar: in HACS das Repository `https://github.com/twostone/ha-meal-planner` als
+benutzerdefiniertes Repository (Kategorie „Integration“) hinzufügen, siehe dessen README. Der Quellcode der Integration liegt
+in diesem Repository unter `custom_components/meal_planner/` (`ha-meal-planner` ist nur ein automatisch befülltes Mirror für HACS). Die Integration wird von der App per Discovery gefunden; die App bietet dafür einen zweiten, nur lesenden
 Port (8100, Token, nur im Supervisor-Netz erreichbar). Wer das Token erneuern will, löscht `/data/ha-token` und startet die
 App neu. In Automationen die Details aus den Eventdaten lesen, nicht aus den Sensoren: sie ziehen einen Moment nach.
 
@@ -109,6 +110,8 @@ npm run build       # Frontend nach dist/
 DB_PATH=./data/dev.db PORT=8099 npm start
 ```
 
+Die Integration (`custom_components/meal_planner/`) hat ihre Python-Tests im Repo-Root: `uv run pytest tests -q`.
+
 Lokal ist die Ingress-Sperre aus, solange `INGRESS_ONLY_IP` nicht gesetzt ist. Architektur, Regeln und bewusste
 Entscheidungen stehen in [`AGENTS.md`](AGENTS.md).
 
@@ -118,7 +121,8 @@ Entscheidungen stehen in [`AGENTS.md`](AGENTS.md).
 keinen Release aus). [Release Please](https://github.com/googleapis/release-please) sammelt sie in einem Release-PR mit
 neuer Version und Changelog. **Den PR zu mergen ist der Release:** GitHub taggt `vX.Y.Z`, testet, baut das Image
 (amd64 und arm64) und veröffentlicht es als `ghcr.io/twostone/meal-planner:<version>`. Die Version nie von Hand ändern.
-Nach dem Merge erst abwarten, bis der Workflow „Release“ grün ist: Erst dann existiert das Image, das Home Assistant
+Die Integration hat einen eigenen Release-PR (Tag `integration-vX.Y.Z`, Commit-Bereich `integration`); nach dessen Merge
+kopiert die CI sie ins HACS-Mirror `twostone/ha-meal-planner`. Nach dem Merge erst abwarten, bis der Workflow „Release“ grün ist: Erst dann existiert das Image, das Home Assistant
 für die neue Version lädt.
 
 ## Lizenz
