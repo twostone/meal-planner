@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.14.0](https://github.com/twostone/meal-planner/compare/v0.13.0...v0.14.0) (2026-10-13)
+
+
+### Neu
+
+* **web:** Einkaufsliste aus der Liste an Bring senden ([45a4737](https://github.com/twostone/meal-planner/commit/45a4737da3517783b81da02bc3a08c7e7822d8bc))
+* **web:** Oberfläche übersichtlicher gegliedert ([0696110](https://github.com/twostone/meal-planner/commit/0696110a42315a6978ba1e3cc484fd50f18a7c48))
+
 ## [0.13.0](https://github.com/twostone/meal-planner/compare/v0.12.0...v0.13.0) (2026-10-11)
 
 
