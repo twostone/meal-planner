@@ -81,6 +81,9 @@ export type CookEntry = {
 export const stepLines = (instructions: string | null): string[] =>
   (instructions ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
 
+// shopping_list_entity: the Home Assistant to-do list the shopping list was last sent to (preselected next time).
+export type SettingKey = "shopping_list_entity";
+
 export class NotFoundError extends Error {}
 export class ConflictError extends Error {}
 
@@ -370,6 +373,25 @@ export function createRepo(db: DatabaseSync) {
         },
       }));
       return { ...p, entries };
+    },
+
+    // The ingredients of every entry of a plan in list order (for the shopping list). Entries without a recipe have none.
+    getPlanIngredients(planId: number): { entry_id: number; title: string; done: boolean; ingredients: Pick<Ingredient, "amount" | "amount_max" | "unit" | "name">[] }[] {
+      const entries = self.getPlan(planId).entries;
+      const stmt = db.prepare("SELECT amount, amount_max, unit, name FROM dish_ingredient WHERE dish_id = ? ORDER BY pos");
+      return entries.map((e) => ({
+        entry_id: e.id,
+        title: e.dish.title,
+        done: e.done,
+        ingredients: stmt.all(e.dish_id) as Pick<Ingredient, "amount" | "amount_max" | "unit" | "name">[],
+      }));
+    },
+
+    getSetting(key: SettingKey): string | null {
+      return one<{ value: string }>("SELECT value FROM setting WHERE key = ?", key)?.value ?? null;
+    },
+    setSetting(key: SettingKey, value: string): void {
+      db.prepare("INSERT INTO setting (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value").run(key, value);
     },
 
     // Everything cook mode needs in one go: the entries of the plan in list order, each with its recipe and ticks.

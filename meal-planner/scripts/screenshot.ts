@@ -1,6 +1,6 @@
 // Dev tool: starts the server on a throw-away database with sample data and saves phone-sized screenshots of the
 // built app to screenshots/<name>.png, so a change can be looked at (by a person or by a coding agent).
-// Usage (from meal-planner/, after `npm run build`):  npm run screenshot [-- list catalog dish recipe cook]
+// Usage (from meal-planner/, after `npm run build`):  npm run screenshot [-- list catalog dish recipe cook shopping]
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdirSync, mkdtempSync, existsSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
@@ -70,6 +70,35 @@ async function seed(base: string): Promise<{ pastaDishId: number }> {
 // The title button of the sample dish (the checkbox next to it has a similar accessible name).
 const pastaTitle = (page: Page) => page.locator("button.title", { hasText: "Spaghetti Carbonara" });
 
+// The local server runs without Home Assistant, so it has no shopping routes: answer them in the browser with sample
+// data (lists as Bring shows them in Home Assistant), so the header button and the sheet can be looked at.
+async function fakeShopping(page: Page): Promise<void> {
+  const lists = [
+    { entity_id: "todo.essen", name: "Essen", description: true },
+    { entity_id: "todo.drogerie", name: "Drogerie", description: true },
+  ];
+  await page.route("**/api/shopping/status", (r) => r.fulfill({ json: { lists, selected: "todo.essen", reason: null } }));
+  await page.route("**/api/plans/*/shopping?*", (r) =>
+    r.fulfill({
+      json: {
+        entries: [
+          { entry_id: 1, title: "Spaghetti Carbonara", done: false, selected: true, has_recipe: true },
+          { entry_id: 2, title: "Kürbissuppe mit Ingwer", done: true, selected: false, has_recipe: true },
+          { entry_id: 3, title: "Linsen-Dal", done: false, selected: true, has_recipe: false },
+        ],
+        items: [
+          { name: "Eier", spec: "3", sources: ["Spaghetti Carbonara"], on_list: true },
+          { name: "Parmesan", spec: "80 g", sources: ["Spaghetti Carbonara"], on_list: false },
+          { name: "Pfeffer", spec: null, sources: ["Spaghetti Carbonara"], on_list: false },
+          { name: "Spaghetti", spec: "400 g", sources: ["Spaghetti Carbonara"], on_list: false },
+          { name: "Speck", spec: "150 g + 1 Packung", sources: ["Spaghetti Carbonara"], on_list: false },
+        ],
+        list_error: false,
+      },
+    }),
+  );
+}
+
 type Shot = { name: string; run: (page: Page) => Promise<void> };
 
 const SHOTS: Shot[] = [
@@ -84,6 +113,7 @@ const SHOTS: Shot[] = [
     },
   },
   { name: "cook", run: (page) => page.getByRole("button", { name: "Kochen", exact: true }).click() },
+  { name: "shopping", run: (page) => page.getByRole("button", { name: "Einkaufen", exact: true }).click() },
 ];
 
 async function main(): Promise<void> {
@@ -110,6 +140,7 @@ async function main(): Promise<void> {
       for (const shot of shots) {
         // A fresh context per shot: each one starts from the list, no state carries over.
         const page = await (await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 2 })).newPage();
+        await fakeShopping(page);
         await page.goto(base);
         await pastaTitle(page).waitFor();
         await shot.run(page);

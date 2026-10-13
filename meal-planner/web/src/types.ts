@@ -82,3 +82,10 @@ export type CookEntry = {
   checks: Checks;
 };
 export type CheckState = { entry_id: number; done: boolean; checks: Checks };
+// A to-do list in Home Assistant (e.g. Bring). description: it keeps a description ("Spezifikation") per item.
+export type TodoList = { entity_id: string; name: string; description: boolean };
+export type ShoppingStatus = { lists: TodoList[]; selected: string | null; reason: string | null };
+export type ShoppingEntry = { entry_id: number; title: string; done: boolean; selected: boolean; has_recipe: boolean };
+export type ShoppingItem = { name: string; spec: string | null; sources: string[]; on_list: boolean };
+export type ShoppingList = { entries: ShoppingEntry[]; items: ShoppingItem[]; list_error: boolean };
+export type SendResult = { added: number; failed: number; reason: string | null };

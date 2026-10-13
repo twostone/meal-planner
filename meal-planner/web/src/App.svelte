@@ -8,7 +8,8 @@
   import ListView from "./ListView.svelte";
   import PeriodSheet from "./PeriodSheet.svelte";
   import RecipeSheet from "./RecipeSheet.svelte";
-  import { app, dismissError, init, openCook, openPeriods } from "./store.svelte";
+  import ShoppingSheet from "./ShoppingSheet.svelte";
+  import { app, dismissError, init, openCook, openPeriods, openShopping } from "./store.svelte";
 
   onMount(() => {
     init();
@@ -27,6 +28,11 @@
           <Icon name="chevron-down" />
         </button>
         {#if app.plan?.entries.length}
+          {#if app.shopping}
+            <button type="button" class="btn outline square" aria-label="Einkaufen" title="Einkaufen" onclick={openShopping}>
+              <Icon name="cart" />
+            </button>
+          {/if}
           <button type="button" class="btn primary" onclick={openCook}>Kochen</button>
         {/if}
       </div>
@@ -68,6 +74,8 @@
     <RecipeSheet dishId={app.sheet.dishId} />
   {:else if app.sheet.kind === "cook"}
     <CookView />
+  {:else if app.sheet.kind === "shopping"}
+    <ShoppingSheet />
   {:else if app.sheet.kind === "periods"}
     <PeriodSheet />
   {/if}

@@ -27,6 +27,9 @@ dieselbe Liste.
   wechselt (praktisch zum Vorkochen mehrerer Gerichte). Zutaten und Schritte lassen sich abhaken, auf allen Handys
   gleichzeitig (Abgleich alle paar Sekunden). „Fertig“ hakt das Gericht auch in der Liste ab. Der Bildschirm bleibt an,
   soweit die App das zulässt.
+- Einkaufsliste: Der Einkaufswagen in der Liste fasst die Zutaten der offenen Gerichte zusammen (gleiche Zutaten werden
+  addiert, g/kg und ml/l umgerechnet) und schickt die angehakten Artikel an eine Todo-Liste in Home Assistant, z. B. eine
+  Bring-Liste. Was dort schon offen steht, ist abgewählt. Siehe „Einkaufsliste (Bring)“.
 - Bedienung für das Handy ausgelegt, auch in der Home-Assistant-Companion-App.
 
 ## Installation
@@ -72,6 +75,20 @@ die Antwort oder dauert sie länger als 15 Sekunden, verschwinden die Platzhalte
 Sprache der Titel ist die Sprache des Browsers (auf dem Handy: die Systemsprache). Ein Titel wird nie ungefragt
 überschrieben: Man wählt einen Vorschlag selbst.
 
+## Einkaufsliste (Bring)
+
+Der Einkaufswagen erscheint, wenn Home Assistant mindestens eine **Todo-Liste** hat, der man Einträge hinzufügen kann. Für
+Bring ist das die [Bring-Integration](https://www.home-assistant.io/integrations/bring/): Jede Bring-Liste wird dort zu
+einer Todo-Entität. Die App braucht keine eigenen Zugangsdaten, sie nutzt die Integration über Home Assistant.
+
+- Im Blatt wählt man die Ziel-Liste (die zuletzt genutzte ist vorbelegt, für alle Handys gleich) und per Chip die Gerichte
+  (Standard: alle noch nicht gekochten). Gerichte ohne Zutaten werden genannt, aber nicht berücksichtigt.
+- Gleiche Zutaten (ohne Groß-/Kleinschreibung) werden zu einem Artikel; Mengen gleicher Einheit werden addiert, andere
+  Einheiten mit „+“ angehängt („400 g + 1 Dose“). Ähnliche Namen („Knoblauch“, „Knoblauchzehe“) bleiben getrennt.
+- Die Menge landet in Bring als Spezifikation. Listen ohne Beschreibungsfeld (z. B. die eingebaute Einkaufsliste von Home
+  Assistant) bekommen sie in Klammern hinter den Namen.
+- Was auf der Liste schon offen steht, ist abgewählt und markiert; vorhandene Einträge werden nie geändert.
+
 ## Protokoll
 
 Die App schreibt eine Zeile pro Ereignis ins Protokoll der App (*Einstellungen → Apps → Essensplanung → Protokoll*), mit
@@ -95,6 +112,8 @@ In der App-Konfiguration stellt `log_level` ein, wie viel geschrieben wird (`deb
   einem Cloud-Dienst also ins Internet), und zwar nur auf Knopfdruck. **Die KI-Titelvorschläge dagegen laufen automatisch:**
   Jede Link-Vorschau schickt den Seitentitel und den gefundenen Text (höchstens 10 000 Zeichen) an denselben Dienst. Wer das
   nicht möchte, richtet in Home Assistant keine AI-Task-Entität ein (oder entfernt sie): dann bleiben beide Funktionen aus.
+- Die Einkaufsliste geht nur auf Knopfdruck an die gewählte Todo-Liste in Home Assistant, bei Bring also über dessen
+  Cloud-Dienst an Bring.
 - Es gibt keine Nutzerverwaltung: Alle, die die App in Home Assistant öffnen dürfen, sehen und ändern dieselbe Liste.
 
 ## Entwicklung

@@ -1135,3 +1135,46 @@ details.source summary {
 a.btn {
   text-decoration: none;
 }
+
+/* shopping list */
+.shop-item {
+  width: 100%;
+  font: inherit;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.shop-item[aria-checked="true"] .box {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+}
+.shop-item.off {
+  background: transparent;
+}
+.shop-item.off .shop-name {
+  color: var(--muted);
+}
+.shop-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 0;
+}
+.shop-name {
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.shop-spec {
+  font-weight: 500;
+  color: var(--green);
+}
+.shop-text small {
+  font-size: 13px;
+  color: var(--muted);
+}
+.shop-items[aria-busy="true"] {
+  opacity: 0.6;
+}

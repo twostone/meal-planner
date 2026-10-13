@@ -38,7 +38,10 @@ meal-planner/            das Add-on (Docker-Build-Kontext)
     images.ts              Bildspeicher (/data/images, Dateiname = Hash)
     ha-api.ts, ha-state.ts  Zweiter Listener (Token) und Zustand für die HA-Integration
     ha-notify.ts            Bus-Events an Home Assistant (über den Supervisor)
+    ha-core.ts              gemeinsamer Aufruf der Core-API über den Supervisor (ha-ai.ts, ha-todo.ts)
     ha-ai.ts                ai_task.generate_data über den Supervisor (Rezept in Zutaten zerlegen, Titel vorschlagen)
+    ha-todo.ts              Todo-Listen von HA (z. B. Bring): Listen, offene Artikel, Artikel hinzufügen
+    shopping.ts             Einkaufsliste aus den Rezepten zusammenfassen (rein, ohne Netz und DB)
     recipe-draft.ts         prüft und bereinigt die LLM-Antwort, gleicht sie mit dem Originaltext ab
     text.ts                 clip (Kürzen ohne halbes Zeichen) und toJson (JSON für Home Assistant)
     log.ts                  Logger: eine logfmt-Zeile pro Ereignis, Stufe aus der App-Option `log_level`
@@ -63,7 +66,7 @@ npm run check                     # svelte-check Frontend
 npm run build                     # Frontend nach dist/ (wird vom Server ausgeliefert)
 DB_PATH=./data/dev.db PORT=8099 npm start
 npm run dev:web                   # Vite-Dev-Server, /api geht per Proxy an :8099
-npm run screenshot [-- list catalog dish recipe cook]   # nach npm run build: PNGs bei 390 px nach screenshots/
+npm run screenshot [-- list catalog dish recipe cook shopping] # nach npm run build: PNGs bei 390 px nach screenshots/
 ```
 
 Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (genau das prüft auch die CI). Bei Änderungen an
@@ -72,7 +75,8 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
 ## Architektur und bewusste Entscheidungen
 
 - **Datenmodell:** `dish` (Katalog, mit `url`, `note`, `image`), `dish_tag` (Kategorien), `plan` (Zeitraum, Start/Ende,
-  optional `title`), `plan_entry` (Gericht in Zeitraum, `done`, `note`). Bewusst **keine Tageszuordnung** und keine manuelle
+  optional `title`), `plan_entry` (Gericht in Zeitraum, `done`, `note`), `setting` (Schlüssel/Wert, Schlüssel nur aus
+  `SettingKey` in `repo.ts`). Bewusst **keine Tageszuordnung** und keine manuelle
   Reihenfolge per Drag.
 - **Liste bearbeiten:** Name und Zeitraum einer Liste ändert `PATCH /api/plans/:id` (`updatePlan` in `repo.ts`), im UI per
   Stift-Symbol im Zeitraum-Blatt. `title`: höchstens 100 Zeichen, `""`/`null` löscht den Namen, fehlt es, bleibt er. Ohne
@@ -129,6 +133,23 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   ab (löst `entry_done` aus), die Haken bleiben. Wake Lock (`navigator.wakeLock`) wird gehalten, wenn der Browser ihn kennt,
   sonst still ohne; nach dem Zurückkehren in die Seite neu angefordert. **Nicht am echten System geprüft:** Wake Lock in der
   Companion-App im Ingress-iframe und der Abgleich zwischen zwei echten Handys.
+- **Einkaufsliste** (Entscheidungen vom 13.10.2026): Einkaufswagen-Knopf in der Kopfzeile (nur wenn
+  `GET /api/shopping/status` mindestens eine Todo-Liste meldet) öffnet `ShoppingSheet.svelte` (`openShopping`, Sheet-Art
+  `shopping`). Ziel ist eine **HA-Todo-Entität** (Bring über die HA-Integration, keine Bring-Zugangsdaten in der App), über
+  `ha-todo.ts` und den Supervisor. Als Listen gelten `todo.*`-Entitäten, die nicht `unavailable` sind und `CREATE_TODO_ITEM`
+  (1) können; `SET_DESCRIPTION_ON_ITEM` (64) entscheidet, ob die Menge als `description` (Bring: Spezifikation) oder als
+  „Name (Menge)“ geht (HA lehnt `description` sonst ab, auch leer). Die zuletzt genutzte Liste merkt `setting`
+  (`shopping_list_entity`), für alle Handys gleich. `GET /api/plans/:id/shopping?entries=1,2&list=todo.x` liefert die Einträge
+  (`selected`, `has_recipe`), die Artikel und `list_error`; ohne `entries` gelten die offenen Einträge, `entries=` ist keiner.
+  **Zusammenfassen** (`buildShoppingList` in `shopping.ts`): ein Artikel pro Name (`nameKey`: Leerraum zusammengezogen,
+  `toLocaleLowerCase("de")`), erste Schreibweise gilt; Mengen je Einheit addiert, kg->g und l->ml, ab 1000 wieder kg/l;
+  Spannen addieren die Obergrenze (sonst `amount`); andere Einheiten mit „ + “; ohne Menge kein Teil. Keine Synonyme.
+  **Schon auf der Liste:** `todo.get_items` (`needs_action`) vorher lesen, gleiche Namen sind `on_list` und im UI abgewählt;
+  vorhandene Artikel werden nie geändert (Bring würde die Spezifikation überschreiben). Schlägt das Lesen fehl, gibt es die
+  Liste trotzdem (`list_error`). `POST /api/shopping/send {list, items}` (höchstens 200, `name` ≤ 80, `spec` ≤ 200) prüft die
+  Liste gegen HA, sendet nacheinander je ein `todo.add_item` und **bricht beim ersten Fehler ab** (`{added, failed, reason}`);
+  höchstens ein Senden gleichzeitig (sonst 429). Es wird nicht gespeichert, was gesendet wurde, und kein HA-Event gefeuert.
+  Fehler-Bodies von `add_item` kommen nicht ins Log (Bring wiederholt darin den Artikelnamen).
 - Ein Gericht kann pro Zeitraum nur einmal vorkommen. Der Titel ist im Katalog eindeutig (ohne Groß-/Kleinschreibung).
   Ein Eintrag per Titel legt das Gericht an oder verwendet ein vorhandenes wieder. Löschen eines Gerichts, das noch
   in einer Liste steht, ist absichtlich gesperrt (409).
@@ -328,7 +349,7 @@ raten (`async_update_reload_and_abort`, `HassioServiceInfo`, `StaticPathConfig`,
   Größenlimit nach dem Entpacken (gegen Zip-Bomben). Nicht lockern.
 - `allowPrivate` in `fetchLimited` ist **nur für Tests** (lokaler Testserver auf 127.0.0.1). Nie im Produktivcode setzen,
   nie über eine Umgebungsvariable oder Konfiguration erreichbar machen.
-- **`ha-notify.ts` ist bewusst die eine Ausnahme von der SSRF-Regel oben (ebenso `ha-ai.ts`):** Es nutzt einfaches `fetch`,
+- **`ha-notify.ts` ist bewusst die eine Ausnahme von der SSRF-Regel oben (ebenso `ha-core.ts` mit `ha-ai.ts` und `ha-todo.ts`):** Es nutzt einfaches `fetch`,
   nicht `fetchLimited`. Das Ziel (`http://supervisor`, `ha-discovery.ts` und `ha-ai.ts` ebenso) ist im Code festgelegt, kein Nutzer-Input, und
   liegt im internen Netz – genau die Adressen, die `net-guard.ts` für Rezept-Links zu Recht sperrt. Diese Pfade
   nicht vermischen.
@@ -402,8 +423,9 @@ raten (`async_update_reload_and_abort`, `HassioServiceInfo`, `StaticPathConfig`,
   gibt es keinen Release und HA zeigt kein Update.
 - **Datenbank nur über Migrationen ändern:** in `src/db.ts` einen Eintrag an `MIGRATIONS` **anhängen**, nie ändern oder
   umsortieren (`PRAGMA user_version` zählt sie). Neue Migrationen mit einem Test gegen eine Datenbank im alten Stand.
-  Die Tests, die die Schema-Version prüfen (`dish-image`, `tags`, `entry-note`, `plan-edit`, `recipe`, `recipe-source`, `cook`), bei jeder neuen Migration
-  mit anheben.
+  Die Tests, die die Schema-Version prüfen (`dish-image`, `tags`, `entry-note`, `plan-edit`, `recipe`, `recipe-source`, `cook`,
+  `shopping-api`), bei jeder neuen Migration mit anheben. Tests, die eine volle DB auf eine alte Version zurücksetzen
+  (`cook`, `recipe-source`, `shopping-api`), müssen die Tabellen neuerer Migrationen vorher löschen.
 - **Add-on-Build:** Kein `build.yaml`, kein `BUILD_FROM` (beides gilt seit Supervisor 2026.04 nicht mehr). HA baut nicht
   selbst, es lädt das Image aus `image:`. Das Dockerfile ist zweistufig: Das Frontend wird auf der Architektur des Builders
   gebaut (`--platform=$BUILDPLATFORM`, sonst dauert arm64 unter Emulation sehr lange), die Laufzeit-Stufe je Zielarchitektur.
@@ -455,7 +477,7 @@ raten (`async_update_reload_and_abort`, `HassioServiceInfo`, `StaticPathConfig`,
 
 ## Bewusst nicht gebaut (nur auf ausdrücklichen Wunsch)
 
-Einkaufsliste, Nährwerte, Anbindung an HA-Todo/Kalender, Tageszuordnung, Drag-and-Drop, OAuth, Instagram-oEmbed,
+Nährwerte, Anbindung an den HA-Kalender, Tageszuordnung, Drag-and-Drop, OAuth, Instagram-oEmbed,
 Bildverkleinerung, Image-Signatur/SBOM,
 Kategorien umbenennen/zusammenführen, Mehrfachauswahl im Kategorie-Filter.
 Rezept-Text einfügen und per KI zerlegen sowie Portionen umrechnen (beides am 10.10.2026 aus `docs/plan-rezepte.md` gestrichen).
@@ -481,6 +503,9 @@ Rezept-Text einfügen und per KI zerlegen sowie Portionen umrechnen (beides am 1
 - Die Releases laufen über Release Please (siehe „CI und Releases“). Der Stand des Pakets auf ghcr.io ist hier nicht
   festgehalten.
 - Voraussetzung im Repository (gesetzt): Einstellungen → Actions → General → „Allow GitHub Actions to create and approve pull requests“.
+- Die Einkaufsliste ist nur gegen eine Fake-Core-API getestet, **nicht gegen Bring in HA**: offen sind die Antwortform von
+  `todo.get_items` über die REST-API, ob Bring die `description` als Spezifikation zeigt, `supported_features` der
+  Bring-Entitäten und wie lange 20 bis 30 `add_item` nacheinander dauern (Bring aktualisiert nach jedem Artikel).
 - Kein Dunkelmodus (HA-Theme dunkel, App bleibt hell).
 - Die HA-Integration + Lovelace-Karte lebt in `custom_components/meal_planner/` (HACS-Mirror: [twostone/ha-meal-planner](https://github.com/twostone/ha-meal-planner)).
   Die Anbindung (Discovery,

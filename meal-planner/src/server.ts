@@ -8,6 +8,7 @@ import { createHaApi, loadOrCreateToken } from "./ha-api.ts";
 import { announceToHomeAssistant } from "./ha-discovery.ts";
 import { createHaAi } from "./ha-ai.ts";
 import { createHaNotify } from "./ha-notify.ts";
+import { createHaTodo } from "./ha-todo.ts";
 import { ImageStore } from "./images.ts";
 import { logger, resolveLogLevel, setLogLevel } from "./log.ts";
 import { createPreviewService } from "./preview.ts";
@@ -46,6 +47,7 @@ const app = createApp(repo, {
   preview: createPreviewService({ images }),
   notify: haNotify,
   ai: createHaAi(supervisorToken),
+  todo: createHaTodo(supervisorToken),
 });
 // API routes are registered first; anything else is the built frontend (npm run build).
 app.use("/*", serveStatic({ root: "./dist" }));

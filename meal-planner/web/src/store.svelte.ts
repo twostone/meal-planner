@@ -13,6 +13,7 @@ export type SheetState =
     }
   | { kind: "recipe"; dishId: number }
   | { kind: "cook" }
+  | { kind: "shopping" }
   | { kind: "periods" };
 
 export const app = $state({
@@ -23,6 +24,8 @@ export const app = $state({
   dishes: [] as Dish[],
   error: "",
   sheet: { kind: "none" } as SheetState,
+  // Home Assistant has a to-do list to send the shopping list to (checked once at start; decides the header button).
+  shopping: false,
 });
 
 // The plan containing today, else the next upcoming one, else the newest.
@@ -59,6 +62,11 @@ export async function init() {
     if (id !== null) await loadPlan(id);
   });
   app.ready = true;
+  // Never blocks the start and never shows an error: without a to-do list the button just stays hidden.
+  api.getShoppingStatus().then(
+    (s) => void (app.shopping = s.lists.length > 0),
+    () => {},
+  );
 }
 
 // Back button: an open sheet owns one history entry, so "back" (Android button or gesture) closes the sheet
@@ -121,6 +129,13 @@ export function openCook() {
   app.error = "";
   pushSheetEntry();
   app.sheet = { kind: "cook" };
+}
+
+export function openShopping() {
+  if (!app.plan) return;
+  app.error = "";
+  pushSheetEntry();
+  app.sheet = { kind: "shopping" };
 }
 
 export function openPeriods() {
