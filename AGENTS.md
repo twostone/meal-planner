@@ -45,6 +45,7 @@ meal-planner/            das Add-on (Docker-Build-Kontext)
     ha-discovery.ts         Meldung von Host, Port und Token per Supervisor-Discovery
   web/                   Frontend: Svelte 5 + Vite (Runes, TypeScript)
     public/favicon.svg     Favicon der App, Vorlage für icon.png
+  scripts/screenshot.ts  Screenshot-Werkzeug (playwright-core + installiertes Google Chrome, Beispieldaten, Wegwerf-DB)
   test/                  Tests (node:test)
 ```
 
@@ -62,6 +63,7 @@ npm run check                     # svelte-check Frontend
 npm run build                     # Frontend nach dist/ (wird vom Server ausgeliefert)
 DB_PATH=./data/dev.db PORT=8099 npm start
 npm run dev:web                   # Vite-Dev-Server, /api geht per Proxy an :8099
+npm run screenshot [-- list catalog dish recipe cook]   # nach npm run build: PNGs bei 390 px nach screenshots/
 ```
 
 Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (genau das prüft auch die CI). Bei Änderungen an
@@ -428,7 +430,9 @@ raten (`async_update_reload_and_abort`, `HassioServiceInfo`, `StaticPathConfig`,
 - **APIs und Schnittstellen vor der Nutzung gegen die aktuelle Dokumentation prüfen** (HA-Add-on-Konfiguration, Hono,
   Svelte, Vite, Node). HA nennt Add-ons inzwischen „Apps“.
 - Neue Backend-Logik bekommt Tests in `test/` (`app.request(...)` mit `node:test`). Für Netzwerkcode gilt: gegen einen
-  lokalen Testserver testen, nie gegen das Internet. Bei UI-Änderungen zusätzlich im Browser bei 390 px Breite prüfen.
+  lokalen Testserver testen, nie gegen das Internet. Bei UI-Änderungen zusätzlich bei 390 px Breite prüfen: `npm run build && npm run screenshot` (braucht Google Chrome), die
+  PNGs in `meal-planner/screenshots/` (nicht eingecheckt) mit dem Read-Tool ansehen. Neue Ansicht oder neues Blatt -> einen Eintrag in
+  `SHOTS` in `scripts/screenshot.ts` ergänzen. `playwright-core` ist bewusst gewählt: lädt keinen Browser, `puppeteer` schon.
 - **Text kürzen und an Home Assistant senden:** Texte aus fremden Seiten mit `clip()` aus `text.ts` kürzen, nie mit `.slice`
   (JavaScript zählt UTF-16-Einheiten, ein Schnitt mitten in einem Emoji lässt ein halbes Zeichen übrig). Was an Home Assistant
   geht, wird mit `toJson()` statt `JSON.stringify` serialisiert (`ha-ai.ts`): HA liest den Body mit orjson und antwortet auf ein
