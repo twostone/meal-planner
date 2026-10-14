@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.1](https://github.com/twostone/meal-planner/compare/v0.14.0...v0.14.1) (2026-10-14)
+
+
+### Behoben
+
+* **web:** Hinweise der Zutaten in der Einkaufsliste übernehmen ([0fbc080](https://github.com/twostone/meal-planner/commit/0fbc0803827ebc5ff53160c261b3920016fa3dda))
+
 ## [0.14.0](https://github.com/twostone/meal-planner/compare/v0.13.0...v0.14.0) (2026-10-13)
 
 
