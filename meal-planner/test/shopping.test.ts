@@ -1,18 +1,26 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildShoppingList, type ShoppingRecipe } from "../src/shopping.ts";
+import { buildShoppingList, MAX_SPEC_LENGTH, type ShoppingRecipe } from "../src/shopping.ts";
 
-const ing = (amount: number | null, unit: string | null, name: string, amount_max: number | null = null) => ({ amount, amount_max, unit, name });
+const ing = (amount: number | null, unit: string | null, name: string, amount_max: number | null = null, note: string | null = null) => ({
+  amount,
+  amount_max,
+  unit,
+  name,
+  note,
+});
 const recipe = (title: string, ...ingredients: ShoppingRecipe["ingredients"]): ShoppingRecipe => ({ title, ingredients });
+// name, note, spec, sources of every item: the part of the result the tests care about
+const view = (list: ReturnType<typeof buildShoppingList>) => list.map((i) => [i.name, i.note, i.spec, i.sources]);
 
 test("same name and unit is added up, across recipes and case", () => {
   const list = buildShoppingList([
     recipe("Suppe", ing(2, null, "Zwiebel"), ing(200, "g", "Möhren")),
     recipe("Pasta", ing(1, null, "zwiebel"), ing(150, "g", "Möhren")),
   ]);
-  assert.deepEqual(list, [
-    { name: "Möhren", spec: "350 g", sources: ["Suppe", "Pasta"] },
-    { name: "Zwiebel", spec: "3", sources: ["Suppe", "Pasta"] },
+  assert.deepEqual(view(list), [
+    ["Möhren", null, "350 g", ["Suppe", "Pasta"]],
+    ["Zwiebel", null, "3", ["Suppe", "Pasta"]],
   ]);
 });
 
@@ -36,9 +44,11 @@ test("different units stay separate parts, without amount adds nothing", () => {
     recipe("B", ing(1, "Dose", "Tomaten"), ing(1, "Prise", "salz")),
     recipe("C", ing(null, null, "Salz")),
   ]);
-  assert.deepEqual(salz, { name: "Salz", spec: "1 Prise", sources: ["A", "B", "C"] });
-  assert.deepEqual(tomaten, { name: "Tomaten", spec: "400 g + 1 Dose", sources: ["A", "B"] });
-  assert.deepEqual(buildShoppingList([recipe("A", ing(null, null, "Pfeffer"))]), [{ name: "Pfeffer", spec: null, sources: ["A"] }]);
+  assert.deepEqual(view([salz!, tomaten!]), [
+    ["Salz", null, "1 Prise", ["A", "B", "C"]],
+    ["Tomaten", null, "400 g + 1 Dose", ["A", "B"]],
+  ]);
+  assert.deepEqual(view(buildShoppingList([recipe("A", ing(null, null, "Pfeffer"))])), [["Pfeffer", null, null, ["A"]]]);
 });
 
 test("ranges add up their upper bound, plain amounts count for both", () => {
@@ -61,5 +71,67 @@ test("German decimals, no float noise, sorted by German collation", () => {
 
 test("whitespace in names is normalised, the first spelling is kept", () => {
   const list = buildShoppingList([recipe("A", ing(1, null, "  rote  Zwiebel ")), recipe("B", ing(1, null, "Rote Zwiebel"))]);
-  assert.deepEqual(list, [{ name: "rote Zwiebel", spec: "2", sources: ["A", "B"] }]);
+  assert.deepEqual(view(list), [["rote Zwiebel", null, "2", ["A", "B"]]]);
+});
+
+test("a note goes into the spec, and different notes are different items that are not added up", () => {
+  const list = buildShoppingList([
+    recipe("Bowl", ing(50, "g", "Nüsse", null, "Macadamia")),
+    recipe("Müsli", ing(50, "g", "Nüsse", null, "Walnuss")),
+  ]);
+  assert.deepEqual(view(list), [
+    ["Nüsse", "Macadamia", "Macadamia, 50 g", ["Bowl"]],
+    ["Nüsse", "Walnuss", "Walnuss, 50 g", ["Müsli"]],
+  ]);
+  assert.equal(new Set(list.map((i) => i.key)).size, 2, "the name is shared, so the key has to tell them apart");
+});
+
+test("the same note in another spelling is added up and the first spelling is kept", () => {
+  const list = buildShoppingList([
+    recipe("A", ing(500, "g", "Nüsse", null, "Macadamia")),
+    recipe("B", ing(600, "g", "nüsse", null, "  macadamia ")),
+  ]);
+  assert.deepEqual(view(list), [["Nüsse", "Macadamia", "Macadamia, 1,1 kg", ["A", "B"]]]);
+});
+
+test("an ingredient without note stays apart from the same one with a note", () => {
+  const list = buildShoppingList([
+    recipe("A", ing(30, "g", "Nüsse")),
+    recipe("B", ing(50, "g", "Nüsse", null, "Macadamia")),
+    recipe("C", ing(2, null, "Zwiebel")),
+    recipe("D", ing(1, null, "Zwiebel", null, "groß")),
+  ]);
+  assert.deepEqual(
+    list.map((i) => [i.name, i.spec]),
+    [
+      ["Nüsse", "30 g"],
+      ["Nüsse", "Macadamia, 50 g"],
+      ["Zwiebel", "2"],
+      ["Zwiebel", "groß, 1"],
+    ],
+    "sorted by name, then note; the one without note comes first",
+  );
+});
+
+test("a note without amount is the whole spec; a blank note counts as none", () => {
+  const list = buildShoppingList([
+    recipe("A", ing(null, null, "Salz", null, "nach Geschmack"), ing(null, null, "Pfeffer", null, "   ")),
+    recipe("B", ing(500, "g", "Hack", null, "gemischt"), ing(1, "kg", "Hack", null, "gemischt"), ing(2, "Dose", "Hack", null, "gemischt")),
+  ]);
+  assert.deepEqual(
+    list.map((i) => [i.name, i.note, i.spec]),
+    [
+      ["Hack", "gemischt", "gemischt, 1,5 kg + 2 Dose"],
+      ["Pfeffer", null, null],
+      ["Salz", "nach Geschmack", "nach Geschmack"],
+    ],
+  );
+});
+
+test("a long note is cut to the spec limit without leaving half a character", () => {
+  const note = "x".repeat(MAX_SPEC_LENGTH - 3) + "😀😀";
+  const [item] = buildShoppingList([recipe("A", ing(5, "g", "Mandeln", null, note))]);
+  assert.ok(item!.spec!.length <= MAX_SPEC_LENGTH);
+  assert.equal(item!.spec!.toWellFormed(), item!.spec, "no lone surrogate");
+  assert.equal(item!.note, note, "only the spec is cut, the note itself is kept");
 });

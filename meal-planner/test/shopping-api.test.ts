@@ -5,13 +5,13 @@ import os from "node:os";
 import path from "node:path";
 import { createApp } from "../src/app.ts";
 import { openDb } from "../src/db.ts";
-import { TodoError, type HaTodo, type TodoList } from "../src/ha-todo.ts";
+import { TodoError, type HaTodo, type OpenTodoItem, type TodoList } from "../src/ha-todo.ts";
 import { createRepo } from "../src/repo.ts";
 
 const ESSEN: TodoList = { entity_id: "todo.essen", name: "Essen", description: true };
 
 // A fake to-do list in Home Assistant: records what is added, `failAt` makes the n-th add fail.
-function fakeTodo(opts: { open?: string[]; failAt?: number; openFails?: boolean; unreachable?: boolean } = {}) {
+function fakeTodo(opts: { open?: OpenTodoItem[]; failAt?: number; openFails?: boolean; unreachable?: boolean } = {}) {
   const added: { list: string; name: string; spec: string | null }[] = [];
   let release: (() => void) | null = null;
   const todo: HaTodo & { added: typeof added; hold: () => void; go: () => void } = {
@@ -52,7 +52,7 @@ function setup(todo?: HaTodo) {
   };
   return { call, db };
 }
-const ing = (amount: number | null, unit: string | null, name: string) => ({ section: null, amount, amount_max: null, unit, name, note: null });
+const ing = (amount: number | null, unit: string | null, name: string, note: string | null = null) => ({ section: null, amount, amount_max: null, unit, name, note });
 
 // Suppe and Pasta with recipes, Salat without one; Pasta is already cooked (done).
 async function plan(todo?: HaTodo) {
@@ -83,8 +83,8 @@ test("shopping list: open entries by default, chosen entries on request, entries
     { entry_id: salat.id, title: "Salat", done: false, selected: true, has_recipe: false },
   ]);
   assert.deepEqual(def.items, [
-    { name: "Salz", spec: null, sources: ["Suppe"], on_list: false },
-    { name: "Zwiebel", spec: "2", sources: ["Suppe"], on_list: false },
+    { key: "salz\u0000", name: "Salz", note: null, spec: null, sources: ["Suppe"], on_list: false },
+    { key: "zwiebel\u0000", name: "Zwiebel", note: null, spec: "2", sources: ["Suppe"], on_list: false },
   ]);
   const both = (await call("GET", `/api/plans/${p.id}/shopping?entries=${suppe.id},${pasta.id}`)).json;
   assert.deepEqual(
@@ -102,7 +102,7 @@ test("shopping list: open entries by default, chosen entries on request, entries
 });
 
 test("shopping list: items already open on the to-do list are marked (any case); a failed read does not block", async () => {
-  const { call, plan: p } = await plan(fakeTodo({ open: ["zwiebel", "Milch"] }));
+  const { call, plan: p } = await plan(fakeTodo({ open: [{ summary: "zwiebel", description: null }, { summary: "Milch", description: null }] }));
   const r = (await call("GET", `/api/plans/${p.id}/shopping?list=todo.essen`)).json;
   assert.deepEqual(r.items.map((i: any) => [i.name, i.on_list]), [["Salz", false], ["Zwiebel", true]]);
   assert.equal(r.list_error, false);
@@ -179,4 +179,43 @@ test("migration v8 adds the setting table", async () => {
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+// Eine Liste mit Nüssen (Macadamia) und Nüssen (Walnuss), beide aus verschiedenen Gerichten.
+async function nuts(todo: HaTodo) {
+  const { call, plan: p, suppe, pasta } = await plan(todo);
+  await call("PUT", `/api/dishes/${suppe.dish_id}/recipe`, { servings: null, instructions: null, ingredients: [ing(50, "g", "Nüsse", "Macadamia")] });
+  await call("PUT", `/api/dishes/${pasta.dish_id}/recipe`, { servings: null, instructions: null, ingredients: [ing(50, "g", "Nüsse", "Walnuss")] });
+  await call("PATCH", `/api/entries/${pasta.id}`, { done: false });
+  return { call, p, url: `/api/plans/${p.id}/shopping?list=todo.essen` };
+}
+
+test("shopping list: a note makes its own item with the note in the spec, keys are unique", async () => {
+  const { call, url } = await nuts(fakeTodo());
+  const items = (await call("GET", url)).json.items;
+  assert.deepEqual(items.map((i: any) => [i.name, i.note, i.spec, i.on_list]), [
+    ["Nüsse", "Macadamia", "Macadamia, 50 g", false],
+    ["Nüsse", "Walnuss", "Walnuss, 50 g", false],
+  ]);
+  assert.equal(new Set(items.map((i: any) => i.key)).size, 2);
+});
+
+test("on_list: an open item of the same name only counts for the note its description mentions", async () => {
+  const walnuss = await nuts(fakeTodo({ open: [{ summary: "Nüsse", description: "walnuss, 20 g" }] }));
+  assert.deepEqual((await walnuss.call("GET", walnuss.url)).json.items.map((i: any) => [i.note, i.on_list]), [["Macadamia", false], ["Walnuss", true]]);
+
+  const noDescription = await nuts(fakeTodo({ open: [{ summary: "Nüsse", description: null }] }));
+  assert.deepEqual((await noDescription.call("GET", noDescription.url)).json.items.map((i: any) => i.on_list), [false, false]);
+
+  // Without a note the name alone decides, whatever the description says.
+  const plain = await plan(fakeTodo({ open: [{ summary: "Zwiebel", description: "2 Stück" }] }));
+  const r = (await plain.call("GET", `/api/plans/${plain.plan.id}/shopping?list=todo.essen`)).json;
+  assert.deepEqual(r.items.map((i: any) => [i.name, i.on_list]), [["Salz", false], ["Zwiebel", true]]);
+});
+
+test("send: takes a spec of the full length and refuses a longer one", async () => {
+  const { call } = setup(fakeTodo());
+  const send = (spec: string) => call("POST", "/api/shopping/send", { list: "todo.essen", items: [{ name: "Mandeln", spec }] });
+  assert.equal((await send("x".repeat(200))).status, 200);
+  assert.equal((await send("x".repeat(201))).status, 400);
 });

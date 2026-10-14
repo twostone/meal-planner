@@ -14,6 +14,8 @@ const SET_DESCRIPTION_ON_ITEM = 64;
 // A to-do list in Home Assistant, e.g. a Bring list. `description`: the list keeps a description per item (Bring calls
 // it "Spezifikation"); without it the amount goes into the item name, because Home Assistant refuses the field.
 export type TodoList = { entity_id: string; name: string; description: boolean };
+// An item that is still to buy. description: null when the list has none or it is empty.
+export type OpenTodoItem = { summary: string; description: string | null };
 export type TodoStatus = { lists: TodoList[]; reason: "disabled" | "no_list" | "unreachable" | null };
 export class TodoError extends Error {
   constructor(public reason: "disabled" | "timeout" | "unreachable" | "bad_response") {
@@ -22,8 +24,8 @@ export class TodoError extends Error {
 }
 export type HaTodo = {
   status(): Promise<TodoStatus>;
-  // Names of the items still to buy (status needs_action).
-  openItems(entityId: string): Promise<string[]>;
+  // The items still to buy (status needs_action).
+  openItems(entityId: string): Promise<OpenTodoItem[]>;
   add(list: TodoList, name: string, spec: string | null): Promise<void>;
 };
 
@@ -84,7 +86,9 @@ export function createHaTodo(token: string | null, baseUrl = SUPERVISOR_CORE_URL
       const body = await call("get_items?return_response", { entity_id: entityId, status: ["needs_action"] }, STATUS_TIMEOUT_MS);
       const items = body?.service_response?.[entityId]?.items;
       if (!Array.isArray(items)) throw new TodoError("bad_response");
-      return items.map((i: any) => i?.summary).filter((s: unknown): s is string => typeof s === "string");
+      return items.flatMap((i: any): OpenTodoItem[] =>
+        typeof i?.summary === "string" ? [{ summary: i.summary, description: typeof i.description === "string" && i.description ? i.description : null }] : [],
+      );
     },
 
     async add(list, name, spec) {

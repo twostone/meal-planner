@@ -85,6 +85,9 @@ einer Todo-Entität. Die App braucht keine eigenen Zugangsdaten, sie nutzt die I
   (Standard: alle noch nicht gekochten). Gerichte ohne Zutaten werden genannt, aber nicht berücksichtigt.
 - Gleiche Zutaten (ohne Groß-/Kleinschreibung) werden zu einem Artikel; Mengen gleicher Einheit werden addiert, andere
   Einheiten mit „+“ angehängt („400 g + 1 Dose“). Ähnliche Namen („Knoblauch“, „Knoblauchzehe“) bleiben getrennt.
+- Der Hinweis einer Zutat kommt in die Beschreibung („Macadamia, 50 g“) und trennt Einträge: „Nüsse (Macadamia)“ und
+  „Nüsse (Walnuss)“ stehen als zwei Einträge „Nüsse“ in Bring, ihre Mengen werden nicht addiert. Das gilt für jeden
+  Hinweis, auch für „fein gehackt“; unerwünschte Einträge wählt man im Blatt vor dem Senden ab.
 - Die Menge landet in Bring als Spezifikation. Listen ohne Beschreibungsfeld (z. B. die eingebaute Einkaufsliste von Home
   Assistant) bekommen sie in Klammern hinter den Namen.
 - Was auf der Liste schon offen steht, ist abgewählt und markiert; vorhandene Einträge werden nie geändert.

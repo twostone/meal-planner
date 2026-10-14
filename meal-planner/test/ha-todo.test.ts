@@ -67,15 +67,18 @@ test("status: disabled without token; lists only usable todo entities, sorted, w
   assert.deepEqual(await createHaTodo("tok", "http://127.0.0.1:1/core/api/").status(), { lists: [], reason: "unreachable" });
 });
 
-test("openItems: asks for needs_action items and reads the entity's summaries", async () => {
+test("openItems: asks for needs_action items and reads summary and description (empty = null)", async () => {
   const f = await fakeSupervisor(() => ({
     json: {
       changed_states: [],
-      service_response: { "todo.essen": { items: [{ summary: "Milch", uid: "1", status: "needs_action" }, { summary: "Eier", uid: "2", status: "needs_action", description: "10" }] } },
+      service_response: { "todo.essen": { items: [{ summary: "Milch", uid: "1", status: "needs_action", description: "" }, { summary: "Eier", uid: "2", status: "needs_action", description: "10" }] } },
     },
   }));
   try {
-    assert.deepEqual(await createHaTodo("tok", f.base).openItems("todo.essen"), ["Milch", "Eier"]);
+    assert.deepEqual(await createHaTodo("tok", f.base).openItems("todo.essen"), [
+      { summary: "Milch", description: null },
+      { summary: "Eier", description: "10" },
+    ]);
     const s = f.seen[0]!;
     assert.equal(s.method, "POST");
     assert.equal(s.url, "/core/api/services/todo/get_items?return_response");

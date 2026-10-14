@@ -86,6 +86,7 @@ export type CheckState = { entry_id: number; done: boolean; checks: Checks };
 export type TodoList = { entity_id: string; name: string; description: boolean };
 export type ShoppingStatus = { lists: TodoList[]; selected: string | null; reason: string | null };
 export type ShoppingEntry = { entry_id: number; title: string; done: boolean; selected: boolean; has_recipe: boolean };
-export type ShoppingItem = { name: string; spec: string | null; sources: string[]; on_list: boolean };
+// key: unique per name and note (two items may share a name, e.g. "Nüsse" for Macadamia and for Walnuss).
+export type ShoppingItem = { key: string; name: string; note: string | null; spec: string | null; sources: string[]; on_list: boolean };
 export type ShoppingList = { entries: ShoppingEntry[]; items: ShoppingItem[]; list_error: boolean };
 export type SendResult = { added: number; failed: number; reason: string | null };
