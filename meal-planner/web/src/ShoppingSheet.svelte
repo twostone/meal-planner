@@ -13,7 +13,7 @@
   let data = $state<ShoppingList | null>(null);
   // Entry ids that go into the list; null = the server's default (the open entries).
   let chosen = $state<number[] | null>(null);
-  // Names of the items that will be sent. Items already on the to-do list start unticked.
+  // Keys of the items that will be sent. Items already on the to-do list start unticked.
   let ticked = $state<string[]>([]);
   let loading = $state(true);
   let sending = $state(false);
@@ -23,7 +23,7 @@
   const list = $derived(lists.find((l) => l.entity_id === listId) ?? null);
   const withRecipe = $derived(data?.entries.filter((e) => e.has_recipe) ?? []);
   const withoutRecipe = $derived(data?.entries.filter((e) => e.selected && !e.has_recipe) ?? []);
-  const toSend = $derived(data?.items.filter((i) => ticked.includes(i.name)) ?? []);
+  const toSend = $derived(data?.items.filter((i) => ticked.includes(i.key)) ?? []);
 
   async function start() {
     try {
@@ -45,7 +45,7 @@
       if (seq !== loadSeq) return;
       data = r;
       chosen = r.entries.filter((e) => e.selected).map((e) => e.entry_id);
-      ticked = r.items.filter((i) => !i.on_list).map((i) => i.name);
+      ticked = r.items.filter((i) => !i.on_list).map((i) => i.key);
     } catch (e) {
       if (seq === loadSeq) app.error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -63,8 +63,8 @@
     load();
   }
 
-  function toggleItem(name: string) {
-    ticked = ticked.includes(name) ? ticked.filter((t) => t !== name) : [...ticked, name];
+  function toggleItem(key: string) {
+    ticked = ticked.includes(key) ? ticked.filter((t) => t !== key) : [...ticked, key];
   }
 
   function changeList() {
@@ -125,10 +125,10 @@
 
     {#if data.items.length}
       <ul class="rows shop-items" aria-busy={loading}>
-        {#each data.items as i (i.name)}
-          {@const on = ticked.includes(i.name)}
+        {#each data.items as i (i.key)}
+          {@const on = ticked.includes(i.key)}
           <li>
-            <button type="button" class="row shop-item" class:off={!on} role="checkbox" aria-checked={on} onclick={() => toggleItem(i.name)}>
+            <button type="button" class="row shop-item" class:off={!on} role="checkbox" aria-checked={on} onclick={() => toggleItem(i.key)}>
               <span class="check" aria-hidden="true"><span class="box">{#if on}<Icon name="check" size={16} />{/if}</span></span>
               <span class="shop-text">
                 <span class="shop-name">{i.name}{#if i.spec}<span class="shop-spec">{" · "}{i.spec}</span>{/if}</span>

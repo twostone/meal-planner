@@ -376,14 +376,14 @@ export function createRepo(db: DatabaseSync) {
     },
 
     // The ingredients of every entry of a plan in list order (for the shopping list). Entries without a recipe have none.
-    getPlanIngredients(planId: number): { entry_id: number; title: string; done: boolean; ingredients: Pick<Ingredient, "amount" | "amount_max" | "unit" | "name">[] }[] {
+    getPlanIngredients(planId: number): { entry_id: number; title: string; done: boolean; ingredients: Pick<Ingredient, "amount" | "amount_max" | "unit" | "name" | "note">[] }[] {
       const entries = self.getPlan(planId).entries;
-      const stmt = db.prepare("SELECT amount, amount_max, unit, name FROM dish_ingredient WHERE dish_id = ? ORDER BY pos");
+      const stmt = db.prepare("SELECT amount, amount_max, unit, name, note FROM dish_ingredient WHERE dish_id = ? ORDER BY pos");
       return entries.map((e) => ({
         entry_id: e.id,
         title: e.dish.title,
         done: e.done,
-        ingredients: stmt.all(e.dish_id) as Pick<Ingredient, "amount" | "amount_max" | "unit" | "name">[],
+        ingredients: stmt.all(e.dish_id) as Pick<Ingredient, "amount" | "amount_max" | "unit" | "name" | "note">[],
       }));
     },
 

@@ -141,10 +141,18 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   „Name (Menge)“ geht (HA lehnt `description` sonst ab, auch leer). Die zuletzt genutzte Liste merkt `setting`
   (`shopping_list_entity`), für alle Handys gleich. `GET /api/plans/:id/shopping?entries=1,2&list=todo.x` liefert die Einträge
   (`selected`, `has_recipe`), die Artikel und `list_error`; ohne `entries` gelten die offenen Einträge, `entries=` ist keiner.
-  **Zusammenfassen** (`buildShoppingList` in `shopping.ts`): ein Artikel pro Name (`nameKey`: Leerraum zusammengezogen,
-  `toLocaleLowerCase("de")`), erste Schreibweise gilt; Mengen je Einheit addiert, kg->g und l->ml, ab 1000 wieder kg/l;
-  Spannen addieren die Obergrenze (sonst `amount`); andere Einheiten mit „ + “; ohne Menge kein Teil. Keine Synonyme.
-  **Schon auf der Liste:** `todo.get_items` (`needs_action`) vorher lesen, gleiche Namen sind `on_list` und im UI abgewählt;
+  **Zusammenfassen** (`buildShoppingList` in `shopping.ts`): ein Eintrag pro **Name und Hinweis** (`dish_ingredient.note`;
+  `nameKey`: Leerraum zusammengezogen, `toLocaleLowerCase("de")`), erste Schreibweise gilt; Mengen je Einheit addiert, kg->g
+  und l->ml, ab 1000 wieder kg/l; Spannen addieren die Obergrenze (sonst `amount`); andere Einheiten mit „ + “; ohne Menge
+  kein Mengenteil. Keine Synonyme. **Der Hinweis steht in der Beschreibung** („Macadamia, 50 g“, der Artikelname bleibt
+  „Nüsse“) und **trennt Einträge**: Nüsse (Macadamia) und Nüsse (Walnuss) sind zwei Einträge mit gleichem Namen (die
+  Todo-Liste erlaubt das) und werden nicht addiert, sonst wüsste man bei „100 g Nüsse“ nicht, wie viel von welcher Sorte.
+  Einkaufs- und Zubereitungshinweise („fein gehackt“) lassen sich nicht trennen, deshalb zählen alle. Der Name allein ist
+  nicht eindeutig, die UI nutzt `key` (Name + Hinweis). Die Beschreibung ist auf `MAX_SPEC_LENGTH` (200) gekürzt (`clip`),
+  dieselbe Grenze gilt beim Senden.
+  **Schon auf der Liste:** `todo.get_items` (`needs_action`, mit Beschreibung) vorher lesen; gleiche Namen sind `on_list` und im UI
+  abgewählt, bei Einträgen **mit Hinweis** nur, wenn die Beschreibung eines gleichnamigen offenen Eintrags den Hinweis enthält
+  (`isOnList` in `app.ts`, die Menge wird nicht verglichen, sie ändert sich mit der Liste);
   vorhandene Artikel werden nie geändert (Bring würde die Spezifikation überschreiben). Schlägt das Lesen fehl, gibt es die
   Liste trotzdem (`list_error`). `POST /api/shopping/send {list, items}` (höchstens 200, `name` ≤ 80, `spec` ≤ 200) prüft die
   Liste gegen HA, sendet nacheinander je ein `todo.add_item` und **bricht beim ersten Fehler ab** (`{added, failed, reason}`);

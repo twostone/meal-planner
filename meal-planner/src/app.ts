@@ -3,14 +3,14 @@ import { getConnInfo } from "@hono/node-server/conninfo";
 import { zValidator } from "@hono/zod-validator";
 import * as z from "zod";
 import { AiError, type RecipeAi } from "./ha-ai.ts";
-import { TodoError, type HaTodo } from "./ha-todo.ts";
+import { TodoError, type HaTodo, type OpenTodoItem } from "./ha-todo.ts";
 import type { HaEventInput, HaUser } from "./ha-notify.ts";
 import { IMAGE_NAME, type ImageStore } from "./images.ts";
 import { logger } from "./log.ts";
 import type { PreviewResult } from "./preview.ts";
 import { buildDraft, DraftError } from "./recipe-draft.ts";
 import { ConflictError, NotFoundError, UNITS, type Entry, type Repo } from "./repo.ts";
-import { buildShoppingList, nameKey } from "./shopping.ts";
+import { buildShoppingList, MAX_SPEC_LENGTH, nameKey, type ShoppingItem } from "./shopping.ts";
 import { cleanAiTitles } from "./title-suggest.ts";
 
 const title = z.string().trim().min(1).max(200);
@@ -102,7 +102,7 @@ const todoEntity = z.string().regex(/^todo\.[a-z0-9_]+$/);
 const shoppingQuery = z.object({ entries: z.string().regex(/^(\d+(,\d+)*)?$/).optional(), list: todoEntity.optional() });
 const shoppingSend = z.object({
   list: todoEntity,
-  items: z.array(z.object({ name: z.string().trim().min(1).max(80), spec: z.string().trim().max(200).nullable() })).min(1).max(200),
+  items: z.array(z.object({ name: z.string().trim().min(1).max(80), spec: z.string().trim().max(MAX_SPEC_LENGTH).nullable() })).min(1).max(200),
 });
 const entryBody = z.union([z.object({ dish_id: id }), dishBody]);
 // note: only for this entry (dish in one plan); "" or null clears it
@@ -137,6 +137,15 @@ const SLOW_REQUEST_MS = 2000;
 const MAX_PARALLEL_PREVIEWS = 4;
 const MAX_PARALLEL_DRAFTS = 2;
 const MAX_PARALLEL_TITLES = 2;
+
+// Is the item already open on the to-do list? Items may share a name ("Nüsse" for Macadamia and for Walnuss), so one with a
+// note only counts when an open item of that name mentions the note in its description. The amount is not compared: it
+// changes with the plan, and a match must not fail on "80 g" against "100 g".
+function isOnList(item: ShoppingItem, open: OpenTodoItem[]): boolean {
+  const name = nameKey(item.name);
+  const note = item.note ? nameKey(item.note) : null;
+  return open.some((o) => nameKey(o.summary) === name && (note === null || (o.description !== null && nameKey(o.description).includes(note))));
+}
 
 export function createApp(repo: Repo, opts: AppOptions = {}) {
   const app = new Hono();
@@ -297,11 +306,11 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
       const ids = chosen === undefined ? null : new Set(chosen.split(",").filter(Boolean).map(Number));
       const entries = repo.getPlanIngredients(c.req.valid("param").id).map((e) => ({ ...e, selected: ids ? ids.has(e.entry_id) : !e.done }));
       const items = buildShoppingList(entries.filter((e) => e.selected));
-      let onList = new Set<string>();
+      let open: OpenTodoItem[] = [];
       let listError = false;
       if (list && items.length) {
         try {
-          onList = new Set((await todo.openItems(list)).map(nameKey));
+          open = await todo.openItems(list);
         } catch (e) {
           if (!(e instanceof TodoError)) throw e;
           listError = true;
@@ -309,7 +318,7 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
       }
       return c.json({
         entries: entries.map((e) => ({ entry_id: e.entry_id, title: e.title, done: e.done, selected: e.selected, has_recipe: e.ingredients.length > 0 })),
-        items: items.map((i) => ({ ...i, on_list: onList.has(nameKey(i.name)) })),
+        items: items.map((i) => ({ ...i, on_list: isOnList(i, open) })),
         list_error: listError,
       });
     });
