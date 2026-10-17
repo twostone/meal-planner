@@ -1,6 +1,6 @@
 import { afterEach, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
@@ -78,23 +78,12 @@ test("parseLevel: 'warning' (the add-on option) is warn, anything else unknown i
   for (const bad of ["trace", "", 3, null, undefined]) assert.equal(parseLevel(bad), null);
 });
 
-test("resolveLogLevel: options file beats LOG_LEVEL, no file falls back to the variable, then info; invalid -> info", async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "log-"));
-  try {
-    const file = path.join(dir, "options.json");
-    await writeFile(file, JSON.stringify({ log_level: "warning" }));
-    assert.deepEqual(resolveLogLevel(file, "debug"), { level: "warn", invalid: null });
-    assert.deepEqual(resolveLogLevel(path.join(dir, "missing.json"), "debug"), { level: "debug", invalid: null });
-    assert.deepEqual(resolveLogLevel(path.join(dir, "missing.json")), { level: "info", invalid: null });
-    await writeFile(file, JSON.stringify({ log_level: "loud" }));
-    assert.deepEqual(resolveLogLevel(file), { level: "info", invalid: "loud" });
-    await writeFile(file, "{ not json");
-    assert.deepEqual(resolveLogLevel(file, "error"), { level: "error", invalid: null });
-    await writeFile(file, JSON.stringify({ other: 1 }));
-    assert.deepEqual(resolveLogLevel(file, "error"), { level: "error", invalid: null }, "an options file without log_level uses the variable");
-  } finally {
-    await rm(dir, { recursive: true });
-  }
+test("resolveLogLevel: the option beats LOG_LEVEL, without it the variable, then info; invalid -> info", () => {
+  assert.deepEqual(resolveLogLevel({ log_level: "warning" }, "debug"), { level: "warn", invalid: null });
+  assert.deepEqual(resolveLogLevel({}, "debug"), { level: "debug", invalid: null });
+  assert.deepEqual(resolveLogLevel({}), { level: "info", invalid: null });
+  assert.deepEqual(resolveLogLevel({ log_level: "loud" }), { level: "info", invalid: "loud" });
+  assert.deepEqual(resolveLogLevel({ other: 1 }, "error"), { level: "error", invalid: null }, "options without log_level use the variable");
 });
 
 // --- request log ---

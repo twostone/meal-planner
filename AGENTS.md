@@ -25,6 +25,7 @@ hacs.json                         HACS-Metadaten, wird ins Mirror-Repo kopiert
 .github/integration-mirror/       README und Workflows, die ins Mirror-Repo kopiert werden
 meal-planner/            das Add-on (Docker-Build-Kontext)
   config.yaml            Add-on-Konfiguration (Version pflegt Release Please)
+  translations/          de.yaml, en.yaml: Namen und Beschreibungen der App-Optionen
   icon.png               Icon im App-Store (128×128 PNG, aus web/public/favicon.svg erzeugt)
   CHANGELOG.md           entsteht und wächst durch Release Please, nicht von Hand ändern
   Dockerfile             zweistufig, node:24-alpine
@@ -44,6 +45,7 @@ meal-planner/            das Add-on (Docker-Build-Kontext)
     shopping.ts             Einkaufsliste aus den Rezepten zusammenfassen (rein, ohne Netz und DB)
     recipe-draft.ts         prüft und bereinigt die LLM-Antwort, gleicht sie mit dem Originaltext ab
     text.ts                 clip (Kürzen ohne halbes Zeichen) und toJson (JSON für Home Assistant)
+    options.ts              App-Optionen aus /data/options.json lesen (log_level, ai_entity_*)
     log.ts                  Logger: eine logfmt-Zeile pro Ereignis, Stufe aus der App-Option `log_level`
     ha-discovery.ts         Meldung von Host, Port und Token per Supervisor-Discovery
   web/                   Frontend: Svelte 5 + Vite (Runes, TypeScript)
@@ -112,6 +114,12 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   steuert, ob die UI den Knopf zeigt. Ohne Token ist `ai` nicht gesetzt: die Entwurfsroute gibt es dann nicht. Ablauf: 30 s
   Zeitlimit, kein Wiederholen, höchstens 2 parallele Entwürfe, Fehler -> 502 `ai failed` und im UI „Von Hand eintragen“.
   Das LLM hat keine Tools. Der Text geht an den in HA eingerichteten (evtl. Cloud-)Dienst: im README vermerkt.
+  **Entität je Aufgabe:** Die HA-Voreinstellung gilt für alle `generate_data`-Aufrufe, nicht pro `task_name`. Die optionalen
+  App-Optionen `ai_entity_recipe` und `ai_entity_titles` (Schema `match(^ai_task\.…)?`, bewusst nicht unter `options`,
+  damit sie ungesetzt bleiben; `aiEntities` in `options.ts`) setzen `entity_id` für die jeweilige Aufgabe, leer = keine
+  `entity_id`. `status()` verlangt, dass jede gesetzte Entität existiert und nicht `unavailable` ist, sonst `no_entity` und
+  eine Warnzeile `configured_entity_missing` mit dem Optionsnamen; ein Status für die ganze UI (ein Tippfehler schaltet beide
+  KI-Funktionen ab, bewusst). Optionen für künftige KI-Funktionen kommen erst mit dem jeweiligen Feature.
   **Zutatensuche (Stufe 5):** `GET /api/dishes?ingredient=zucchini` liefert Gerichte, in deren Rezept eine Zutat (`dish_ingredient.name`)
   den Text enthält. Der Vergleich läuft in JS (`toLocaleLowerCase("de")`), weil SQLite-`LIKE` nur ASCII ohne Beachtung der
   Schreibweise vergleicht; `q` und `ingredient` zusammen verlangen beides. Der Katalog fragt ab zwei Zeichen (250 ms Pause) nach und zeigt Gerichte, deren
@@ -507,6 +515,9 @@ Rezept-Text einfügen und per KI zerlegen sowie Portionen umrechnen (beides am 1
   Container gesetzt ist und Node ohne `tzdata` richtig rechnet; sonst `tzdata` ins Image) und ob die Protokollansicht
   eigene Zeitstempel davorsetzt. Die Startzeile `server starting … tz=…` zeigt, was der Container als `TZ` bekommt.
 - Ob HA-Ingress die `X-Remote-User-*`-Header wirklich liefert, ist gegen die Doku, aber nicht am echten System geprüft.
+- Ohne gesetzte `ai_entity_*`-Option und ohne bevorzugte Entität in HA meldet `status()` fälschlich „verfügbar“, sobald
+  irgendeine `ai_task.*` existiert (die Voreinstellung ist per REST nicht abgefragt). Die Optionen samt Übersetzung und die
+  Auswahl per `entity_id` sind nicht am echten System geprüft.
 - Der Prompt der KI-Titel (`titlesPrompt` in `ha-ai.ts`) ist **nur gegen eine Fake-AI getestet, nie gegen ein echtes Modell**:
   offen ist, ob er Aufmerksamkeitsfänger („Das BESTE Abendessen …“) zuverlässig verwirft, ob er bei englischen Captions
   die Browsersprache einhält und wie lange die Antwort dauert (Zeitlimit 15 s). Am echten System mit ein paar Captions

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import type { AddonOptions } from "./options.ts";
 
 // One log line per event: `<time> <LEVEL> <module> <event> key=value …`, e.g.
 //   2026-10-11T14:41:03.123+02:00 ERROR ha-ai task_failed task=meal_planner_title status=400 ms=812 body="…"
@@ -25,14 +25,8 @@ export function setLogLevel(level: Level): void {
 
 // The add-on's `log_level` option (Supervisor writes /data/options.json), else LOG_LEVEL (development), else info.
 // An invalid value falls back to info and is returned as `invalid`, so the caller can say so once logging is set up.
-export function resolveLogLevel(optionsPath: string, envLevel?: string): { level: Level; invalid: string | null } {
-  let configured: unknown;
-  try {
-    configured = (JSON.parse(readFileSync(optionsPath, "utf8")) as { log_level?: unknown }).log_level;
-  } catch {
-    // no options file outside the add-on
-  }
-  const raw = configured ?? envLevel;
+export function resolveLogLevel(options: AddonOptions, envLevel?: string): { level: Level; invalid: string | null } {
+  const raw = options.log_level ?? envLevel;
   if (raw === undefined || raw === null || raw === "") return { level: "info", invalid: null };
   const level = parseLevel(raw);
   return level ? { level, invalid: null } : { level: "info", invalid: String(raw).slice(0, 40) };
