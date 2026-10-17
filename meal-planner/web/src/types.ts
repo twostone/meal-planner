@@ -91,3 +91,11 @@ export type ShoppingEntry = { entry_id: number; title: string; done: boolean; se
 export type ShoppingItem = { key: string; name: string; note: string | null; spec: string | null; sources: string[]; on_list: boolean };
 export type ShoppingList = { entries: ShoppingEntry[]; items: ShoppingItem[]; list_error: boolean };
 export type SendResult = { added: number; failed: number; reason: string | null };
+
+// Making the stored ingredients uniform (see NormalizeSheet).
+export type IngredientPair = { name: string; note: string | null; dishes: number };
+export type IngredientChange = {
+  from: { name: string; note: string | null };
+  to: { name: string; note: string | null; prep: string | null };
+  unit: string | null; // English unit taken out of the note; the server converts amount and unit
+};

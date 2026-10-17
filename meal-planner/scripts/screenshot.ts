@@ -99,6 +99,31 @@ async function fakeShopping(page: Page): Promise<void> {
   );
 }
 
+// Without Home Assistant there is no AI: answer its routes for making ingredients uniform with sample suggestions.
+async function fakeNormalize(page: Page): Promise<void> {
+  await page.route("**/api/recipe/status", (r) => r.fulfill({ json: { ai: true, reason: null } }));
+  await page.route("**/api/ingredients/pairs", (r) =>
+    r.fulfill({
+      json: [
+        { name: "Eier", note: null, dishes: 3 },
+        { name: "Mehl", note: "cups, gesiebt", dishes: 1 },
+        { name: "rote Zwiebeln", note: "gewürfelt", dishes: 2 },
+      ],
+    }),
+  );
+  await page.route("**/api/ingredients/normalize/preview", (r) =>
+    r.fulfill({
+      json: {
+        changes: [
+          { from: { name: "Eier", note: null }, to: { name: "Ei", note: null, prep: null }, unit: null },
+          { from: { name: "Mehl", note: "cups, gesiebt" }, to: { name: "Mehl", note: null, prep: "gesiebt" }, unit: "cup" },
+          { from: { name: "rote Zwiebeln", note: "gewürfelt" }, to: { name: "Zwiebel", note: "rot", prep: "gewürfelt" }, unit: null },
+        ],
+      },
+    }),
+  );
+}
+
 type Shot = { name: string; run: (page: Page) => Promise<void> };
 
 const SHOTS: Shot[] = [
@@ -121,6 +146,16 @@ const SHOTS: Shot[] = [
     },
   },
   { name: "cook", run: (page) => page.getByRole("button", { name: "Kochen", exact: true }).click() },
+  {
+    name: "normalize",
+    run: async (page) => {
+      await fakeNormalize(page);
+      await page.getByRole("button", { name: "Katalog" }).click();
+      await page.getByRole("button", { name: "Zutaten vereinheitlichen" }).click();
+      await page.getByRole("button", { name: "Vorschläge holen" }).click();
+      await page.getByText("Änderungen übernehmen").waitFor();
+    },
+  },
   { name: "shopping", run: (page) => page.getByRole("button", { name: "Einkaufen", exact: true }).click() },
 ];
 

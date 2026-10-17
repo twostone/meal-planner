@@ -1,6 +1,6 @@
 # Umbauplan: Zutaten vereinheitlichen
 
-_Stand: 17.10.2026. PR 1 (Import) gebaut, PR 2 (Bestand) folgt._
+_Stand: 17.10.2026. PR 1 (Import) und PR 2 (Bestand) gebaut._
 
 ## 1. Entscheidungen (17.10.2026)
 
@@ -36,7 +36,7 @@ _Stand: 17.10.2026. PR 1 (Import) gebaut, PR 2 (Bestand) folgt._
 - Editor: Felder „Sorte“ und „Zubereitung“, im Entwurf die Originalzeile unter jeder Zutat.
 - Suche: `matchesIngredient` (Präfix, höchstens 2 fehlende Zeichen), `GET /api/ingredients/names` für das `<datalist>`.
 
-## 4. PR 2 – vorhandene Zutaten vereinheitlichen
+## 4. PR 2 – vorhandene Zutaten vereinheitlichen (gebaut)
 
 1. **Vorschau, schreibt nichts:** `POST /api/ingredients/normalize/preview` mit bis zu 80 eindeutigen Paaren (`name`,
    `note`). KI-Task `meal_planner_normalize` gibt je Paar `{name, note, prep}` zurück. Der Client ruft blockweise
