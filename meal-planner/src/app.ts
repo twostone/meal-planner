@@ -2,7 +2,7 @@ import { Hono, type Context } from "hono";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { zValidator } from "@hono/zod-validator";
 import * as z from "zod";
-import { AiError, type RecipeAi } from "./ha-ai.ts";
+import { AiError, MAX_KNOWN_NAMES, type RecipeAi } from "./ha-ai.ts";
 import { TodoError, type HaTodo, type OpenTodoItem } from "./ha-todo.ts";
 import type { HaEventInput, HaUser } from "./ha-notify.ts";
 import { IMAGE_NAME, type ImageStore } from "./images.ts";
@@ -78,6 +78,7 @@ const ingredient = z
     unit: z.enum(UNITS).nullable(),
     name: z.string().trim().min(1).max(80),
     note: text(200),
+    prep: text(200).optional(), // missing (older client) = none
     raw: z.string().trim().max(200).nullish(), // built from amount/unit/name when missing
   })
   .refine((v) => v.amount_max === null || (v.amount !== null && v.amount_max >= v.amount), {
@@ -213,6 +214,8 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
   app.get("/api/me", (c) => c.json({ user: haUser(c) }));
 
   app.get("/api/dishes", (c) => c.json(repo.listDishes(c.req.query("q"), c.req.query("ingredient"))));
+  // Suggestions for the search box of the catalog.
+  app.get("/api/ingredients/names", (c) => c.json(repo.listIngredientNames(MAX_KNOWN_NAMES)));
   app.post("/api/dishes", zValidator("json", dishBody), async (c) => {
     const body = c.req.valid("json");
     if (await imageMissing(body.image)) return c.json({ error: "unknown image" }, 400);
@@ -251,7 +254,7 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
       if (drafting >= MAX_PARALLEL_DRAFTS) return c.json({ error: "busy" }, 429);
       drafting++;
       try {
-        return c.json(buildDraft(await ai.generate(source_text), source_text));
+        return c.json(buildDraft(await ai.generate(source_text, repo.listIngredientNames(MAX_KNOWN_NAMES)), source_text));
       } catch (e) {
         if (e instanceof AiError || e instanceof DraftError) {
           const reason = e instanceof AiError ? e.reason : "bad_response";

@@ -1,5 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { openDb } from "../src/db.ts";
+import { createRepo } from "../src/repo.ts";
 import { buildShoppingList, MAX_SPEC_LENGTH, type ShoppingRecipe } from "../src/shopping.ts";
 
 const ing = (amount: number | null, unit: string | null, name: string, amount_max: number | null = null, note: string | null = null) => ({
@@ -134,4 +136,14 @@ test("a long note is cut to the spec limit without leaving half a character", ()
   assert.ok(item!.spec!.length <= MAX_SPEC_LENGTH);
   assert.equal(item!.spec!.toWellFormed(), item!.spec, "no lone surrogate");
   assert.equal(item!.note, note, "only the spec is cut, the note itself is kept");
+});
+
+test("the preparation (prep) does not split items: same name and note with different prep is one item", () => {
+  const repo = createRepo(openDb(":memory:"));
+  const plan = repo.createPlan({ start_date: "2026-10-10", end_date: "2026-10-16" });
+  for (const [title, prep] of [["Salat", "in Ringen"], ["Suppe", "gewürfelt"]] as const) {
+    const entry = repo.addEntry(plan.id, { title });
+    repo.setRecipe(entry.dish_id, { servings: null, instructions: null, ingredients: [{ section: null, amount: 1, amount_max: null, unit: null, name: "Zwiebel", note: "rot", prep }] });
+  }
+  assert.deepEqual(view(buildShoppingList(repo.getPlanIngredients(plan.id))), [["Zwiebel", "rot", "rot, 2", ["Salat", "Suppe"]]]);
 });

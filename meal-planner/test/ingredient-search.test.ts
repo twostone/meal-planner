@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createApp } from "../src/app.ts";
 import { openDb } from "../src/db.ts";
-import { createRepo } from "../src/repo.ts";
+import { createRepo, matchesIngredient, MAX_PLURAL_SUFFIX } from "../src/repo.ts";
 
 function setup() {
   const app = createApp(createRepo(openDb(":memory:")));
@@ -55,4 +55,38 @@ test("the search sees the recipe as it is saved: replaced ingredients, deleted r
   assert.deepEqual(await titles(call, "ingredient=kichererbsen"), ["Curry"]);
   await call("PUT", `/api/dishes/${id}/recipe`, { servings: null, instructions: null, ingredients: [] });
   assert.deepEqual(await titles(call, "ingredient=kichererbsen"), []);
+});
+
+test("?ingredient= finds the singular base form from a plural, but no other word that only shares letters", async () => {
+  const call = setup();
+  await dish(call, "Suppe", ["Zwiebel", "Tomate"]);
+  await dish(call, "Kuchen", ["Ei", "Mehl"]);
+  await dish(call, "Risotto", ["Reis"]);
+  assert.deepEqual(await titles(call, "ingredient=zwiebeln"), ["Suppe"]);
+  assert.deepEqual(await titles(call, "ingredient=Tomaten"), ["Suppe"]);
+  assert.deepEqual(await titles(call, "ingredient=eier"), ["Kuchen"]);
+  assert.deepEqual(await titles(call, "ingredient=mais"), [], "Ei is not the start of mais");
+  assert.deepEqual(await titles(call, "ingredient=reise"), ["Risotto"], "one letter more is still a plural ending");
+  assert.deepEqual(await titles(call, "ingredient=reisnudeln"), [], "more than two letters more: another word");
+  assert.deepEqual(await titles(call, "ingredient=eis"), ["Kuchen", "Risotto"], "accepted: Ei matches eis (prefix), Reis contains eis");
+});
+
+test("matchesIngredient: substring or plural ending of at most MAX_PLURAL_SUFFIX letters", () => {
+  assert.equal(matchesIngredient("zwiebel", "zwiebeln"), true);
+  assert.equal(matchesIngredient("tomate", "tomaten"), true);
+  assert.equal(matchesIngredient("ei", "eier"), true);
+  assert.equal(matchesIngredient("eis", "reis"), false);
+  assert.equal(matchesIngredient("ei", "mais"), false);
+  assert.equal(matchesIngredient("zucchini", "zucch"), true);
+  assert.equal(matchesIngredient("ei", "e".padEnd(2 + MAX_PLURAL_SUFFIX + 1, "x")), false);
+  assert.equal(matchesIngredient("", "ab"), false);
+});
+
+test("GET /api/ingredients/names: each name once (case and spaces do not matter), most used first", async () => {
+  const call = setup();
+  assert.deepEqual((await call("GET", "/api/ingredients/names")).json, []);
+  await dish(call, "A", ["Zwiebel", "Möhre"]);
+  await dish(call, "B", ["zwiebel ", "Apfel"]);
+  await dish(call, "C", ["Zwiebel", "Möhre"]);
+  assert.deepEqual((await call("GET", "/api/ingredients/names")).json, ["Zwiebel", "Möhre", "Apfel"]);
 });

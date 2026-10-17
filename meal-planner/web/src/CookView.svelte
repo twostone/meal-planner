@@ -2,7 +2,7 @@
   import { onDestroy, onMount, tick } from "svelte";
   import * as api from "./api";
   import Icon from "./Icon.svelte";
-  import { ingredientText, stepLines } from "./recipe";
+  import { ingredientExtra, ingredientText, stepLines } from "./recipe";
   import { app, closeSheet, dismissError, finishEntry } from "./store.svelte";
   import type { CookEntry, Ingredient } from "./types";
 
@@ -201,7 +201,7 @@
                 <li>
                   <button type="button" class="tick" aria-pressed={on} onclick={() => tickItem(e, "ingredient", idx)}>
                     <span class="box">{#if on}<Icon name="check" size={16} />{/if}</span>
-                    <span class="tick-text">{ingredientText(i)}{#if i.note}<span class="ing-note">, {i.note}</span>{/if}</span>
+                    <span class="tick-text">{ingredientText(i)}{#if ingredientExtra(i)}<span class="ing-note">, {ingredientExtra(i)}</span>{/if}</span>
                   </button>
                 </li>
               {/each}

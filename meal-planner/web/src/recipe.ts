@@ -6,6 +6,7 @@ type Ingredient = {
   unit: string | null;
   name: string;
   note: string | null;
+  prep?: string | null;
 };
 
 // 1.5 -> "1,5" (German decimal comma, no trailing zeros)
@@ -28,6 +29,9 @@ export function parseAmount(v: string): { amount: number | null; amount_max: num
 
 // "2 EL Olivenöl" for the recipe view
 export const ingredientText = (i: Ingredient) => [fmtAmount(i), i.unit, i.name].filter(Boolean).join(" ");
+
+// ", rot, gewürfelt" after the ingredient: variety (note), then preparation (prep). "" without either.
+export const ingredientExtra = (i: Pick<Ingredient, "note" | "prep">) => [i.note, i.prep].filter(Boolean).join(", ");
 
 export function groupBySection(list: Ingredient[]): { section: string | null; items: Ingredient[] }[] {
   const out: { section: string | null; items: Ingredient[] }[] = [];

@@ -102,3 +102,29 @@ test("normalizeForCompare keeps letters and case", () => {
   assert.equal(normalizeForCompare("• 2  EL\tÖl:"), "2ELÖl");
   assert.notEqual(normalizeForCompare("Außerdem"), normalizeForCompare("Auflerdin"));
 });
+
+test("English units are converted, the preparation is kept apart, other units still go into the note", () => {
+  const d = buildDraft(
+    raw({
+      ingredients: JSON.stringify([
+        ing({ amount: 2, unit: "cups", name: "Mehl", raw: "2 cups Mehl" }),
+        ing({ amount: 1, unit: "cup", name: "Milch", prep: "warm", raw: "1 cup Milch" }),
+        ing({ amount: 1, unit: "Tbsp", name: "Olivenöl", raw: "1 Tbsp Olivenöl" }),
+        ing({ amount: 2, unit: null, name: "Zwiebel", note: "rot", prep: "  gewürfelt ", raw: "2 rote Zwiebeln, gewürfelt" }),
+        ing({ amount: 1, unit: "Glas", name: "Oliven", raw: "1 Glas Oliven" }),
+        ing({ name: "Ei", unit: null, amount: 1, prep: "x".repeat(300), raw: "1 Ei" }),
+      ]),
+    }),
+    SOURCE,
+  );
+  const view = d.ingredients.map((i) => [i.amount, i.unit, i.name, i.note, i.prep]);
+  assert.deepEqual(view.slice(0, 5), [
+    [240, "g", "Mehl", null, null],
+    [235, "ml", "Milch", null, "warm"],
+    [1, "EL", "Olivenöl", null, null],
+    [2, null, "Zwiebel", "rot", "gewürfelt"],
+    [1, null, "Oliven", "Glas", null],
+  ]);
+  assert.equal(d.ingredients[5]!.prep!.length, 200);
+  assert.equal(d.ingredients[0]!.raw, "2 cups Mehl", "the original line stays");
+});
