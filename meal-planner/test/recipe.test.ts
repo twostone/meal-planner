@@ -129,10 +129,42 @@ test("migration v5 keeps dishes and adds the recipe tables", async () => {
     old.close();
 
     const db = openDb(file);
-    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 9);
+    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 10);
     const repo = createRepo(db);
     assert.deepEqual(repo.listDishes().map((d) => d.title), ["Linsensuppe"]);
     assert.deepEqual(repo.getRecipe(1), { servings: null, instructions: null, ingredients: [], source_text: null, source_truncated: false });
+    db.close();
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("prep (preparation) is stored next to the note; missing = none, \"\" clears it, too long is rejected", async () => {
+  const { call } = setup();
+  const d = (await call("POST", "/api/dishes", { title: "Salat" })).json;
+  const url = `/api/dishes/${d.id}/recipe`;
+  const put = await call("PUT", url, recipe({ ingredients: [ing({ name: "Zwiebel", unit: null, note: "rot", prep: "gewürfelt" }), ing(), ing({ prep: "" })] }));
+  assert.equal(put.status, 200);
+  assert.deepEqual(put.json.ingredients.map((i: any) => [i.name, i.note, i.prep]), [["Zwiebel", "rot", "gewürfelt"], ["Olivenöl", null, null], ["Olivenöl", null, null]]);
+  assert.equal((await call("PUT", url, recipe({ ingredients: [ing({ prep: "x".repeat(201) })] }))).status, 400);
+  assert.equal((await call("GET", url)).json.ingredients[0].prep, "gewürfelt");
+});
+
+test("migration v9 -> v10 adds prep and keeps the ingredients", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "mp-mig-"));
+  try {
+    const file = path.join(dir, "v9.db");
+    const first = openDb(file);
+    const repo = createRepo(first);
+    const d = repo.createDish({ title: "Suppe" });
+    repo.setRecipe(d.id, { servings: null, instructions: null, ingredients: [{ section: null, amount: 1, amount_max: null, unit: null, name: "Zwiebel", note: "rot" }] });
+    first.exec("ALTER TABLE dish_ingredient DROP COLUMN prep");
+    first.exec("PRAGMA user_version = 9");
+    first.close();
+
+    const db = openDb(file);
+    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 10);
+    assert.deepEqual(createRepo(db).getRecipe(d.id).ingredients.map((i) => [i.name, i.note, i.prep, i.raw]), [["Zwiebel", "rot", null, "1 Zwiebel"]]);
     db.close();
   } finally {
     await rm(dir, { recursive: true, force: true });

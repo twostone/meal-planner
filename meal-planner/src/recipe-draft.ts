@@ -1,5 +1,6 @@
 import { UNITS } from "./repo.ts";
 import { clip } from "./text.ts";
+import { convert, foreignUnit } from "./units.ts";
 
 // What the LLM returns (ha-ai.ts) is untrusted input: this module turns it into a draft the user reviews,
 // never into stored data. Nothing here talks to the network.
@@ -11,6 +12,7 @@ export type DraftIngredient = {
   unit: string | null;
   name: string;
   note: string | null;
+  prep: string | null;
   raw: string;
   // raw and section are found word for word in the source text. false = the model changed or made up the line.
   verified: boolean;
@@ -85,13 +87,16 @@ export function buildDraft(raw: RawDraft, source: string): RecipeDraft {
     let amountMax = num(o.amount_max);
     if (amount === null || (amountMax !== null && amountMax < amount)) amountMax = null;
     if (amount === null) amountMax = null;
-    // Only units from the fixed list; any other unit goes into the note so the information is not lost.
+    // Units from the fixed list; English ones (cup, oz) are converted. Any other unit goes into the note so the
+    // information is not lost.
     let unit: string | null = null;
     let note = str(o.note, 200);
     const givenUnit = typeof o.unit === "string" ? o.unit.trim() : "";
     if (givenUnit) {
       unit = UNIT_BY_LOWER.get(givenUnit.toLowerCase()) ?? null;
-      if (!unit) note = str([givenUnit, note].filter(Boolean).join(", "), 200);
+      const foreign = unit ? null : foreignUnit(givenUnit);
+      if (foreign) ({ amount, amount_max: amountMax, unit } = convert(amount, amountMax, foreign, name));
+      else if (!unit) note = str([givenUnit, note].filter(Boolean).join(", "), 200);
     }
     ingredients.push({
       section,
@@ -100,6 +105,7 @@ export function buildDraft(raw: RawDraft, source: string): RecipeDraft {
       unit,
       name,
       note,
+      prep: str(o.prep, 200),
       raw: rawLine,
       verified: found(rawLine) && (section === null || found(section)),
     });

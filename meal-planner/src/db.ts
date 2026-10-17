@@ -86,6 +86,8 @@ const MIGRATIONS = [
   ) STRICT;`,
   // v9: small settings of the household, e.g. the to-do list the shopping list was last sent to
   "CREATE TABLE setting (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;",
+  // v10: how an ingredient is prepared ("gewürfelt"), kept apart from the note (variety, relevant for shopping: "rot")
+  "ALTER TABLE dish_ingredient ADD COLUMN prep TEXT;",
 ];
 
 function migrate(db: DatabaseSync): void {
