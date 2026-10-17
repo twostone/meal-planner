@@ -12,7 +12,7 @@ const G_PER_LB = 453.592;
 
 // The English units the recipe prompt allows (ha-ai.ts); recipe-draft.ts converts them.
 export const FOREIGN_UNITS = ["cup", "tbsp", "tsp", "oz", "fl oz", "lb"] as const;
-type Foreign = (typeof FOREIGN_UNITS)[number];
+export type Foreign = (typeof FOREIGN_UNITS)[number];
 const FOREIGN_BY_SPELLING: Record<string, Foreign> = {
   cup: "cup",
   cups: "cup",

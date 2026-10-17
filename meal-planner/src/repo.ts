@@ -1,6 +1,8 @@
 import type { DatabaseSync } from "node:sqlite";
 import { transaction } from "./db.ts";
+import type { Change, Pair } from "./ingredient-normalize.ts";
 import { nameKey } from "./shopping.ts";
+import { convert } from "./units.ts";
 
 export type Dish = {
   id: number;
@@ -275,6 +277,38 @@ export function createRepo(db: DatabaseSync) {
         .sort((a, b) => b.n - a.n || a.name.localeCompare(b.name, "de"))
         .slice(0, limit)
         .map((c) => c.name);
+    },
+
+    // Every distinct (name, note) of the stored ingredients with the number of dishes using it, for making them uniform.
+    // Exact spellings: applying a change compares with exactly these values.
+    listIngredientPairs(): (Pair & { dishes: number })[] {
+      return all<Pair & { dishes: number }>(
+        "SELECT name, note, COUNT(DISTINCT dish_id) AS dishes FROM dish_ingredient GROUP BY name, note",
+      ).sort((a, b) => a.name.localeCompare(b.name, "de") || (a.note ?? "").localeCompare(b.note ?? "", "de"));
+    },
+
+    // Applies reviewed changes in one transaction and returns the number of changed rows. Only rows that still have
+    // the old name and note change (an outdated preview changes nothing). Unlike setRecipe this keeps pos, raw and
+    // the ticks of cook mode: the lines stay where they are. A prep already stored stays when the change has none.
+    normalizeIngredients(changes: Change[]): number {
+      return transaction(db, () => {
+        const rows = db.prepare(
+          "SELECT id, amount, amount_max, unit FROM dish_ingredient WHERE name = ? AND note IS ?",
+        );
+        const update = db.prepare(
+          "UPDATE dish_ingredient SET name = ?, note = ?, prep = COALESCE(?, prep), amount = ?, amount_max = ?, unit = ? WHERE id = ?",
+        );
+        let changed = 0;
+        for (const { from, to, unit } of changes) {
+          for (const r of rows.all(from.name, from.note) as { id: number; amount: number | null; amount_max: number | null; unit: string | null }[]) {
+            // A unit taken from the note only applies to rows without a unit of their own.
+            const q = unit && r.unit === null ? convert(r.amount, r.amount_max, unit, to.name) : r;
+            update.run(to.name, to.note, to.prep, q.amount, q.amount_max, q.unit, r.id);
+            changed++;
+          }
+        }
+        return changed;
+      });
     },
 
     getDish,

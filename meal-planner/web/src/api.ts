@@ -4,6 +4,8 @@ import type {
   Entry,
   PlanDetail,
   AiStatus,
+  IngredientChange,
+  IngredientPair,
   CheckState,
   CookEntry,
   PlanSummary,
@@ -54,6 +56,11 @@ export const listDishes = () => request<Dish[]>("GET", "api/dishes");
 export const listDishesWithIngredient = (text: string) =>
   request<Dish[]>("GET", `api/dishes?ingredient=${encodeURIComponent(text)}`);
 export const listIngredientNames = () => request<string[]>("GET", "api/ingredients/names");
+export const listIngredientPairs = () => request<IngredientPair[]>("GET", "api/ingredients/pairs");
+export const previewNormalize = (pairs: { name: string; note: string | null }[]) =>
+  request<{ changes: IngredientChange[] }>("POST", "api/ingredients/normalize/preview", { pairs });
+export const applyNormalize = (changes: IngredientChange[]) =>
+  request<{ changed: number }>("POST", "api/ingredients/normalize/apply", { changes });
 export const createDish = (d: DishInput) => request<Dish>("POST", "api/dishes", d);
 export const updateDish = (id: number, d: DishInput) => request<Dish>("PATCH", `api/dishes/${id}`, d);
 export const deleteDish = (id: number) => request<void>("DELETE", `api/dishes/${id}`);
