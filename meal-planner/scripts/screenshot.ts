@@ -60,8 +60,8 @@ async function seed(base: string): Promise<{ pastaDishId: number }> {
     instructions: "Wasser salzen und die Spaghetti kochen.\nSpeck in einer Pfanne auslassen.\nEier mit Käse verrühren und alles mischen.",
     ingredients: [
       { section: null, amount: 400, amount_max: null, unit: "g", name: "Spaghetti", note: null },
-      { section: null, amount: 150, amount_max: null, unit: "g", name: "Speck", note: null },
-      { section: null, amount: 3, amount_max: null, unit: null, name: "Eier", note: null },
+      { section: null, amount: 150, amount_max: null, unit: "g", name: "Speck", note: "durchwachsen", prep: "gewürfelt" },
+      { section: null, amount: 3, amount_max: null, unit: null, name: "Ei", note: null, prep: "zimmerwarm" },
     ],
   });
   return { pastaDishId };
@@ -110,6 +110,14 @@ const SHOTS: Shot[] = [
     run: async (page) => {
       await pastaTitle(page).click();
       await page.getByRole("button", { name: "Rezept Zutaten und Zubereitung" }).click();
+    },
+  },
+  {
+    name: "recipe-edit",
+    run: async (page) => {
+      await pastaTitle(page).click();
+      await page.getByRole("button", { name: "Rezept Zutaten und Zubereitung" }).click();
+      await page.getByRole("button", { name: "Bearbeiten" }).click();
     },
   },
   { name: "cook", run: (page) => page.getByRole("button", { name: "Kochen", exact: true }).click() },

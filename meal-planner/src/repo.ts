@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import { transaction } from "./db.ts";
+import { nameKey } from "./shopping.ts";
 
 export type Dish = {
   id: number;
@@ -49,13 +50,14 @@ export type Ingredient = {
   amount_max: number | null; // only for ranges ("1-2 Zehen")
   unit: string | null; // one of UNITS; null = counted without unit ("1 Zwiebel") or no amount
   name: string;
-  note: string | null;
+  note: string | null; // variety, relevant for shopping ("rot", "Macadamia", "TK")
+  prep: string | null; // preparation, irrelevant for shopping ("gewürfelt", "zimmerwarm")
   raw: string; // original line; built from amount/unit/name when entered by hand
 };
 export type RecipeInput = {
   servings: number | null;
   instructions: string | null; // one step per line
-  ingredients: (Omit<Ingredient, "raw"> & { raw?: string | null })[];
+  ingredients: (Omit<Ingredient, "raw" | "prep"> & { prep?: string | null; raw?: string | null })[];
 };
 // source_text: the recipe as found at the link, unchanged; only a fetch from the link writes it, never setRecipe.
 export type Recipe = Omit<RecipeInput, "ingredients"> & {
@@ -80,6 +82,15 @@ export type CookEntry = {
 // The steps of a recipe: non-empty lines. The frontend splits the same way, so step numbers agree.
 export const stepLines = (instructions: string | null): string[] =>
   (instructions ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
+
+// Plural endings the ingredient search tolerates: "zwiebeln" finds "Zwiebel", "eier" finds "Ei" (-n, -en, -e, -er, -s).
+export const MAX_PLURAL_SUFFIX = 2;
+
+// Search rule for ingredient names (both already lower case, toLocaleLowerCase("de")): the needle is part of the name,
+// or the name is the start of the needle and at most MAX_PLURAL_SUFFIX letters are missing. Names are stored in the
+// singular base form, people search in the plural. Plurals with umlauts ("äpfel") are left to the autocomplete.
+export const matchesIngredient = (name: string, needle: string) =>
+  name.includes(needle) || (name.length > 0 && needle.startsWith(name) && needle.length - name.length <= MAX_PLURAL_SUFFIX);
 
 // shopping_list_entity: the Home Assistant to-do list the shopping list was last sent to (preselected next time).
 export type SettingKey = "shopping_list_entity";
@@ -176,7 +187,7 @@ export function createRepo(db: DatabaseSync) {
   }
 
   const num = (n: number) => String(n).replace(".", ",");
-  const rawLine = (i: Omit<Ingredient, "raw">) =>
+  const rawLine = (i: Pick<Ingredient, "amount" | "amount_max" | "unit" | "name">) =>
     [i.amount === null ? "" : num(i.amount) + (i.amount_max === null ? "" : `-${num(i.amount_max)}`), i.unit, i.name]
       .filter(Boolean)
       .join(" ");
@@ -189,7 +200,7 @@ export function createRepo(db: DatabaseSync) {
       );
       if (!d) throw new NotFoundError("dish");
       const ingredients = all<Ingredient>(
-        "SELECT section, amount, amount_max, unit, name, note, raw FROM dish_ingredient WHERE dish_id = ? ORDER BY pos",
+        "SELECT section, amount, amount_max, unit, name, note, prep, raw FROM dish_ingredient WHERE dish_id = ? ORDER BY pos",
         dishId,
       );
       return {
@@ -218,10 +229,10 @@ export function createRepo(db: DatabaseSync) {
         db.prepare("UPDATE dish SET servings = ?, instructions = ? WHERE id = ?").run(recipe.servings, recipe.instructions, dishId);
         db.prepare("DELETE FROM dish_ingredient WHERE dish_id = ?").run(dishId);
         const ins = db.prepare(
-          "INSERT INTO dish_ingredient (dish_id, pos, section, amount, amount_max, unit, name, note, raw) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO dish_ingredient (dish_id, pos, section, amount, amount_max, unit, name, note, prep, raw) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         );
         recipe.ingredients.forEach((i, pos) =>
-          ins.run(dishId, pos, i.section, i.amount, i.amount_max, i.unit, i.name, i.note, i.raw?.trim() || rawLine(i)),
+          ins.run(dishId, pos, i.section, i.amount, i.amount_max, i.unit, i.name, i.note, i.prep ?? null, i.raw?.trim() || rawLine(i)),
         );
         return self.getRecipe(dishId);
       });
@@ -242,12 +253,28 @@ export function createRepo(db: DatabaseSync) {
       if (needle) {
         const ids = new Set(
           all<{ dish_id: number; name: string }>("SELECT DISTINCT dish_id, name FROM dish_ingredient")
-            .filter((r) => r.name.toLocaleLowerCase("de").includes(needle))
+            .filter((r) => matchesIngredient(r.name.toLocaleLowerCase("de"), needle))
             .map((r) => r.dish_id),
         );
         rows = rows.filter((d) => ids.has(d.id));
       }
       return withTags(rows);
+    },
+
+    // Ingredient names in use, each once (same nameKey = same name, the first spelling wins), most frequent first.
+    // For the recipe prompt (reuse names) and the autocomplete of the search box.
+    listIngredientNames(limit: number): string[] {
+      const counts = new Map<string, { name: string; n: number }>();
+      for (const { name } of all<{ name: string }>("SELECT name FROM dish_ingredient ORDER BY dish_id, pos")) {
+        const key = nameKey(name);
+        const c = counts.get(key);
+        if (c) c.n++;
+        else counts.set(key, { name, n: 1 });
+      }
+      return [...counts.values()]
+        .sort((a, b) => b.n - a.n || a.name.localeCompare(b.name, "de"))
+        .slice(0, limit)
+        .map((c) => c.name);
     },
 
     getDish,

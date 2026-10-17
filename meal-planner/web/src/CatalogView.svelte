@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { imageSrc, listDishesWithIngredient } from "./api";
+  import { onMount } from "svelte";
+  import { imageSrc, listDishesWithIngredient, listIngredientNames } from "./api";
   import Icon from "./Icon.svelte";
   import { addDishToPlan, app, openDishSheet } from "./store.svelte";
   import type { Dish } from "./types";
@@ -41,6 +42,15 @@
     };
   });
 
+  // Ingredient names in use as suggestions for the search box: names are stored in the base form ("Apfel"), which
+  // the search would not find from "äpfel". Without them the box simply has no suggestions.
+  let ingredientNames = $state<string[]>([]);
+  onMount(() => {
+    listIngredientNames()
+      .then((names) => (ingredientNames = names))
+      .catch(() => {});
+  });
+
   const inPlan = $derived(new Set(app.plan?.entries.map((e) => e.dish_id) ?? []));
 
   const groups = $derived.by(() => {
@@ -64,7 +74,10 @@
 <main>
   <div class="search">
     <span class="search-icon"><Icon name="search" size={22} /></span>
-    <input type="search" aria-label="Gerichte oder Zutaten suchen" placeholder="Gericht oder Zutat suchen" autocomplete="off" bind:value={s} />
+    <input type="search" aria-label="Gerichte oder Zutaten suchen" placeholder="Gericht oder Zutat suchen" autocomplete="off" list="ingredient-names" bind:value={s} />
+    <datalist id="ingredient-names">
+      {#each ingredientNames as n (n)}<option value={n}></option>{/each}
+    </datalist>
   </div>
 
   {#if allTags.length}

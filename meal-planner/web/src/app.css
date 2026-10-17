@@ -915,6 +915,14 @@ fieldset.ingredients legend {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 8px;
 }
+.ing-extra > :nth-child(3) {
+  grid-column: 1 / -1; /* section below variety and preparation */
+}
+.ing-raw {
+  font-size: 13px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
 .recipe h3 {
   margin: 12px 0 4px;
   font-family: var(--display);

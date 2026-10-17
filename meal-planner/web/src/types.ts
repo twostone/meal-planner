@@ -56,7 +56,8 @@ export type Ingredient = {
   amount_max: number | null; // only for ranges ("1-2")
   unit: string | null;
   name: string;
-  note: string | null;
+  note: string | null; // variety, relevant for shopping ("rot")
+  prep: string | null; // preparation ("gewürfelt")
   raw: string; // original line
 };
 export type Recipe = {

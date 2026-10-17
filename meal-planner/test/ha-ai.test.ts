@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { createApp } from "../src/app.ts";
 import { openDb } from "../src/db.ts";
 import { setLogSink } from "../src/log.ts";
-import { AiError, createHaAi, languageName, PROMPT, titlesPrompt, type RecipeAi } from "../src/ha-ai.ts";
+import { AiError, createHaAi, knownNamesPrompt, languageName, MAX_KNOWN_NAMES, PROMPT, titlesPrompt, type RecipeAi } from "../src/ha-ai.ts";
 import { createRepo } from "../src/repo.ts";
 
 // A fake Supervisor core proxy on 127.0.0.1 (never the real network).
@@ -47,7 +47,7 @@ test("status: disabled without token, no_entity without ai_task entity, ok with 
 test("generate: posts the task with token and returns service_response.data", async () => {
   const f = await fakeSupervisor(() => ({ json: { changed_states: [], service_response: { data: { ingredients: "[]", instructions: "x" } } } }));
   try {
-    const out = await createHaAi("tok", f.base).generate("2 Eier");
+    const out = await createHaAi("tok", f.base).generate("2 Eier", []);
     assert.deepEqual(out, { ingredients: "[]", instructions: "x" });
     const s = f.seen[0]!;
     assert.equal(s.method, "POST");
@@ -61,27 +61,50 @@ test("generate: posts the task with token and returns service_response.data", as
   }
 });
 
+test("generate: the names in use go into the prompt before the text, none without names", async () => {
+  const f = await fakeSupervisor(() => ({ json: { service_response: { data: { ingredients: "[]" } } } }));
+  try {
+    await createHaAi("tok", f.base).generate("2 Eier", ["Zwiebel", "Ei"]);
+    const prompt = f.seen[0]!.body.instructions as string;
+    assert.ok(prompt.includes("Bereits verwendete Namen"));
+    assert.ok(prompt.indexOf("Zwiebel, Ei") < prompt.indexOf("2 Eier"));
+    await createHaAi("tok", f.base).generate("2 Eier", []);
+    assert.equal(f.seen[1]!.body.instructions, `${PROMPT}\n\nText:\n2 Eier`);
+  } finally {
+    f.close();
+  }
+});
+
+test("knownNamesPrompt: at most MAX_KNOWN_NAMES names; the prompt allows the English units", () => {
+  const names = Array.from({ length: MAX_KNOWN_NAMES + 5 }, (_, i) => `Z${i}`);
+  const p = knownNamesPrompt(names);
+  assert.ok(p.includes(`Z${MAX_KNOWN_NAMES - 1}`));
+  assert.ok(!p.includes(`Z${MAX_KNOWN_NAMES}`));
+  assert.equal(knownNamesPrompt([]), "");
+  assert.ok(PROMPT.includes("cup") && PROMPT.includes("prep"));
+});
+
 test("generate: a response layer keyed by entity id is accepted", async () => {
   const f = await fakeSupervisor(() => ({ json: { service_response: { "ai_task.x": { data: { ingredients: "[]" } } } } }));
   try {
-    assert.deepEqual(await createHaAi("tok", f.base).generate("t"), { ingredients: "[]" });
+    assert.deepEqual(await createHaAi("tok", f.base).generate("t", []), { ingredients: "[]" });
   } finally {
     f.close();
   }
 });
 
 test("generate: errors map to AiError reasons (disabled, unreachable, bad_response, timeout)", async () => {
-  await assert.rejects(createHaAi(null).generate("t"), (e: AiError) => e.reason === "disabled");
-  await assert.rejects(createHaAi("t", "http://127.0.0.1:1/core/api/").generate("t"), (e: AiError) => e.reason === "unreachable");
+  await assert.rejects(createHaAi(null).generate("t", []), (e: AiError) => e.reason === "disabled");
+  await assert.rejects(createHaAi("t", "http://127.0.0.1:1/core/api/").generate("t", []), (e: AiError) => e.reason === "unreachable");
   let mode: "500" | "empty" | "hang" = "500";
   const f = await fakeSupervisor(() => (mode === "500" ? { status: 500 } : mode === "empty" ? { json: { service_response: {} } } : { hang: true }));
   try {
     const ai = createHaAi("t", f.base, 100);
-    await assert.rejects(ai.generate("t"), (e: AiError) => e.reason === "unreachable");
+    await assert.rejects(ai.generate("t", []), (e: AiError) => e.reason === "unreachable");
     mode = "empty";
-    await assert.rejects(ai.generate("t"), (e: AiError) => e.reason === "bad_response");
+    await assert.rejects(ai.generate("t", []), (e: AiError) => e.reason === "bad_response");
     mode = "hang";
-    await assert.rejects(ai.generate("t"), (e: AiError) => e.reason === "timeout");
+    await assert.rejects(ai.generate("t", []), (e: AiError) => e.reason === "timeout");
   } finally {
     f.close();
   }
@@ -91,7 +114,7 @@ test("generate and titles: a lone surrogate in the text never reaches Home Assis
   const f = await fakeSupervisor(() => ({ json: { service_response: { data: { ingredients: "[]", titles: "x" } } } }));
   try {
     const ai = createHaAi("tok", f.base);
-    await ai.generate("Zutaten \ud83d Ende");
+    await ai.generate("Zutaten \ud83d Ende", []);
     await ai.titles({ title: "Titel \ude02", text: "Text \ud83d", lang: "de" });
     assert.equal(f.seen.length, 2);
     for (const s of f.seen) assert.doesNotMatch(s.raw, /\\ud[89a-f][0-9a-f]{2}/i, "no escaped surrogate in the body");
@@ -117,7 +140,7 @@ test("a failed call logs what Home Assistant said, shortened to 300 characters",
   const f = await fakeSupervisor(() => ({ status: 400, json: { message: "Data should be valid JSON.", pad: "x".repeat(1000) } }));
   try {
     const lines = await captureLog(async () => {
-      await assert.rejects(createHaAi("tok", f.base).generate("t"), (e: AiError) => e.reason === "unreachable");
+      await assert.rejects(createHaAi("tok", f.base).generate("t", []), (e: AiError) => e.reason === "unreachable");
       await createHaAi("tok", f.base).status(); // a failing status check logs the reason too
     });
     assert.equal(lines.length, 2);
@@ -139,7 +162,7 @@ test("a successful call logs how long it took; a timeout and an unreachable supe
       await ai.titles({ title: "t", text: "t", lang: "de" });
       hang = true;
       await assert.rejects(ai.titles({ title: "t", text: "t", lang: "de" }), (e: AiError) => e.reason === "timeout");
-      await assert.rejects(createHaAi("tok", "http://127.0.0.1:1/core/api/").generate("t"), (e: AiError) => e.reason === "unreachable");
+      await assert.rejects(createHaAi("tok", "http://127.0.0.1:1/core/api/").generate("t", []), (e: AiError) => e.reason === "unreachable");
     });
     assert.match(lines[0]!, / INFO ha-ai task_done task=meal_planner_title ms=\d+$/);
     assert.match(lines[1]!, / WARN ha-ai task_timeout task=meal_planner_title ms=\d+ limit_ms=100$/);
@@ -178,9 +201,11 @@ test("GET /api/recipe/status: disabled without AI, otherwise what the AI reports
 
 test("POST …/recipe/draft: builds a checked draft from the source text and stores nothing", async () => {
   const seen: string[] = [];
+  const known: string[][] = [];
   const call = setup(
-    fakeAi(async (text) => {
+    fakeAi(async (text, names) => {
       seen.push(text);
+      known.push(names);
       return { servings: 4, servings_quote: "für 4", ingredients: JSON.stringify([{ section: null, amount: 2, amount_max: null, unit: "EL", name: "Öl", note: null, raw: "2 EL Öl" }, { section: null, amount: 1, unit: null, name: "Ei", raw: "1 Ei erfunden" }]), instructions: "1. Braten" };
     }),
   );
@@ -188,6 +213,7 @@ test("POST …/recipe/draft: builds a checked draft from the source text and sto
   const r = await call("POST", `/api/dishes/${id}/recipe/draft`);
   assert.equal(r.status, 200);
   assert.deepEqual(seen, ["Rezept für 4\n2 EL Öl\nBraten"]);
+  assert.deepEqual(known, [[]], "no ingredients stored yet");
   assert.deepEqual(r.json.ingredients.map((i: any) => [i.name, i.verified]), [["Öl", true], ["Ei", false]]);
   assert.equal(r.json.servings, 4);
   assert.equal(r.json.instructions, "Braten");

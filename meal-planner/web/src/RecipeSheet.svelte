@@ -2,14 +2,14 @@
   import { onMount } from "svelte";
   import * as api from "./api";
   import Icon from "./Icon.svelte";
-  import { fmtAmount, groupBySection, ingredientText, parseAmount, stepLines } from "./recipe";
+  import { fmtAmount, groupBySection, ingredientExtra, ingredientText, parseAmount, stepLines } from "./recipe";
   import Sheet from "./Sheet.svelte";
   import { app, closeSheet } from "./store.svelte";
   import { UNITS, type AiStatus, type Recipe, type RecipeDraft } from "./types";
 
   let { dishId }: { dishId: number } = $props();
 
-  type Row = { key: number; section: string; amount: string; unit: string; name: string; note: string; raw: string | null; sig: string; verified: boolean };
+  type Row = { key: number; section: string; amount: string; unit: string; name: string; note: string; prep: string; raw: string | null; sig: string; verified: boolean };
 
   const dish = $derived(app.dishes.find((d) => d.id === dishId));
   let recipe = $state<Recipe | null>(null);
@@ -56,7 +56,7 @@
     servings = r.servings === null ? "" : String(r.servings);
     instructions = r.instructions ?? "";
     rows = r.ingredients.map((i) => {
-      const row = { section: i.section ?? "", amount: fmtAmount(i), unit: i.unit ?? "", name: i.name, note: i.note ?? "" };
+      const row = { section: i.section ?? "", amount: fmtAmount(i), unit: i.unit ?? "", name: i.name, note: i.note ?? "", prep: i.prep ?? "" };
       return { key: nextKey++, ...row, raw: i.raw, sig: sigOf(row), verified: !("verified" in i) || i.verified };
     });
     problem = "";
@@ -65,7 +65,7 @@
 
   function addRow() {
     // A new ingredient starts in the section of the previous one.
-    rows.push({ key: nextKey++, section: rows.at(-1)?.section ?? "", amount: "", unit: "", name: "", note: "", raw: null, sig: "", verified: true });
+    rows.push({ key: nextKey++, section: rows.at(-1)?.section ?? "", amount: "", unit: "", name: "", note: "", prep: "", raw: null, sig: "", verified: true });
   }
 
   function cancel() {
@@ -113,7 +113,7 @@
     if (sv !== null && (!Number.isInteger(sv) || sv < 1 || sv > 50)) return void (problem = "Portionen: eine ganze Zahl von 1 bis 50.");
     const ingredients = [];
     for (const [n, r] of rows.entries()) {
-      if (!r.name.trim() && !r.amount.trim() && !r.unit && !r.note.trim()) continue; // empty row
+      if (!r.name.trim() && !r.amount.trim() && !r.unit && !r.note.trim() && !r.prep.trim()) continue; // empty row
       const a = parseAmount(r.amount);
       if (!a) return void (problem = `Zutat ${n + 1}: Menge wie „1,5“ oder „1-2“ eintragen.`);
       if (!r.name.trim()) return void (problem = `Zutat ${n + 1}: Bitte eine Zutat eintragen.`);
@@ -123,6 +123,7 @@
         unit: r.unit || null,
         name: r.name.trim(),
         note: r.note.trim() || null,
+        prep: r.prep.trim() || null,
         raw: r.raw !== null && r.sig === sigOf(r) ? r.raw : null,
       });
     }
@@ -174,10 +175,12 @@
               </button>
             </div>
             <input type="text" aria-label="Zutat" placeholder="Zutat" maxlength="80" bind:value={r.name} autocomplete="off" />
-            <details class="more" open={!!(r.note || r.section)}>
-              <summary>Hinweis und Abschnitt</summary>
+            {#if draftMode && r.raw}<small class="ing-raw">Original: {r.raw}</small>{/if}
+            <details class="more" open={!!(r.note || r.prep || r.section)}>
+              <summary>Sorte, Zubereitung, Abschnitt</summary>
               <div class="ing-extra">
-                <input type="text" aria-label="Hinweis" placeholder="Hinweis, z. B. fein" maxlength="200" bind:value={r.note} autocomplete="off" />
+                <input type="text" aria-label="Sorte" placeholder="Sorte, z. B. rot" maxlength="200" bind:value={r.note} autocomplete="off" />
+                <input type="text" aria-label="Zubereitung" placeholder="Zubereitung, z. B. gewürfelt" maxlength="200" bind:value={r.prep} autocomplete="off" />
                 <input type="text" aria-label="Abschnitt" placeholder="Abschnitt" maxlength="80" bind:value={r.section} autocomplete="off" />
               </div>
             </details>
@@ -214,7 +217,7 @@
           {#if g.section}<h4>{g.section}</h4>{/if}
           <ul>
             {#each g.items as i, ii (ii)}
-              <li>{ingredientText(i)}{#if i.note}<span class="ing-note">, {i.note}</span>{/if}</li>
+              <li>{ingredientText(i)}{#if ingredientExtra(i)}<span class="ing-note">, {ingredientExtra(i)}</span>{/if}</li>
             {/each}
           </ul>
         {/each}

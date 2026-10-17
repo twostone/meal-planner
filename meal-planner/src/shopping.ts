@@ -5,6 +5,8 @@ import { clip } from "./text.ts";
 // the same unit added up. The note ("Macadamia" for "Nüsse") is never merged away: 50 g Nüsse (Macadamia) and 50 g
 // Nüsse (Walnuss) stay two items, because "100 g Nüsse" would not say how much of which. No network, no database.
 // Synonyms ("Knoblauchzehe" vs. "Knoblauch") stay separate items on purpose: guessing would merge different things.
+// Names are made uniform earlier, when a recipe is recognized (base form, see PROMPT in ha-ai.ts); the preparation
+// ("gewürfelt") is a field of its own (prep) and not part of the key, so it does not split items.
 
 export type ShoppingRecipe = { title: string; ingredients: Pick<Ingredient, "amount" | "amount_max" | "unit" | "name" | "note">[] };
 export type ShoppingItem = {

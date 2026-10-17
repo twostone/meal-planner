@@ -43,6 +43,7 @@ meal-planner/            das Add-on (Docker-Build-Kontext)
     ha-todo.ts              Todo-Listen von HA (z. B. Bring): Listen, offene Artikel, Artikel hinzufügen
     shopping.ts             Einkaufsliste aus den Rezepten zusammenfassen (rein, ohne Netz und DB)
     recipe-draft.ts         prüft und bereinigt die LLM-Antwort, gleicht sie mit dem Originaltext ab
+    units.ts                englische Einheiten (cup, oz, …) in g/ml/EL/TL umrechnen, Dichte je Zutat (rein)
     text.ts                 clip (Kürzen ohne halbes Zeichen) und toJson (JSON für Home Assistant)
     log.ts                  Logger: eine logfmt-Zeile pro Ereignis, Stufe aus der App-Option `log_level`
     ha-discovery.ts         Meldung von Host, Port und Token per Supervisor-Discovery
@@ -88,7 +89,9 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   bleiben unverändert bestehen.
 - **Rezept** (Plan: `docs/plan-rezepte.md`, Stufe 1 bis 3, 5 und 7 gebaut): gehört zum Gericht, nicht zum Listeneintrag. `dish.servings`
   (1–50) und `dish.instructions` (ein Schritt pro Zeile, höchstens 10 000 Zeichen) plus `dish_ingredient` (Reihenfolge `pos`,
-  `section`, `amount`/`amount_max`, `unit`, `name`, `note`, `raw`). `GET/PUT /api/dishes/:id/recipe`: PUT ersetzt alles in einer
+  `section`, `amount`/`amount_max`, `unit`, `name`, `note`, `prep`, `raw`). `note` ist die **Sorte** (kaufrelevant: rot,
+  TK, Macadamia), `prep` die **Zubereitung** (gewürfelt, zimmerwarm, für den Einkauf egal); beide höchstens 200 Zeichen,
+  `prep` fehlt im PUT = keine (ältere Clients). `GET/PUT /api/dishes/:id/recipe`: PUT ersetzt alles in einer
   Transaktion (wie `setTags`), ein leeres Rezept löscht es. Höchstens 60 Zutaten. `unit` nur aus `UNITS` in `repo.ts`
   (wie `UNITS` in `web/src/types.ts`), **kein „Stück“**: Gezähltes hat `unit = null`. `raw` ist die Originalzeile und bleibt
   immer erhalten, bei Handeingabe wird sie aus Menge/Einheit/Name gebildet. Die Rezeptspalten kommen nie mit dem Katalog
@@ -112,10 +115,22 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   steuert, ob die UI den Knopf zeigt. Ohne Token ist `ai` nicht gesetzt: die Entwurfsroute gibt es dann nicht. Ablauf: 30 s
   Zeitlimit, kein Wiederholen, höchstens 2 parallele Entwürfe, Fehler -> 502 `ai failed` und im UI „Von Hand eintragen“.
   Das LLM hat keine Tools. Der Text geht an den in HA eingerichteten (evtl. Cloud-)Dienst: im README vermerkt.
+  **Zutaten vereinheitlichen** (Plan: `docs/plan-zutaten.md`, PR 1): Der Prompt verlangt `name` in der **Grundform Singular**
+  ohne Sorte und Zubereitung („2 rote Zwiebeln, gewürfelt“ -> Zwiebel / `note` rot / `prep` gewürfelt; die Anzeige „3
+  Zwiebel“ ist hingenommen) und hängt die schon verwendeten Namen an (`listIngredientNames` in `repo.ts`, gleiche
+  `nameKey`-Form = ein Name, häufigste zuerst, höchstens `MAX_KNOWN_NAMES` = 300, mit `clip` begrenzt). Erlaubt sind
+  zusätzlich die englischen Einheiten `FOREIGN_UNITS` (`units.ts`), die das Modell nicht selbst umrechnet: `buildDraft` rechnet
+  sie per `convert` um (cup = US 236,588 ml; mit Eintrag in `CUP_GRAMS` nach g, sonst ml; tbsp/tsp -> EL/TL; oz/lb -> g;
+  unter 20 ganzzahlig, darüber auf 5 gerundet). `raw` bleibt die Originalzeile, im Entwurf steht sie unter jeder Zeile
+  („Original: …“). Die Einkaufsliste rät weiterhin nicht (keine Synonyme): Vereinheitlicht wird beim Import.
   **Zutatensuche (Stufe 5):** `GET /api/dishes?ingredient=zucchini` liefert Gerichte, in deren Rezept eine Zutat (`dish_ingredient.name`)
   den Text enthält. Der Vergleich läuft in JS (`toLocaleLowerCase("de")`), weil SQLite-`LIKE` nur ASCII ohne Beachtung der
   Schreibweise vergleicht; `q` und `ingredient` zusammen verlangen beides. Der Katalog fragt ab zwei Zeichen (250 ms Pause) nach und zeigt Gerichte, deren
   Titel **oder** Zutat passt; schlägt die Anfrage fehl, bleibt die Titelsuche. Gesucht wird nur im strukturierten Rezept, nicht in `source_text`.
+  Plural: `matchesIngredient` trifft auch, wenn der Name der Anfang der Suche ist und höchstens `MAX_PLURAL_SUFFIX` (2)
+  Zeichen fehlen („zwiebeln“ -> Zwiebel, „eier“ -> Ei; hingenommen: „eis“ -> Ei). Umlaut-Plurale („äpfel“) deckt das
+  Autocomplete ab: `GET /api/ingredients/names` füllt ein natives `<datalist>` am Suchfeld (einmal beim Öffnen des
+  Katalogs geladen, Fehler still). Keine Fuzzy-Suche, keine Stemming-Bibliothek.
 - **Kochmodus** (Stufe 7): Knopf „Kochen“ in der Kopfzeile der Liste öffnet `CookView.svelte`, eine Vollbild-Ansicht (kein Blatt) über der
   Shell mit **allen Einträgen der Liste** als Reiter (offene zuerst, fertige hinten, einmal beim Öffnen sortiert).
   Sie belegt einen History-Eintrag wie ein Blatt (`openCook` in `store.svelte.ts`, Sheet-Art `cook`; „Zurück“ verlässt den
@@ -507,6 +522,10 @@ Rezept-Text einfügen und per KI zerlegen sowie Portionen umrechnen (beides am 1
   Container gesetzt ist und Node ohne `tzdata` richtig rechnet; sonst `tzdata` ins Image) und ob die Protokollansicht
   eigene Zeitstempel davorsetzt. Die Startzeile `server starting … tz=…` zeigt, was der Container als `TZ` bekommt.
 - Ob HA-Ingress die `X-Remote-User-*`-Header wirklich liefert, ist gegen die Doku, aber nicht am echten System geprüft.
+- Der vereinheitlichende Rezept-Prompt (`PROMPT`, `knownNamesPrompt` in `ha-ai.ts`) ist **nur gegen eine Fake-AI getestet**:
+  offen ist, ob das Modell vorhandene Namen wiederverwendet, Sorte und Zubereitung sauber trennt und englische Einheiten
+  unverändert lässt (Phase 0 in `docs/plan-zutaten.md`). `cup` gilt als US-Cup (AU 250 ml, UK 284 ml weichen ab), die
+  Dichten in `units.ts` (King Arthur, ±20 % je nach Füllweise) sind nicht nachgewogen.
 - Der Prompt der KI-Titel (`titlesPrompt` in `ha-ai.ts`) ist **nur gegen eine Fake-AI getestet, nie gegen ein echtes Modell**:
   offen ist, ob er Aufmerksamkeitsfänger („Das BESTE Abendessen …“) zuverlässig verwirft, ob er bei englischen Captions
   die Browsersprache einhält und wie lange die Antwort dauert (Zeitlimit 15 s). Am echten System mit ein paar Captions
