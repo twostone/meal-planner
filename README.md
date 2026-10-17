@@ -27,6 +27,9 @@ dieselbe Liste.
   um (1 cup Mehl → 120 g, 1 cup Milch → 235 ml, US-Maße).
 - Die Suche im Katalog findet Gerichte auch über ihre Zutaten („Zucchini“ zeigt alle Gerichte mit Zucchini im Rezept,
   „Zwiebeln“ findet auch „Zwiebel“) und schlägt beim Tippen die vorhandenen Zutaten vor.
+- „Zutaten vereinheitlichen“ unter dem Katalog gleicht die schon gespeicherten Zutaten auf dieselbe Weise an. Die KI macht
+  Vorschläge, man sieht jede Änderung vorher und kann sie abwählen. Die App kann das nicht rückgängig machen: vorher ein
+  Backup der App in Home Assistant anlegen.
 - Kochmodus: „Kochen“ in der Liste zeigt alle Gerichte der Liste mit ihren Rezepten, zwischen denen man per Reiter
   wechselt (praktisch zum Vorkochen mehrerer Gerichte). Zutaten und Schritte lassen sich abhaken, auf allen Handys
   gleichzeitig (Abgleich alle paar Sekunden). „Fertig“ hakt das Gericht auch in der Liste ab. Der Bildschirm bleibt an,
@@ -78,7 +81,7 @@ Home Assistant kennt nur eine bevorzugte Entität für alle Textaufgaben. Wer f�
 für die Zutaten ein stärkeres nutzen will, trägt in der App-Konfiguration die Entitäts-ID von Hand ein (z. B.
 `ai_task.openai_ai_task`, zu finden unter Einstellungen → Geräte & Dienste → Entitäten):
 
-- `ai_entity_recipe`: Entität für „Zutaten erkennen“
+- `ai_entity_recipe`: Entität für „Zutaten erkennen“ und „Zutaten vereinheitlichen“
 - `ai_entity_titles`: Entität für die KI-Titelvorschläge
 
 Leer heißt: die bevorzugte Entität. Eine Änderung gilt nach einem Neustart der App. Gibt es eine eingetragene Entität nicht
@@ -128,7 +131,7 @@ In der App-Konfiguration stellt `log_level` ein, wie viel geschrieben wird (`deb
   Apps, Router) sind dabei gesperrt. Der Browser lädt nichts von Drittservern: Schriften und Bilder kommen vom eigenen Server.
 - „Zutaten erkennen“ schickt den gesicherten Rezepttext an den KI-Dienst, der in Home Assistant eingerichtet ist (bei
   einem Cloud-Dienst also ins Internet), zusammen mit der Liste der schon verwendeten Zutatennamen (höchstens 300), und
-  zwar nur auf Knopfdruck. **Die KI-Titelvorschläge dagegen laufen automatisch:**
+  zwar nur auf Knopfdruck. „Zutaten vereinheitlichen“ schickt auf Knopfdruck alle Zutatennamen samt Hinweisen dorthin. **Die KI-Titelvorschläge dagegen laufen automatisch:**
   Jede Link-Vorschau schickt den Seitentitel und den gefundenen Text (höchstens 10 000 Zeichen) an denselben Dienst (oder an
   den unter `ai_entity_titles` eingetragenen). Wer das
   nicht möchte, richtet in Home Assistant keine AI-Task-Entität ein (oder entfernt sie): dann bleiben beide Funktionen aus.

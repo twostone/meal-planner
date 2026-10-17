@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { createApp } from "../src/app.ts";
 import { openDb } from "../src/db.ts";
 import { setLogSink } from "../src/log.ts";
-import { AiError, createHaAi, knownNamesPrompt, languageName, MAX_KNOWN_NAMES, PREFERRED_AI_ENTITIES, PROMPT, titlesPrompt, type RecipeAi } from "../src/ha-ai.ts";
+import { AiError, createHaAi, knownNamesPrompt, languageName, MAX_KNOWN_NAMES, NORMALIZE_PROMPT, PREFERRED_AI_ENTITIES, PROMPT, titlesPrompt, type RecipeAi } from "../src/ha-ai.ts";
 import { createRepo } from "../src/repo.ts";
 
 // A fake Supervisor core proxy on 127.0.0.1 (never the real network).
@@ -82,6 +82,20 @@ test("knownNamesPrompt: at most MAX_KNOWN_NAMES names; the prompt allows the Eng
   assert.ok(!p.includes(`Z${MAX_KNOWN_NAMES}`));
   assert.equal(knownNamesPrompt([]), "");
   assert.ok(PROMPT.includes("cup") && PROMPT.includes("prep"));
+});
+
+test("normalize: own task with one JSON line per pair, returns the items field", async () => {
+  const f = await fakeSupervisor(() => ({ json: { service_response: { data: { items: "[]" } } } }));
+  try {
+    assert.equal(await createHaAi("tok", PREFERRED_AI_ENTITIES, f.base).normalize([{ i: 0, name: "Zwiebeln", note: null }, { i: 1, name: "Mehl", note: "gesiebt" }]), "[]");
+    const body = f.seen[0]!.body;
+    assert.equal(body.task_name, "meal_planner_normalize");
+    assert.deepEqual(Object.keys(body.structure), ["items"]);
+    assert.ok(body.instructions.startsWith(NORMALIZE_PROMPT));
+    assert.ok(body.instructions.endsWith('{"i":0,"name":"Zwiebeln","note":null}\n{"i":1,"name":"Mehl","note":"gesiebt"}'));
+  } finally {
+    f.close();
+  }
 });
 
 test("generate: a response layer keyed by entity id is accepted", async () => {
@@ -191,6 +205,7 @@ const fakeAi = (generate: RecipeAi["generate"], ai = true, titles: RecipeAi["tit
   status: async () => (ai ? { ai: true, reason: null } : { ai: false, reason: "no_entity" }),
   generate,
   titles,
+  normalize: async () => "[]",
 });
 
 test("GET /api/recipe/status: disabled without AI, otherwise what the AI reports", async () => {
@@ -344,7 +359,7 @@ test("POST /api/title-suggestions: nothing to work with 400, AI failure 502, too
 
 const CHOSEN = { recipe: "ai_task.strong", titles: "ai_task.fast" };
 
-test("entities: each task sends its configured entity_id, an unset one sends none", async () => {
+test("entities: each task sends its configured entity_id (unifying uses the recipe one), an unset one sends none", async () => {
   const f = await fakeSupervisor(() => ({ json: { service_response: { data: { ingredients: "[]", titles: "x" } } } }));
   try {
     const ai = createHaAi("tok", CHOSEN, f.base);
@@ -352,8 +367,10 @@ test("entities: each task sends its configured entity_id, an unset one sends non
     await ai.titles({ title: "T", text: "t", lang: "de" });
     assert.equal(f.seen[0]!.body.entity_id, "ai_task.strong");
     assert.equal(f.seen[1]!.body.entity_id, "ai_task.fast");
+    await ai.normalize([{ i: 0, name: "Zwiebeln", note: null }]);
+    assert.equal(f.seen[2]!.body.entity_id, "ai_task.strong", "unifying ingredients uses the recipe entity");
     await createHaAi("tok", { recipe: null, titles: "ai_task.fast" }, f.base).generate("t", []);
-    assert.equal("entity_id" in f.seen[2]!.body, false, "unset -> Home Assistant's preferred entity");
+    assert.equal("entity_id" in f.seen[3]!.body, false, "unset -> Home Assistant's preferred entity");
   } finally {
     f.close();
   }

@@ -1,3 +1,4 @@
+import type { AiPair } from "./ingredient-normalize.ts";
 import type { RawDraft } from "./recipe-draft.ts";
 import { UNITS } from "./repo.ts";
 import { FOREIGN_UNITS } from "./units.ts";
@@ -25,6 +26,8 @@ export type RecipeAi = {
   generate(text: string, knownNames: string[]): Promise<RawDraft>;
   // The model's raw `titles` field (clean it with cleanAiTitles). `lang` is a validated language code like "de" or "en-GB".
   titles(input: { title: string; text: string; lang: string }): Promise<unknown>;
+  // The model's raw `items` field for stored ingredients (turn it into changes with buildChanges).
+  normalize(pairs: AiPair[]): Promise<unknown>;
 };
 
 export const DEFAULT_LANGUAGE = "Deutsch";
@@ -66,6 +69,22 @@ export function knownNamesPrompt(names: string[]): string {
   const list = clip(names.slice(0, MAX_KNOWN_NAMES).join(", "), MAX_KNOWN_NAMES_CHARS);
   return list ? `\n\nBereits verwendete Namen. Wiederverwenden, wenn dieselbe Zutat gemeint ist:\n${list}` : "";
 }
+
+export const NORMALIZE_PROMPT = `Vereinheitliche die folgenden Zutaten aus den Rezepten eines Haushalts.
+Jede Zeile der Liste ist ein JSON-Objekt {"i": Nummer, "name": Zutat, "note": Hinweis oder null}.
+Regeln:
+- name: die Zutat in der Grundform Singular auf Deutsch, ohne Sorte und ohne Zubereitung.
+  Dieselbe Zutat bekommt überall denselben Namen ("Zwiebeln", "Zwiebel" -> "Zwiebel").
+  Verschiedene Zutaten nicht zusammenlegen (Sahne bleibt Sahne, Schmand bleibt Schmand).
+- note: Sorte, Farbe oder was beim Einkauf zählt (rot, TK, Macadamia, Bio), sonst null.
+- prep: Zubereitung (gewürfelt, zimmerwarm, in Ringen, fein gehackt), sonst null.
+  Beispiel: {"i": 0, "name": "rote Zwiebeln", "note": "gewürfelt"} -> {"i": 0, "name": "Zwiebel", "note": "rot", "prep": "gewürfelt"}.
+- Nichts erfinden: Was weder im Namen noch im Hinweis steht, kommt nicht dazu.
+- items ist ein JSON-Array mit einem Objekt {"i", "name", "note", "prep"} je Zeile der Liste, "i" unverändert.`;
+
+const NORMALIZE_STRUCTURE = {
+  items: { description: "JSON-Array der vereinheitlichten Zutaten", required: true, selector: { text: {} } },
+};
 
 export const titlesPrompt = (language: string) => `Nenne genau 2 kurze Titel für das folgende Gericht, einen pro Zeile.
 Regeln:
@@ -187,6 +206,11 @@ export function createHaAi(
     async generate(text, knownNames) {
       const instructions = `${PROMPT}${knownNamesPrompt(knownNames)}\n\nText:\n${text}`;
       return (await run("meal_planner_recipe", entities.recipe, instructions, STRUCTURE, timeoutMs)) as RawDraft;
+    },
+
+    async normalize(pairs) {
+      const instructions = `${NORMALIZE_PROMPT}\n\nListe:\n${pairs.map((p) => toJson(p)).join("\n")}`;
+      return (await run("meal_planner_normalize", entities.recipe, instructions, NORMALIZE_STRUCTURE, timeoutMs)).items;
     },
 
     async titles({ title, text, lang }) {

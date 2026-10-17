@@ -31,7 +31,7 @@ const MAX_INSTRUCTIONS = 10_000;
 const IGNORED = /[\s​‍️⃣•·●▪◦‣⁃*✓✔→\-–—:]|\p{Extended_Pictographic}/gu;
 export const normalizeForCompare = (s: string) => s.normalize("NFC").replace(IGNORED, "");
 
-const str = (v: unknown, max: number): string | null => {
+export const str = (v: unknown, max: number): string | null => {
   if (typeof v !== "string") return null;
   const t = v.replace(/\s+/g, " ").trim();
   return t ? clip(t, max) : null;
@@ -53,9 +53,10 @@ function cleanInstructions(v: unknown): string | null {
   return text || null;
 }
 
-function parseIngredients(v: unknown): unknown[] {
+// A JSON array the model returns as text (ai_task structures are flat). `field` names it in the error.
+export function parseJsonArray(v: unknown, field: string): unknown[] {
   if (Array.isArray(v)) return v;
-  if (typeof v !== "string") throw new DraftError("ingredients missing");
+  if (typeof v !== "string") throw new DraftError(`${field} missing`);
   // The model sometimes wraps JSON in a code fence.
   const t = v.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
   if (!t) return [];
@@ -63,9 +64,9 @@ function parseIngredients(v: unknown): unknown[] {
   try {
     parsed = JSON.parse(t);
   } catch {
-    throw new DraftError("ingredients are not JSON");
+    throw new DraftError(`${field} are not JSON`);
   }
-  if (!Array.isArray(parsed)) throw new DraftError("ingredients are not a list");
+  if (!Array.isArray(parsed)) throw new DraftError(`${field} are not a list`);
   return parsed;
 }
 
@@ -75,7 +76,7 @@ export function buildDraft(raw: RawDraft, source: string): RecipeDraft {
   const found = (s: string | null) => !!s && normalizeForCompare(s).length > 0 && src.includes(normalizeForCompare(s));
 
   const ingredients: DraftIngredient[] = [];
-  for (const item of parseIngredients(raw.ingredients)) {
+  for (const item of parseJsonArray(raw.ingredients, "ingredients")) {
     if (ingredients.length >= MAX_INGREDIENTS) break;
     if (!item || typeof item !== "object") continue;
     const o = item as Record<string, unknown>;

@@ -14,7 +14,8 @@ export type SheetState =
   | { kind: "recipe"; dishId: number }
   | { kind: "cook" }
   | { kind: "shopping" }
-  | { kind: "periods" };
+  | { kind: "periods" }
+  | { kind: "normalize" };
 
 export const app = $state({
   ready: false,
@@ -136,6 +137,12 @@ export function openShopping() {
   app.error = "";
   pushSheetEntry();
   app.sheet = { kind: "shopping" };
+}
+
+export function openNormalize() {
+  app.error = "";
+  pushSheetEntry();
+  app.sheet = { kind: "normalize" };
 }
 
 export function openPeriods() {

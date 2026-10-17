@@ -3,7 +3,7 @@ configuration:
     name: Protokollstufe
     description: Wie viel die App in ihr Protokoll schreibt.
   ai_entity_recipe:
-    name: KI-Entität für „Zutaten erkennen“
+    name: KI-Entität für Zutaten (erkennen und vereinheitlichen)
     description: >-
       Entitäts-ID einer KI-Aufgabe, z. B. ai_task.openai_ai_task. Leer lassen, dann nimmt Home Assistant die
       bevorzugte KI-Aufgabe. Gibt es die Entität nicht, sind die KI-Funktionen aus (das Protokoll nennt die Option).

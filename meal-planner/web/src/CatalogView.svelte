@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { imageSrc, listDishesWithIngredient, listIngredientNames } from "./api";
+  import { getRecipeStatus, imageSrc, listDishesWithIngredient, listIngredientNames } from "./api";
   import Icon from "./Icon.svelte";
-  import { addDishToPlan, app, openDishSheet } from "./store.svelte";
+  import { addDishToPlan, app, openDishSheet, openNormalize } from "./store.svelte";
   import type { Dish } from "./types";
   import { sameTag } from "./util";
 
@@ -45,9 +45,14 @@
   // Ingredient names in use as suggestions for the search box: names are stored in the base form ("Apfel"), which
   // the search would not find from "äpfel". Without them the box simply has no suggestions.
   let ingredientNames = $state<string[]>([]);
+  // "Zutaten vereinheitlichen" needs the AI of Home Assistant; a failed status check just hides the button.
+  let ai = $state(false);
   onMount(() => {
     listIngredientNames()
       .then((names) => (ingredientNames = names))
+      .catch(() => {});
+    getRecipeStatus()
+      .then((s) => (ai = s.ai))
       .catch(() => {});
   });
 
@@ -138,6 +143,10 @@
       </ul>
     </section>
   {/each}
+
+  {#if ai && ingredientNames.length}
+    <p class="catalog-tools"><button type="button" class="link-btn" onclick={openNormalize}>Zutaten vereinheitlichen</button></p>
+  {/if}
 </main>
 
 <button type="button" class="fab" onclick={() => openDishSheet({ tags: activeFilter ? [activeFilter] : [] })}>

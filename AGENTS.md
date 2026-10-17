@@ -45,6 +45,7 @@ meal-planner/            das Add-on (Docker-Build-Kontext)
     shopping.ts             Einkaufsliste aus den Rezepten zusammenfassen (rein, ohne Netz und DB)
     recipe-draft.ts         prüft und bereinigt die LLM-Antwort, gleicht sie mit dem Originaltext ab
     units.ts                englische Einheiten (cup, oz, …) in g/ml/EL/TL umrechnen, Dichte je Zutat (rein)
+    ingredient-normalize.ts Bestand vereinheitlichen: KI-Antwort prüfen, Einheit aus der Notiz lösen (rein)
     text.ts                 clip (Kürzen ohne halbes Zeichen) und toJson (JSON für Home Assistant)
     options.ts              App-Optionen aus /data/options.json lesen (log_level, ai_entity_*)
     log.ts                  Logger: eine logfmt-Zeile pro Ereignis, Stufe aus der App-Option `log_level`
@@ -119,7 +120,7 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   Das LLM hat keine Tools. Der Text geht an den in HA eingerichteten (evtl. Cloud-)Dienst: im README vermerkt.
   **Entität je Aufgabe:** Die HA-Voreinstellung gilt für alle `generate_data`-Aufrufe, nicht pro `task_name`. Die optionalen
   App-Optionen `ai_entity_recipe` und `ai_entity_titles` (Schema `match(^ai_task\.…)?`, bewusst nicht unter `options`,
-  damit sie ungesetzt bleiben; `aiEntities` in `options.ts`) setzen `entity_id` für die jeweilige Aufgabe, leer = keine
+  damit sie ungesetzt bleiben; `aiEntities` in `options.ts`) setzen `entity_id` für die jeweilige Aufgabe (`ai_entity_recipe` gilt auch für „Zutaten vereinheitlichen“), leer = keine
   `entity_id`. `status()` verlangt, dass jede gesetzte Entität existiert und nicht `unavailable` ist, sonst `no_entity` und
   eine Warnzeile `configured_entity_missing` mit dem Optionsnamen; ein Status für die ganze UI (ein Tippfehler schaltet beide
   KI-Funktionen ab, bewusst). Optionen für künftige KI-Funktionen kommen erst mit dem jeweiligen Feature.
@@ -131,6 +132,20 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   sie per `convert` um (cup = US 236,588 ml; mit Eintrag in `CUP_GRAMS` nach g, sonst ml; tbsp/tsp -> EL/TL; oz/lb -> g;
   unter 20 ganzzahlig, darüber auf 5 gerundet). `raw` bleibt die Originalzeile, im Entwurf steht sie unter jeder Zeile
   („Original: …“). Die Einkaufsliste rät weiterhin nicht (keine Synonyme): Vereinheitlicht wird beim Import.
+  **Bestand vereinheitlichen** (PR 2): leiser Knopf „Zutaten vereinheitlichen“ unter dem Katalog (nur bei `ai: true` und
+  vorhandenen Zutaten) öffnet `NormalizeSheet.svelte` (`openNormalize`, Sheet-Art `normalize`). Der Client holt
+  `GET /api/ingredients/pairs` (jedes genaue Paar `name`/`note` mit Anzahl Gerichte) und schickt es in Blöcken von höchstens
+  80 (`MAX_PAIRS_PER_BLOCK`) **nacheinander** an `POST /api/ingredients/normalize/preview` (schreibt nichts, höchstens 1
+  gleichzeitig, sonst 429; Fehler 502 bricht ab, bisherige Vorschläge bleiben wählbar). Der KI-Task `meal_planner_normalize`
+  (`normalize` in `ha-ai.ts`, 30 s, ein Paar als JSON-Zeile) liefert `items` (`[{i, name, note, prep}]`), `buildChanges`
+  prüft sie wie Nutzereingabe (Längen, Typen, unbekannte/doppelte `i` fallen weg, unveränderte Paare entfallen). Eine
+  englische Einheit am Anfang der Notiz (so hat `buildDraft` sie früher gespeichert: „cups, gesiebt“, `splitUnitNote`) wird
+  vorher abgetrennt und ist allein schon eine Änderung (`unit`). Das Blatt zeigt „nachher“ und „vorher“ je Paar, alles
+  abwählbar, „Übernehmen“ zweistufig, mit Hinweis auf ein HA-Backup. `POST /api/ingredients/normalize/apply` (höchstens 500
+  Änderungen, der Client teilt auf) ändert in einer Transaktion nur Zeilen, die noch die alten Werte haben
+  (`normalizeIngredients` in `repo.ts`), rechnet die Einheit je Zeile ohne eigene Einheit um und lässt `pos`, `raw`, eine
+  schon gespeicherte `prep` (wenn die Änderung keine hat) und die Kochmodus-Haken unberührt (nicht über `setRecipe`).
+  Kein Rückgängig (YAGNI, dafür das Backup).
   **Zutatensuche (Stufe 5):** `GET /api/dishes?ingredient=zucchini` liefert Gerichte, in deren Rezept eine Zutat (`dish_ingredient.name`)
   den Text enthält. Der Vergleich läuft in JS (`toLocaleLowerCase("de")`), weil SQLite-`LIKE` nur ASCII ohne Beachtung der
   Schreibweise vergleicht; `q` und `ingredient` zusammen verlangen beides. Der Katalog fragt ab zwei Zeichen (250 ms Pause) nach und zeigt Gerichte, deren
@@ -536,7 +551,8 @@ Rezept-Text einfügen und per KI zerlegen sowie Portionen umrechnen (beides am 1
 - Der vereinheitlichende Rezept-Prompt (`PROMPT`, `knownNamesPrompt` in `ha-ai.ts`) ist **nur gegen eine Fake-AI getestet**:
   offen ist, ob das Modell vorhandene Namen wiederverwendet, Sorte und Zubereitung sauber trennt und englische Einheiten
   unverändert lässt (Phase 0 in `docs/plan-zutaten.md`). `cup` gilt als US-Cup (AU 250 ml, UK 284 ml weichen ab), die
-  Dichten in `units.ts` (King Arthur, ±20 % je nach Füllweise) sind nicht nachgewogen.
+  Dichten in `units.ts` (King Arthur, ±20 % je nach Füllweise) sind nicht nachgewogen. Ebenso `NORMALIZE_PROMPT`: offen, ob
+  das Modell Verschiedenes zusammenlegt (Sahne/Schmand) und ob ein Block mit 80 Paaren in 30 s fertig wird.
 - Der Prompt der KI-Titel (`titlesPrompt` in `ha-ai.ts`) ist **nur gegen eine Fake-AI getestet, nie gegen ein echtes Modell**:
   offen ist, ob er Aufmerksamkeitsfänger („Das BESTE Abendessen …“) zuverlässig verwirft, ob er bei englischen Captions
   die Browsersprache einhält und wie lange die Antwort dauert (Zeitlimit 15 s). Am echten System mit ein paar Captions

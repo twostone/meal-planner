@@ -9,6 +9,8 @@ import { IMAGE_NAME, type ImageStore } from "./images.ts";
 import { logger } from "./log.ts";
 import type { PreviewResult } from "./preview.ts";
 import { buildDraft, DraftError } from "./recipe-draft.ts";
+import { aiPairs, buildChanges, MAX_PAIRS_PER_BLOCK } from "./ingredient-normalize.ts";
+import { FOREIGN_UNITS } from "./units.ts";
 import { ConflictError, NotFoundError, UNITS, type Entry, type Repo } from "./repo.ts";
 import { buildShoppingList, MAX_SPEC_LENGTH, nameKey, type ShoppingItem } from "./shopping.ts";
 import { cleanAiTitles } from "./title-suggest.ts";
@@ -90,6 +92,22 @@ const recipeBody = z.object({
   instructions: text(10000),
   ingredients: z.array(ingredient).max(60),
 });
+// Making stored ingredients uniform: the pairs of one preview block, and the reviewed changes to apply.
+const MAX_NORMALIZE_CHANGES = 500;
+const pair = z.object({ name: z.string().min(1).max(80), note: z.string().max(200).nullable() });
+const normalizePreviewBody = z.object({ pairs: z.array(pair).min(1).max(MAX_PAIRS_PER_BLOCK) });
+const normalizeApplyBody = z.object({
+  changes: z
+    .array(
+      z.object({
+        from: pair,
+        to: z.object({ name: z.string().trim().min(1).max(80), note: text(200), prep: text(200) }),
+        unit: z.enum(FOREIGN_UNITS).nullable(),
+      }),
+    )
+    .min(1)
+    .max(MAX_NORMALIZE_CHANGES),
+});
 // Input of the AI title suggestions: the page title and the text found at the link (or, without one, the title again).
 // `lang` comes from the browser; anything that is not a plain language code ("de", "en-GB") counts as missing.
 const LANG = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
@@ -138,6 +156,8 @@ const SLOW_REQUEST_MS = 2000;
 const MAX_PARALLEL_PREVIEWS = 4;
 const MAX_PARALLEL_DRAFTS = 2;
 const MAX_PARALLEL_TITLES = 2;
+// Making the stored ingredients uniform is a household-wide action: one preview at a time.
+const MAX_PARALLEL_NORMALIZE = 1;
 
 // Is the item already open on the to-do list? Items may share a name ("Nüsse" for Macadamia and for Walnuss), so one with a
 // note only counts when an open item of that name mentions the note in its description. The amount is not compared: it
@@ -291,6 +311,34 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
       } finally {
         suggesting--;
       }
+    });
+
+    // Making the stored ingredients uniform (button in the catalog). The client loads the pairs, sends them block by
+    // block to the preview (nothing is stored) and applies what the user kept.
+    app.get("/api/ingredients/pairs", (c) => c.json(repo.listIngredientPairs()));
+    let normalizing = 0;
+    app.post("/api/ingredients/normalize/preview", zValidator("json", normalizePreviewBody), async (c) => {
+      const { pairs } = c.req.valid("json");
+      if (normalizing >= MAX_PARALLEL_NORMALIZE) return c.json({ error: "busy" }, 429);
+      normalizing++;
+      try {
+        return c.json({ changes: buildChanges(pairs, await ai.normalize(aiPairs(pairs))) });
+      } catch (e) {
+        if (e instanceof AiError || e instanceof DraftError) {
+          const reason = e instanceof AiError ? e.reason : "bad_response";
+          log.warn("normalize_failed", { reason, pairs: pairs.length });
+          return c.json({ error: "ai failed", reason }, 502);
+        }
+        throw e;
+      } finally {
+        normalizing--;
+      }
+    });
+    app.post("/api/ingredients/normalize/apply", zValidator("json", normalizeApplyBody), (c) => {
+      const { changes } = c.req.valid("json");
+      const changed = repo.normalizeIngredients(changes);
+      log.info("ingredients_normalized", { changes: changes.length, rows: changed });
+      return c.json({ changed });
     });
   }
 
