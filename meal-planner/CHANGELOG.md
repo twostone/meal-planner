@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.15.0](https://github.com/twostone/meal-planner/compare/v0.14.1...v0.15.0) (2026-10-17)
+
+
+### Neu
+
+* **ki:** KI-Entität je Aufgabe einstellbar ([#60](https://github.com/twostone/meal-planner/issues/60)) ([05a755d](https://github.com/twostone/meal-planner/commit/05a755d6efc8c33138a815b110473169bcecbce5))
+* **rezept:** vorhandene Zutaten vereinheitlichen ([70e4b77](https://github.com/twostone/meal-planner/commit/70e4b770e1f32a263ec096663fba03ab6d750612))
+* **rezept:** Zutaten beim Import vereinheitlichen ([c48461d](https://github.com/twostone/meal-planner/commit/c48461d9d21a956685b3720e1fc957b3184bad96))
+
 ## [0.14.1](https://github.com/twostone/meal-planner/compare/v0.14.0...v0.14.1) (2026-10-14)
 
 
