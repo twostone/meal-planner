@@ -77,6 +77,17 @@ Der Knopf „Zutaten erkennen“ und die KI-Titelvorschläge gibt es nur, wenn H
 Gesprächsagent allein reicht nicht). Genutzt wird die dort bevorzugte Entität. Ohne sie bleibt es bei den regelbasierten
 Titelvorschlägen und der Handeingabe.
 
+Home Assistant kennt nur eine bevorzugte Entität für alle Textaufgaben. Wer für die Titel ein schnelles, kleines Modell und
+für die Zutaten ein stärkeres nutzen will, trägt in der App-Konfiguration die Entitäts-ID von Hand ein (z. B.
+`ai_task.openai_ai_task`, zu finden unter Einstellungen → Geräte & Dienste → Entitäten):
+
+- `ai_entity_recipe`: Entität für „Zutaten erkennen“ und „Zutaten vereinheitlichen“
+- `ai_entity_titles`: Entität für die KI-Titelvorschläge
+
+Leer heißt: die bevorzugte Entität. Eine Änderung gilt nach einem Neustart der App. Gibt es eine eingetragene Entität nicht
+(Tippfehler) oder ist sie nicht verfügbar, sind **beide** KI-Funktionen aus; das Protokoll nennt dann die Option
+(`configured_entity_missing option=… entity=…`).
+
 Die KI-Titel erscheinen automatisch nach jeder Link-Vorschau, zunächst als zwei Platzhalter mit „KI“-Kennzeichen. Fehlt
 die Antwort oder dauert sie länger als 15 Sekunden, verschwinden die Platzhalter, die übrigen Vorschläge bleiben. Die
 Sprache der Titel ist die Sprache des Browsers (auf dem Handy: die Systemsprache). Ein Titel wird nie ungefragt
@@ -121,7 +132,8 @@ In der App-Konfiguration stellt `log_level` ein, wie viel geschrieben wird (`deb
 - „Zutaten erkennen“ schickt den gesicherten Rezepttext an den KI-Dienst, der in Home Assistant eingerichtet ist (bei
   einem Cloud-Dienst also ins Internet), zusammen mit der Liste der schon verwendeten Zutatennamen (höchstens 300), und
   zwar nur auf Knopfdruck. „Zutaten vereinheitlichen“ schickt auf Knopfdruck alle Zutatennamen samt Hinweisen dorthin. **Die KI-Titelvorschläge dagegen laufen automatisch:**
-  Jede Link-Vorschau schickt den Seitentitel und den gefundenen Text (höchstens 10 000 Zeichen) an denselben Dienst. Wer das
+  Jede Link-Vorschau schickt den Seitentitel und den gefundenen Text (höchstens 10 000 Zeichen) an denselben Dienst (oder an
+  den unter `ai_entity_titles` eingetragenen). Wer das
   nicht möchte, richtet in Home Assistant keine AI-Task-Entität ein (oder entfernt sie): dann bleiben beide Funktionen aus.
 - Die Einkaufsliste geht nur auf Knopfdruck an die gewählte Todo-Liste in Home Assistant, bei Bring also über dessen
   Cloud-Dienst an Bring.

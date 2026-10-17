@@ -21,8 +21,12 @@ panel_admin: false
 homeassistant_api: true
 discovery:
   - meal_planner
-# Only one option: how much the app writes to its log (Supervisor writes it to /data/options.json; a change needs a restart).
+# Options land in /data/options.json (written by the Supervisor); a change needs a restart.
+# log_level: how much the app writes to its log. ai_entity_*: AI task entity per task, unset = Home Assistant's preferred
+# one. They are not under `options` so they stay unset; single quotes because "\." is no valid YAML escape.
 options:
   log_level: info
 schema:
   log_level: list(debug|info|warning|error)
+  ai_entity_recipe: 'match(^ai_task\.[a-z0-9_]+$)?'
+  ai_entity_titles: 'match(^ai_task\.[a-z0-9_]+$)?'

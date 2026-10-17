@@ -11,13 +11,16 @@ import { createHaNotify } from "./ha-notify.ts";
 import { createHaTodo } from "./ha-todo.ts";
 import { ImageStore } from "./images.ts";
 import { logger, resolveLogLevel, setLogLevel } from "./log.ts";
+import { aiEntities, readAddonOptions } from "./options.ts";
 import { createPreviewService } from "./preview.ts";
 import { createRepo } from "./repo.ts";
 
-// The add-on's `log_level` option (Supervisor writes /data/options.json), else LOG_LEVEL, else info. Changing the option
-// needs a restart of the add-on.
+// The add-on's options (Supervisor writes /data/options.json); changing one needs a restart of the add-on.
+// `log_level` beats LOG_LEVEL, else info.
 const log = logger("server");
-const { level: logLevel, invalid: invalidLevel } = resolveLogLevel(process.env.OPTIONS_PATH ?? "/data/options.json", process.env.LOG_LEVEL);
+const options = readAddonOptions(process.env.OPTIONS_PATH ?? "/data/options.json");
+const { level: logLevel, invalid: invalidLevel } = resolveLogLevel(options, process.env.LOG_LEVEL);
+const aiEntity = aiEntities(options);
 setLogLevel(logLevel);
 if (invalidLevel) log.warn("invalid_log_level", { value: invalidLevel, using: logLevel });
 const version = (() => {
@@ -27,7 +30,14 @@ const version = (() => {
     return undefined;
   }
 })();
-log.info("starting", { version, log_level: logLevel, tz: process.env.TZ, node: process.version });
+log.info("starting", {
+  version,
+  log_level: logLevel,
+  ai_entity_recipe: aiEntity.recipe,
+  ai_entity_titles: aiEntity.titles,
+  tz: process.env.TZ,
+  node: process.version,
+});
 
 // In the HA add-on this is /data/meal-planner.db (and /data/images next to it).
 const dbPath = process.env.DB_PATH ?? "./data/meal-planner.db";
@@ -46,7 +56,7 @@ const app = createApp(repo, {
   images,
   preview: createPreviewService({ images }),
   notify: haNotify,
-  ai: createHaAi(supervisorToken),
+  ai: createHaAi(supervisorToken, aiEntity),
   todo: createHaTodo(supervisorToken),
 });
 // API routes are registered first; anything else is the built frontend (npm run build).

@@ -4,6 +4,7 @@ import { UNITS } from "./repo.ts";
 import { FOREIGN_UNITS } from "./units.ts";
 import { logger } from "./log.ts";
 import { errorBody, isAbort, request, SUPERVISOR_CORE_URL } from "./ha-core.ts";
+import type { AiEntities } from "./options.ts";
 import { clip, toJson } from "./text.ts";
 
 const log = logger("ha-ai");
@@ -107,16 +108,25 @@ const STRUCTURE = {
 
 // Talks to Home Assistant's AI task (ai_task.generate_data) through the Supervisor's Core proxy (see ha-core.ts
 // for why this is plain fetch). The recipe text goes to the LLM service configured in
-// Home Assistant (possibly a cloud service). `token` null (dev, tests) -> disabled. `baseUrl` is for tests.
+// Home Assistant (possibly a cloud service). `token` null (dev, tests) -> disabled. `entities` picks the AI task entity
+// per task (app options), null = Home Assistant's preferred one. `baseUrl` is for tests.
+export const PREFERRED_AI_ENTITIES: AiEntities = { recipe: null, titles: null };
 export function createHaAi(
   token: string | null,
+  entities: AiEntities = PREFERRED_AI_ENTITIES,
   baseUrl = SUPERVISOR_CORE_URL,
   timeoutMs = GENERATE_TIMEOUT_MS,
   titlesTimeoutMs = TITLES_TIMEOUT_MS,
 ): RecipeAi {
   // One ai_task call. Errors become AiError reasons; the answer is `service_response.data` (documented by the
   // plan's test), tolerating a layer keyed by the entity id.
-  async function run(taskName: string, instructions: string, structure: object, timeout: number): Promise<Record<string, unknown>> {
+  async function run(
+    taskName: string,
+    entity: string | null,
+    instructions: string,
+    structure: object,
+    timeout: number,
+  ): Promise<Record<string, unknown>> {
     if (!token) throw new AiError("disabled");
     const t0 = performance.now();
     const ms = () => Math.round(performance.now() - t0);
@@ -127,9 +137,10 @@ export function createHaAi(
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          // No entity_id: Home Assistant uses the preferred AI task entity. The model gets no tools.
+          // Without entity_id Home Assistant uses its preferred AI task entity, which is one for all generate_data
+          // calls; the app options pick one per task. The model gets no tools.
           // toJson, not JSON.stringify: Home Assistant answers 400 to a lone surrogate (see text.ts).
-          body: toJson({ task_name: taskName, instructions, structure }),
+          body: toJson({ task_name: taskName, ...(entity ? { entity_id: entity } : {}), instructions, structure }),
         },
         token,
         baseUrl,
@@ -173,9 +184,19 @@ export function createHaAi(
           log.warn("status_check_failed", { status: res.status, body: await errorBody(res) });
           return { ai: false, reason: "unreachable" };
         }
-        const states = (await res.json()) as { entity_id?: unknown; state?: unknown }[];
-        const has = Array.isArray(states) && states.some((s) => typeof s.entity_id === "string" && s.entity_id.startsWith("ai_task.") && s.state !== "unavailable");
-        return has ? { ai: true, reason: null } : { ai: false, reason: "no_entity" };
+        const body: unknown = await res.json();
+        const states = Array.isArray(body) ? (body as { entity_id?: unknown; state?: unknown }[]) : [];
+        const usable = (s: { entity_id?: unknown; state?: unknown }) => typeof s.entity_id === "string" && s.entity_id.startsWith("ai_task.") && s.state !== "unavailable";
+        const usableIds = new Set(states.filter(usable).map((s) => s.entity_id));
+        // A configured entity must exist and be available; an unset one needs any AI task entity (the preferred one
+        // cannot be read here). One status for the whole UI: a typo in one option switches all AI features off.
+        for (const [option, entity] of [["ai_entity_recipe", entities.recipe], ["ai_entity_titles", entities.titles]] as const) {
+          if (entity && !usableIds.has(entity)) {
+            log.warn("configured_entity_missing", { option, entity });
+            return { ai: false, reason: "no_entity" };
+          }
+        }
+        return usableIds.size > 0 ? { ai: true, reason: null } : { ai: false, reason: "no_entity" };
       } catch (e) {
         log.warn("status_check_failed", { err: e });
         return { ai: false, reason: "unreachable" };
@@ -183,17 +204,18 @@ export function createHaAi(
     },
 
     async generate(text, knownNames) {
-      return (await run("meal_planner_recipe", `${PROMPT}${knownNamesPrompt(knownNames)}\n\nText:\n${text}`, STRUCTURE, timeoutMs)) as RawDraft;
+      const instructions = `${PROMPT}${knownNamesPrompt(knownNames)}\n\nText:\n${text}`;
+      return (await run("meal_planner_recipe", entities.recipe, instructions, STRUCTURE, timeoutMs)) as RawDraft;
     },
 
     async normalize(pairs) {
       const instructions = `${NORMALIZE_PROMPT}\n\nListe:\n${pairs.map((p) => toJson(p)).join("\n")}`;
-      return (await run("meal_planner_normalize", instructions, NORMALIZE_STRUCTURE, timeoutMs)).items;
+      return (await run("meal_planner_normalize", entities.recipe, instructions, NORMALIZE_STRUCTURE, timeoutMs)).items;
     },
 
     async titles({ title, text, lang }) {
       const instructions = `${titlesPrompt(languageName(lang))}\n\nTitel der Seite:\n${title}\n\nText:\n${text}`;
-      return (await run("meal_planner_title", instructions, TITLES_STRUCTURE, titlesTimeoutMs)).titles;
+      return (await run("meal_planner_title", entities.titles, instructions, TITLES_STRUCTURE, titlesTimeoutMs)).titles;
     },
   };
 }

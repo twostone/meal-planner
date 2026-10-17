@@ -1,0 +1,14 @@
+configuration:
+  log_level:
+    name: Log level
+    description: How much the app writes to its log.
+  ai_entity_recipe:
+    name: AI entity for ingredients (recognize and unify)
+    description: >-
+      Entity ID of an AI task, e.g. ai_task.openai_ai_task. Leave empty to use Home Assistant's preferred AI task.
+      If the entity does not exist, the AI features are off (the log names the option).
+  ai_entity_titles:
+    name: AI entity for title suggestions
+    description: >-
+      Entity ID of an AI task, e.g. ai_task.google_ai_task. Leave empty to use Home Assistant's preferred AI task.
+      If the entity does not exist, the AI features are off (the log names the option).
