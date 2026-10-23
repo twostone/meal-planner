@@ -30,3 +30,4 @@ schema:
   log_level: list(debug|info|warning|error)
   ai_entity_recipe: 'match(^ai_task\.[a-z0-9_]+$)?'
   ai_entity_titles: 'match(^ai_task\.[a-z0-9_]+$)?'
+  ai_entity_image: 'match(^ai_task\.[a-z0-9_]+$)?'

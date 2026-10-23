@@ -4,6 +4,7 @@
   import Icon from "./Icon.svelte";
   import Sheet from "./Sheet.svelte";
   import { app, deleteDish, openRecipe, removeEntry, saveDish, type SheetState } from "./store.svelte";
+  import { shrinkImage } from "./image-resize";
   import type { Preview } from "./types";
   import { isUrl, sameTag } from "./util";
 
@@ -44,7 +45,15 @@
   let aiLoading = $state(false);
   let aiRun = 0; // a newer preview makes the answer to an older one obsolete
   // Without an AI task in Home Assistant there are no placeholders that would only vanish again.
-  const aiReady = api.getRecipeStatus().then((s) => s.ai, () => false);
+  const aiStatus = api.getRecipeStatus().catch(() => null);
+  const aiReady = aiStatus.then((s) => !!s?.ai);
+  // "Bild erzeugen" only when an AI task can generate images.
+  let imageAi = $state(false);
+  void aiStatus.then((s) => (imageAi = !!s?.ai && !!s.image));
+  // Own photo or AI image: one at a time. A generated image replaces an existing one only after a second tap.
+  let imageBusy = $state<"upload" | "generate" | null>(null);
+  let confirmReplace = $state(false);
+  let imageHint = $state("");
   // Recipe text found at the link. Only a new dish takes it along; for a saved one there is "Rezept aus Link holen".
   let sourceText = $state<string | null>(null);
   let sourceTruncated = $state(false);
@@ -129,6 +138,41 @@
     }
   }
 
+  async function pickPhoto(e: Event) {
+    const input = e.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = ""; // picking the same file again still fires
+    if (!file || imageBusy) return;
+    imageBusy = "upload";
+    imageHint = "";
+    confirmReplace = false;
+    try {
+      const r = await api.uploadImage(await shrinkImage(file));
+      if (alive) image = r.image;
+    } catch (err) {
+      if (alive) imageHint = err instanceof Error ? err.message : "Das Foto konnte nicht gespeichert werden.";
+    } finally {
+      if (alive) imageBusy = null;
+    }
+  }
+
+  async function generate() {
+    if (imageBusy) return;
+    if (!title.trim()) return void (imageHint = "Für ein Bild bitte zuerst einen Titel eintragen.");
+    if (image && !confirmReplace) return void (confirmReplace = true);
+    confirmReplace = false;
+    imageBusy = "generate";
+    imageHint = "";
+    try {
+      const r = await api.generateImage(title.trim(), start.dishId);
+      if (alive) image = r.image;
+    } catch {
+      if (alive) imageHint = "Das Bild konnte nicht erzeugt werden. Bitte später noch einmal versuchen.";
+    } finally {
+      if (alive) imageBusy = null;
+    }
+  }
+
   // Coming from "paste a link in the add bar": the link is already there.
   onMount(() => {
     if (creating && start.url) {
@@ -174,7 +218,7 @@
         {#if image}
           <div class="thumb-wrap">
             <img class="thumb big" src={api.imageSrc(image)} alt="Vorschaubild" />
-            <button type="button" class="thumb-remove" aria-label="Bild entfernen" onclick={() => (image = null)}>×</button>
+            <button type="button" class="thumb-remove" aria-label="Bild entfernen" onclick={() => ((image = null), (confirmReplace = false))}>×</button>
           </div>
         {/if}
         <label class="grow-field">
@@ -226,6 +270,21 @@
         </div>
       </label>
       <p class="status" aria-live="polite">{loading ? "Lade Vorschau …" : aiLoading ? "KI-Vorschläge werden geladen …" : hint}</p>
+      <div class="image-actions">
+        <label class="btn outline" class:disabled={imageBusy !== null}>
+          <input type="file" accept="image/*" class="visually-hidden" disabled={imageBusy !== null} onchange={pickPhoto} />
+          {imageBusy === "upload" ? "Lädt …" : image ? "Anderes Foto" : "Foto wählen"}
+        </label>
+        {#if imageAi}
+          <button type="button" class="btn outline" disabled={imageBusy !== null} onclick={generate}>
+            {imageBusy === "generate" ? "Erzeugt …" : confirmReplace ? "Bild ersetzen?" : "Bild erzeugen"}
+            <small class="ai-tag">KI</small>
+          </button>
+        {/if}
+      </div>
+      <p class="status" aria-live="polite">
+        {imageBusy === "generate" ? "Bild wird erzeugt, das kann bis zu einer Minute dauern …" : imageHint}
+      </p>
     </section>
 
     {#if start.dishId !== null}

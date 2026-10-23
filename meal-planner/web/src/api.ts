@@ -28,15 +28,18 @@ const MESSAGES: Record<string, string> = {
   busy: "Gerade beschäftigt. Bitte gleich noch einmal versuchen.",
   "unknown list": "Diese Liste gibt es in Home Assistant nicht mehr. Bitte eine andere wählen.",
   "todo failed": "Home Assistant ist gerade nicht erreichbar.",
+  "image too large": "Das Bild ist zu groß.",
+  "not a supported image": "Dieses Bildformat geht nicht. Bitte ein JPEG, PNG oder WebP wählen.",
 };
 
+// A Blob body (an image) is sent as it is, with its own type; anything else as JSON.
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   let res: Response;
   try {
     res = await fetch(new URL(path, document.baseURI), {
       method,
-      headers: body === undefined ? undefined : { "Content-Type": "application/json" },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      headers: body === undefined ? undefined : { "Content-Type": body instanceof Blob ? body.type : "application/json" },
+      body: body === undefined ? undefined : body instanceof Blob ? body : JSON.stringify(body),
     });
   } catch {
     throw new Error("Server nicht erreichbar.");
@@ -118,5 +121,10 @@ export const previewUrl = (url: string) => request<Preview>("POST", "api/preview
 // The browser language tells the server which language the titles should be in.
 export const suggestTitles = (b: { title: string; text: string }) =>
   request<{ titles: string[] }>("POST", "api/title-suggestions", { ...b, lang: navigator.language });
+// An own photo (already shrunk, see shrinkImage). Only stored as a file: the dish gets it when the sheet is saved.
+export const uploadImage = (image: Blob) => request<{ image: string }>("POST", "api/images", image);
+// A photo of the dish from Home Assistant's AI (takes up to a minute). With dishId the saved ingredients go along.
+export const generateImage = (title: string, dishId: number | null) =>
+  request<{ image: string }>("POST", "api/images/generate", { title, ...(dishId !== null ? { dish_id: dishId } : {}) });
 // Relative like every other URL, so it works under the ingress prefix.
 export const imageSrc = (name: string) => `api/images/${name}`;

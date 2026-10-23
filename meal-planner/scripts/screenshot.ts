@@ -101,7 +101,7 @@ async function fakeShopping(page: Page): Promise<void> {
 
 // Without Home Assistant there is no AI: answer its routes for making ingredients uniform with sample suggestions.
 async function fakeNormalize(page: Page): Promise<void> {
-  await page.route("**/api/recipe/status", (r) => r.fulfill({ json: { ai: true, reason: null } }));
+  await page.route("**/api/recipe/status", (r) => r.fulfill({ json: { ai: true, reason: null, image: true } }));
   await page.route("**/api/ingredients/pairs", (r) =>
     r.fulfill({
       json: [
@@ -130,6 +130,15 @@ const SHOTS: Shot[] = [
   { name: "list", run: async () => {} },
   { name: "catalog", run: (page) => page.getByRole("button", { name: "Katalog" }).click() },
   { name: "dish", run: (page) => pastaTitle(page).click() },
+  {
+    // With an AI task that can generate images, the sheet offers "Bild erzeugen" next to "Foto wählen".
+    name: "dish-ai",
+    run: async (page) => {
+      await page.route("**/api/recipe/status", (r) => r.fulfill({ json: { ai: true, reason: null, image: true } }));
+      await pastaTitle(page).click();
+      await page.getByRole("button", { name: /Bild erzeugen/ }).waitFor();
+    },
+  },
   {
     name: "recipe",
     run: async (page) => {

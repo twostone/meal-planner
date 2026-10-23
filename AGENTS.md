@@ -36,11 +36,11 @@ meal-planner/            das Add-on (Docker-Build-Kontext)
     safe-fetch.ts          der einzige Weg, fremde URLs abzurufen
     preview.ts             Titel und Bild aus HTML (og:-Tags, schema.org-Rezept)
     title-suggest.ts       Titelvorschläge aus Captions (Regeln) und Bereinigung der KI-Titel
-    images.ts              Bildspeicher (/data/images, Dateiname = Hash)
+    images.ts              Bildspeicher (/data/images, Dateiname = Hash), MAX_IMAGE_BYTES
     ha-api.ts, ha-state.ts  Zweiter Listener (Token) und Zustand für die HA-Integration
     ha-notify.ts            Bus-Events an Home Assistant (über den Supervisor)
     ha-core.ts              gemeinsamer Aufruf der Core-API über den Supervisor (ha-ai.ts, ha-todo.ts)
-    ha-ai.ts                ai_task.generate_data über den Supervisor (Rezept in Zutaten zerlegen, Titel vorschlagen)
+    ha-ai.ts                ai_task.generate_data/generate_image über den Supervisor (Zutaten, Titel, Bild)
     ha-todo.ts              Todo-Listen von HA (z. B. Bring): Listen, offene Artikel, Artikel hinzufügen
     shopping.ts             Einkaufsliste aus den Rezepten zusammenfassen (rein, ohne Netz und DB)
     recipe-draft.ts         prüft und bereinigt die LLM-Antwort, gleicht sie mit dem Originaltext ab
@@ -119,11 +119,11 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   Zeitlimit, kein Wiederholen, höchstens 2 parallele Entwürfe, Fehler -> 502 `ai failed` und im UI „Von Hand eintragen“.
   Das LLM hat keine Tools. Der Text geht an den in HA eingerichteten (evtl. Cloud-)Dienst: im README vermerkt.
   **Entität je Aufgabe:** Die HA-Voreinstellung gilt für alle `generate_data`-Aufrufe, nicht pro `task_name`. Die optionalen
-  App-Optionen `ai_entity_recipe` und `ai_entity_titles` (Schema `match(^ai_task\.…)?`, bewusst nicht unter `options`,
+  App-Optionen `ai_entity_recipe`, `ai_entity_titles` und `ai_entity_image` (Schema `match(^ai_task\.…)?`, bewusst nicht unter `options`,
   damit sie ungesetzt bleiben; `aiEntities` in `options.ts`) setzen `entity_id` für die jeweilige Aufgabe (`ai_entity_recipe` gilt auch für „Zutaten vereinheitlichen“), leer = keine
   `entity_id`. `status()` verlangt, dass jede gesetzte Entität existiert und nicht `unavailable` ist, sonst `no_entity` und
-  eine Warnzeile `configured_entity_missing` mit dem Optionsnamen; ein Status für die ganze UI (ein Tippfehler schaltet beide
-  KI-Funktionen ab, bewusst). Optionen für künftige KI-Funktionen kommen erst mit dem jeweiligen Feature.
+  eine Warnzeile `configured_entity_missing` mit dem Optionsnamen; ein Status für die ganze UI (ein Tippfehler schaltet alle
+  KI-Funktionen ab, bewusst). Für Bilder hat HA eine eigene Voreinstellung (`gen_image_entity_id`). Optionen für künftige KI-Funktionen kommen erst mit dem jeweiligen Feature.
   **Zutaten vereinheitlichen** (Plan: `docs/plan-zutaten.md`, PR 1): Der Prompt verlangt `name` in der **Grundform Singular**
   ohne Sorte und Zubereitung („2 rote Zwiebeln, gewürfelt“ -> Zwiebel / `note` rot / `prep` gewürfelt; die Anzeige „3
   Zwiebel“ ist hingenommen) und hängt die schon verwendeten Namen an (`listIngredientNames` in `repo.ts`, gleiche
@@ -255,6 +255,21 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   Typ nach den Datei-Bytes). Nie fremde Bild-URLs im Frontend einbinden (Adressen, besonders bei Instagram, laufen ab,
   und der Browser würde Drittserver anfragen). Nicht mehr verwendete Dateien räumt `ImageStore.sweep` auf (Dateien unter
   einer Stunde bleiben, damit Vorschauen vor dem Speichern nicht verschwinden).
+  **Eigene Bilder:** `POST /api/images` nimmt ein Foto als rohen Body (höchstens `MAX_IMAGE_BYTES` per `bodyLimit` aus Hono,
+  sonst 413; Typ nach den Bytes, sonst 400) und speichert nur die Datei, das Gericht bekommt sie beim Speichern über sein
+  `image`-Feld (unbenutzt räumt `sweep` sie weg). Das Frontend verkleinert vorher im Browser (`shrinkImage` in
+  `web/src/image-resize.ts`, Canvas ohne Bibliothek, längste Seite `MAX_IMAGE_EDGE` = 1600 px, JPEG; kleine JPEG/PNG/WebP
+  gehen unverändert). Der Server verkleinert nie. Im Bearbeiten-Blatt „Foto wählen“ (verstecktes `<input type="file">`).
+  **KI-Bild:** `POST /api/images/generate {title, dish_id?}` (nur mit AI und Bildspeicher; Titel aus dem Blatt, damit es
+  auch für neue Gerichte geht; mit `dish_id` die Zutatennamen des gespeicherten Rezepts) ruft `image()` in `ha-ai.ts`:
+  `ai_task.generate_image` (`task_name` `meal_planner_image`, `IMAGE_PROMPT`, 60 s für Erzeugen und Laden zusammen,
+  höchstens 1 gleichzeitig, sonst 429; Fehler 502). HA antwortet mit einem signierten Pfad (`/ai_task/image/…?authSig=…`,
+  eine Stunde gültig), der nicht unter `/api/` liegt: der Supervisor-Proxy reicht ihn nicht durch, deshalb lädt `ha-ai.ts`
+  ihn direkt von Core (`CORE_DIRECT_URL` = `http://homeassistant:8123` in `ha-core.ts`), ohne Token (die Signatur
+  autorisiert). Nur ein relativer Pfad wird akzeptiert (nie ein fremder Host), höchstens `MAX_GENERATED_IMAGE_BYTES`
+  (10 MB, weil KI-PNGs groß sind und der Server nicht verkleinert). `status()` meldet `image`, wenn die gesetzte (sonst
+  irgendeine) `ai_task`-Entität `GENERATE_IMAGE` (Bit 4 in `supported_features`) kann; nur dann zeigt das Blatt
+  „Bild erzeugen“. Ein vorhandenes Bild wird erst nach zweitem Tippen ersetzt.
 - **Instagram:** Der Abruf ist der allgemeine (`fetchLimited`) mit dem Bot-User-Agent `EssensplanungBot`, **nicht in einen
   Browser-User-Agent ändern**: nur damit liefert Instagram eine vorgerenderte Seite mit der vollständigen Caption in `og:title`
   (`<Name> auf Instagram: "<Caption>"`); mit Browser-UA kommt nur eine JavaScript-Hülle. Das ist undokumentiertes Verhalten,
@@ -396,7 +411,8 @@ raten (`async_update_reload_and_abort`, `HassioServiceInfo`, `StaticPathConfig`,
 - `allowPrivate` in `fetchLimited` ist **nur für Tests** (lokaler Testserver auf 127.0.0.1). Nie im Produktivcode setzen,
   nie über eine Umgebungsvariable oder Konfiguration erreichbar machen.
 - **`ha-notify.ts` ist bewusst die eine Ausnahme von der SSRF-Regel oben (ebenso `ha-core.ts` mit `ha-ai.ts` und `ha-todo.ts`):** Es nutzt einfaches `fetch`,
-  nicht `fetchLimited`. Das Ziel (`http://supervisor`, `ha-discovery.ts` und `ha-ai.ts` ebenso) ist im Code festgelegt, kein Nutzer-Input, und
+  nicht `fetchLimited`. Das Ziel (`http://supervisor`, `ha-discovery.ts` und `ha-ai.ts` ebenso; für das KI-Bild
+  `http://homeassistant:8123` mit einem Pfad aus der HA-Antwort, nie mit fremdem Host) ist im Code festgelegt, kein Nutzer-Input, und
   liegt im internen Netz – genau die Adressen, die `net-guard.ts` für Rezept-Links zu Recht sperrt. Diese Pfade
   nicht vermischen.
 - Änderungen an `net-guard.ts` mit Vorsicht: Node prüft IPv4-Adressen als IPv4-gemappte IPv6-Adressen, eine Regel für
@@ -528,7 +544,7 @@ raten (`async_update_reload_and_abort`, `HassioServiceInfo`, `StaticPathConfig`,
 ## Bewusst nicht gebaut (nur auf ausdrücklichen Wunsch)
 
 Nährwerte, Anbindung an den HA-Kalender, Tageszuordnung, Drag-and-Drop, OAuth, Instagram-oEmbed,
-Bildverkleinerung, Image-Signatur/SBOM,
+Bildverkleinerung auf dem Server (verkleinert wird nur im Browser vor dem Hochladen), Image-Signatur/SBOM,
 Kategorien umbenennen/zusammenführen, Mehrfachauswahl im Kategorie-Filter.
 Rezept-Text einfügen und per KI zerlegen sowie Portionen umrechnen (beides am 10.10.2026 aus `docs/plan-rezepte.md` gestrichen).
 
@@ -553,6 +569,11 @@ Rezept-Text einfügen und per KI zerlegen sowie Portionen umrechnen (beides am 1
   unverändert lässt (Phase 0 in `docs/plan-zutaten.md`). `cup` gilt als US-Cup (AU 250 ml, UK 284 ml weichen ab), die
   Dichten in `units.ts` (King Arthur, ±20 % je nach Füllweise) sind nicht nachgewogen. Ebenso `NORMALIZE_PROMPT`: offen, ob
   das Modell Verschiedenes zusammenlegt (Sahne/Schmand) und ob ein Block mit 80 Paaren in 30 s fertig wird.
+- Das KI-Bild (`image()` in `ha-ai.ts`) ist **nur gegen einen Fake-Server getestet**: offen sind die Antwortform von
+  `generate_image` über die REST-API (erwartet: `service_response.url`), ob `http://homeassistant:8123` aus dem Container
+  erreichbar ist (bei HA mit eigenem SSL-Zertifikat auf 8123 nicht), ob der signierte Pfad dort ohne Token gilt, die
+  Dauer und ob `IMAGE_PROMPT` brauchbare Bilder ergibt. Das Verkleinern im Browser ist im Desktop-Browser geprüft, nicht
+  in der Companion-App (Dateiauswahl im Ingress-iframe, HEIC vom iPhone).
 - Der Prompt der KI-Titel (`titlesPrompt` in `ha-ai.ts`) ist **nur gegen eine Fake-AI getestet, nie gegen ein echtes Modell**:
   offen ist, ob er Aufmerksamkeitsfänger („Das BESTE Abendessen …“) zuverlässig verwirft, ob er bei englischen Captions
   die Browsersprache einhält und wie lange die Antwort dauert (Zeitlimit 15 s). Am echten System mit ein paar Captions

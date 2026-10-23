@@ -5,6 +5,9 @@ import { clip } from "./text.ts";
 // input, and it lies in the internal network that net-guard.ts rightly blocks for recipe links.
 
 export const SUPERVISOR_CORE_URL = "http://supervisor/core/api/";
+// Core itself in the Supervisor network, for the one path outside /api/ (the signed URL of a generated image, see
+// ha-ai.ts). Same reasoning as above: fixed in code, internal network.
+export const CORE_DIRECT_URL = "http://homeassistant:8123";
 const ERROR_BODY_MAX = 300;
 const ERROR_BODY_WAIT_MS = 2000;
 

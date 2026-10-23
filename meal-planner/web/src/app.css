@@ -667,6 +667,32 @@ dialog::backdrop {
   line-height: 1;
   padding: 0;
 }
+/* own photo or AI image, below the link */
+.image-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.image-actions .btn {
+  gap: 8px;
+  cursor: pointer;
+}
+.image-actions .btn.disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.image-actions .btn:focus-within {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 .link-row {
   display: flex;
   gap: 8px;

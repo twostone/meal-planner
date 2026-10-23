@@ -12,3 +12,9 @@ configuration:
     description: >-
       Entity ID of an AI task, e.g. ai_task.google_ai_task. Leave empty to use Home Assistant's preferred AI task.
       If the entity does not exist, the AI features are off (the log names the option).
+  ai_entity_image:
+    name: AI entity for images
+    description: >-
+      Entity ID of an AI task that can generate images, e.g. ai_task.openai_ai_task. Leave empty to use Home
+      Assistant's preferred AI task for images. If the entity does not exist, the AI features are off (the log names
+      the option).

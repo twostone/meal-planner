@@ -1,4 +1,4 @@
-import type { ImageStore } from "./images.ts";
+import { MAX_IMAGE_BYTES, type ImageStore } from "./images.ts";
 import { FetchError, type FetchFailure } from "./net-guard.ts";
 import { logger } from "./log.ts";
 import { fetchLimited, type Fetched } from "./safe-fetch.ts";
@@ -226,7 +226,6 @@ function decodeBody(page: Fetched): string {
 const HTML_ACCEPT = "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5";
 const IMAGE_ACCEPT = "image/avif,image/webp,image/png,image/jpeg,image/gif;q=0.8";
 export const MAX_PAGE_BYTES = 1_500_000;
-export const MAX_IMAGE_BYTES = 3_000_000;
 
 type Deps = { images: ImageStore; fetcher?: typeof fetchLimited };
 

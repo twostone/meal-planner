@@ -24,7 +24,7 @@
   let fetching = $state(false);
   let confirmReplace = $state(false);
   let sourceHint = $state("");
-  let ai = $state<AiStatus>({ ai: false, reason: null });
+  let ai = $state<AiStatus>({ ai: false, reason: null, image: false });
   let drafting = $state(false);
   let draftMode = $state(false); // the editor shows a draft from the AI, not the saved recipe
 
@@ -43,7 +43,7 @@
       loadError = true;
     }
     // Only matters for the button; a failed status simply hides it.
-    ai = await api.getRecipeStatus().catch(() => ({ ai: false, reason: null }));
+    ai = await api.getRecipeStatus().catch(() => ({ ai: false, reason: null, image: false }));
   });
 
   // The signature says whether a row was touched: only an untouched row keeps its original line (raw).

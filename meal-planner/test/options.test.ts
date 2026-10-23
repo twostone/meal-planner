@@ -22,7 +22,11 @@ test("readAddonOptions: the parsed file, {} without a file, for broken JSON or a
 });
 
 test("aiEntities: trimmed ids, unset or empty -> null (Home Assistant's preferred entity)", () => {
-  assert.deepEqual(aiEntities({}), { recipe: null, titles: null });
-  assert.deepEqual(aiEntities({ ai_entity_recipe: " ai_task.a ", ai_entity_titles: "ai_task.b" }), { recipe: "ai_task.a", titles: "ai_task.b" });
-  assert.deepEqual(aiEntities({ ai_entity_recipe: "", ai_entity_titles: 3 }), { recipe: null, titles: null });
+  assert.deepEqual(aiEntities({}), { recipe: null, titles: null, image: null });
+  assert.deepEqual(aiEntities({ ai_entity_recipe: " ai_task.a ", ai_entity_titles: "ai_task.b", ai_entity_image: "ai_task.c" }), {
+    recipe: "ai_task.a",
+    titles: "ai_task.b",
+    image: "ai_task.c",
+  });
+  assert.deepEqual(aiEntities({ ai_entity_recipe: "", ai_entity_titles: 3, ai_entity_image: " " }), { recipe: null, titles: null, image: null });
 });
