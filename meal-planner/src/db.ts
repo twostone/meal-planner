@@ -88,6 +88,8 @@ const MIGRATIONS = [
   "CREATE TABLE setting (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;",
   // v10: how an ingredient is prepared ("gewürfelt"), kept apart from the note (variety, relevant for shopping: "rot")
   "ALTER TABLE dish_ingredient ADD COLUMN prep TEXT;",
+  // v11: the plural of the name ("Zwiebeln" for "Zwiebel"), shown with amounts above one; null = no plural ("Mehl")
+  "ALTER TABLE dish_ingredient ADD COLUMN plural TEXT;",
 ];
 
 function migrate(db: DatabaseSync): void {

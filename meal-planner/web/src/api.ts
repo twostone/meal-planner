@@ -5,7 +5,6 @@ import type {
   PlanDetail,
   AiStatus,
   IngredientChange,
-  IngredientPair,
   CheckState,
   CookEntry,
   PlanSummary,
@@ -56,11 +55,7 @@ export const listDishes = () => request<Dish[]>("GET", "api/dishes");
 export const listDishesWithIngredient = (text: string) =>
   request<Dish[]>("GET", `api/dishes?ingredient=${encodeURIComponent(text)}`);
 export const listIngredientNames = () => request<string[]>("GET", "api/ingredients/names");
-export const listIngredientPairs = () => request<IngredientPair[]>("GET", "api/ingredients/pairs");
-export const previewNormalize = (pairs: { name: string; note: string | null }[]) =>
-  request<{ changes: IngredientChange[] }>("POST", "api/ingredients/normalize/preview", { pairs });
-export const applyNormalize = (changes: IngredientChange[]) =>
-  request<{ changed: number }>("POST", "api/ingredients/normalize/apply", { changes });
+
 export const createDish = (d: DishInput) => request<Dish>("POST", "api/dishes", d);
 export const updateDish = (id: number, d: DishInput) => request<Dish>("PATCH", `api/dishes/${id}`, d);
 export const deleteDish = (id: number) => request<void>("DELETE", `api/dishes/${id}`);
@@ -77,6 +72,10 @@ export const fetchSource = (dishId: number) => request<Recipe | { reason: string
 export const getRecipeStatus = () => request<AiStatus>("GET", "api/recipe/status");
 // Splits the saved original text into a draft (nothing is stored). Takes a few seconds.
 export const draftRecipe = (dishId: number) => request<RecipeDraft>("POST", `api/dishes/${dishId}/recipe/draft`);
+export const normalizeRecipe = (dishId: number) =>
+  request<{ changes: IngredientChange[] }>("POST", `api/dishes/${dishId}/recipe/normalize`);
+export const applyNormalizedRecipe = (dishId: number, changes: IngredientChange[]) =>
+  request<Recipe>("POST", `api/dishes/${dishId}/recipe/normalize/apply`, { changes });
 
 // Cook mode: all recipes of a plan once, then only the ticks and done flags (polled).
 export const getCook = (planId: number) => request<{ plan_id: number; entries: CookEntry[] }>("GET", `api/plans/${planId}/cook`);

@@ -1,4 +1,4 @@
-import type { AiPair } from "./ingredient-normalize.ts";
+import type { AiItem } from "./ingredient-normalize.ts";
 import type { RawDraft } from "./recipe-draft.ts";
 import { UNITS } from "./repo.ts";
 import { FOREIGN_UNITS } from "./units.ts";
@@ -26,8 +26,8 @@ export type RecipeAi = {
   generate(text: string, knownNames: string[]): Promise<RawDraft>;
   // The model's raw `titles` field (clean it with cleanAiTitles). `lang` is a validated language code like "de" or "en-GB".
   titles(input: { title: string; text: string; lang: string }): Promise<unknown>;
-  // The model's raw `items` field for stored ingredients (turn it into changes with buildChanges).
-  normalize(pairs: AiPair[]): Promise<unknown>;
+  // The model's raw `items` field for the lines of a saved recipe (turn it into changes with buildChanges).
+  normalize(items: AiItem[], knownNames: string[]): Promise<unknown>;
 };
 
 export const DEFAULT_LANGUAGE = "Deutsch";
@@ -49,13 +49,14 @@ Regeln:
   Gezählte Dinge ohne Einheit ("1 Zwiebel"): unit = null. Passt sonst keine Einheit, unit = null und den Rest in note.
 - Zahlwörter in Zahlen umwandeln ("Eine Zehe" -> 1). Spannen ("1-2") als amount und amount_max.
 - name: die Zutat in der Grundform Singular auf Deutsch, ohne Sorte und ohne Zubereitung.
+  plural: die Mehrzahl von name ("Zwiebeln", "Eier"), null, wenn es keine gibt oder sie gleich lautet ("Mehl", "Knoblauch").
   Sorte, Farbe oder was beim Einkauf zählt (rot, TK, Macadamia, Bio) gehört in note.
   Zubereitung (gewürfelt, zimmerwarm, in Ringen, fein gehackt) gehört in prep.
-  Beispiel: "2 rote Zwiebeln, gewürfelt" -> name "Zwiebel", note "rot", prep "gewürfelt".
+  Beispiel: "2 rote Zwiebeln, gewürfelt" -> name "Zwiebel", plural "Zwiebeln", note "rot", prep "gewürfelt".
 - Ignorieren: Hashtags (auch ohne #), Emojis, Werbung, Nährwerte, Hinweise zum Video.
 - ingredients ist ein JSON-Array von Objekten
   {"section": string|null, "amount": number|null, "amount_max": number|null,
-   "unit": string|null, "name": string, "note": string|null, "prep": string|null, "raw": string}.
+   "unit": string|null, "name": string, "plural": string|null, "note": string|null, "prep": string|null, "raw": string}.
   "raw" ist die Originalzeile unverändert, "section" die Zwischenüberschrift unverändert.
   Jede Zutatenzeile übernehmen, auch "Salz & Pfeffer".
 - instructions: ein Schritt pro Zeile, Wortlaut möglichst erhalten. Lücken nicht füllen.`;
@@ -70,17 +71,18 @@ export function knownNamesPrompt(names: string[]): string {
   return list ? `\n\nBereits verwendete Namen. Wiederverwenden, wenn dieselbe Zutat gemeint ist:\n${list}` : "";
 }
 
-export const NORMALIZE_PROMPT = `Vereinheitliche die folgenden Zutaten aus den Rezepten eines Haushalts.
-Jede Zeile der Liste ist ein JSON-Objekt {"i": Nummer, "name": Zutat, "note": Hinweis oder null}.
+export const NORMALIZE_PROMPT = `Vereinheitliche die Zutaten des folgenden Rezepts.
+Jede Zeile der Liste ist ein JSON-Objekt {"i": Nummer, "name": Zutat, "plural": Mehrzahl oder null, "note": Hinweis oder null, "prep": Zubereitung oder null}.
 Regeln:
-- name: die Zutat in der Grundform Singular auf Deutsch, ohne Sorte und ohne Zubereitung.
-  Dieselbe Zutat bekommt überall denselben Namen ("Zwiebeln", "Zwiebel" -> "Zwiebel").
+- name: die Zutat in der Grundform Singular auf Deutsch, ohne Sorte und ohne Zubereitung ("Zwiebeln" -> "Zwiebel").
   Verschiedene Zutaten nicht zusammenlegen (Sahne bleibt Sahne, Schmand bleibt Schmand).
+- plural: die Mehrzahl von name ("Zwiebeln", "Eier"), null, wenn es keine gibt oder sie gleich lautet ("Mehl", "Knoblauch").
 - note: Sorte, Farbe oder was beim Einkauf zählt (rot, TK, Macadamia, Bio), sonst null.
 - prep: Zubereitung (gewürfelt, zimmerwarm, in Ringen, fein gehackt), sonst null.
-  Beispiel: {"i": 0, "name": "rote Zwiebeln", "note": "gewürfelt"} -> {"i": 0, "name": "Zwiebel", "note": "rot", "prep": "gewürfelt"}.
-- Nichts erfinden: Was weder im Namen noch im Hinweis steht, kommt nicht dazu.
-- items ist ein JSON-Array mit einem Objekt {"i", "name", "note", "prep"} je Zeile der Liste, "i" unverändert.`;
+  Beispiel: {"i": 0, "name": "rote Zwiebeln", "plural": null, "note": "gewürfelt", "prep": null}
+  -> {"i": 0, "name": "Zwiebel", "plural": "Zwiebeln", "note": "rot", "prep": "gewürfelt"}.
+- Nichts erfinden: Was weder im Namen noch im Hinweis oder in der Zubereitung steht, kommt nicht dazu.
+- items ist ein JSON-Array mit einem Objekt {"i", "name", "plural", "note", "prep"} je Zeile der Liste, "i" unverändert.`;
 
 const NORMALIZE_STRUCTURE = {
   items: { description: "JSON-Array der vereinheitlichten Zutaten", required: true, selector: { text: {} } },
@@ -208,8 +210,8 @@ export function createHaAi(
       return (await run("meal_planner_recipe", entities.recipe, instructions, STRUCTURE, timeoutMs)) as RawDraft;
     },
 
-    async normalize(pairs) {
-      const instructions = `${NORMALIZE_PROMPT}\n\nListe:\n${pairs.map((p) => toJson(p)).join("\n")}`;
+    async normalize(items, knownNames) {
+      const instructions = `${NORMALIZE_PROMPT}${knownNamesPrompt(knownNames)}\n\nListe:\n${items.map((p) => toJson(p)).join("\n")}`;
       return (await run("meal_planner_normalize", entities.recipe, instructions, NORMALIZE_STRUCTURE, timeoutMs)).items;
     },
 

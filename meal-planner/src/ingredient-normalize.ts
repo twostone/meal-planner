@@ -1,21 +1,20 @@
-import { parseJsonArray, str } from "./recipe-draft.ts";
+import type { Ingredient } from "./repo.ts";
+import { parseJsonArray, pluralOf, str } from "./recipe-draft.ts";
 import { foreignUnit, type Foreign } from "./units.ts";
 
-// Making the stored ingredients uniform (the button in the catalog): the model suggests a base-form name, variety
-// (note) and preparation (prep) for every distinct (name, note) pair; this module turns its answer into changes the
-// user reviews. Its answer is untrusted input, like a recipe draft. No network, no database.
+// Making the ingredients of one saved recipe uniform (button in the recipe view): the model suggests base form, plural,
+// variety (note) and preparation (prep) for every line; this module turns its answer into changes the user reviews.
+// Its answer is untrusted input, like a recipe draft. No network, no database.
 
-export type Pair = { name: string; note: string | null };
-// What the model gets: the pair with an English unit already taken out of the note, numbered.
-export type AiPair = { i: number; name: string; note: string | null };
+export type StoredIngredient = Pick<Ingredient, "name" | "plural" | "note" | "prep">;
+// What the model gets: the line numbered by its position, an English unit already taken out of the note.
+export type AiItem = { i: number; name: string; plural: string | null; note: string | null; prep: string | null };
 export type Change = {
-  from: Pair; // the stored values; apply only touches rows that still have them
-  to: { name: string; note: string | null; prep: string | null };
-  unit: Foreign | null; // the note started with this unit: apply converts amount and unit of each row
+  pos: number; // position of the line in the recipe
+  from: { name: string; note: string | null }; // the stored values; apply only touches the line if it still has them
+  to: { name: string; plural: string | null; note: string | null; prep: string | null };
+  unit: Foreign | null; // the note started with this unit: apply converts amount and unit of the line
 };
-
-// Pairs per preview call: small enough for the AI task's time limit, the client sends block after block.
-export const MAX_PAIRS_PER_BLOCK = 80;
 
 // Recipes recognized before the conversion (recipe-draft.ts) kept an unknown unit as the start of the note:
 // "cups, gesiebt" -> cup and "gesiebt". Only that exact form counts.
@@ -29,28 +28,29 @@ export function splitUnitNote(note: string | null): { unit: Foreign | null; note
   return { unit, note: rest || null };
 }
 
-// The model's `items` field -> changes. Unknown or repeated numbers and malformed items are dropped; an item without
-// any difference to its pair is no change. A unit in the note is a change even when the model suggests nothing.
-export function buildChanges(pairs: Pair[], items: unknown): Change[] {
-  const split = pairs.map((p) => splitUnitNote(p.note));
+export const aiItems = (lines: StoredIngredient[]): AiItem[] =>
+  lines.map((l, i) => ({ i, name: l.name, plural: l.plural, note: splitUnitNote(l.note).note, prep: l.prep }));
+
+// The model's `items` field -> changes. Unknown or repeated numbers and malformed items are dropped; a suggestion
+// without any difference is no change. A unit in the note is a change even when the model suggests nothing. A
+// preparation the model drops stays: it was in the input, losing it would lose information.
+export function buildChanges(lines: StoredIngredient[], items: unknown): Change[] {
   const suggested = new Map<number, Change["to"]>();
   for (const item of parseJsonArray(items, "items")) {
     if (!item || typeof item !== "object") continue;
     const o = item as Record<string, unknown>;
     const i = o.i;
-    if (typeof i !== "number" || !Number.isInteger(i) || i < 0 || i >= pairs.length || suggested.has(i)) continue;
+    if (typeof i !== "number" || !Number.isInteger(i) || i < 0 || i >= lines.length || suggested.has(i)) continue;
     const name = str(o.name, 80);
     if (!name) continue;
-    suggested.set(i, { name, note: str(o.note, 200), prep: str(o.prep, 200) });
+    suggested.set(i, { name, plural: pluralOf(name, o.plural), note: str(o.note, 200), prep: str(o.prep, 200) ?? lines[i]!.prep });
   }
   const changes: Change[] = [];
-  pairs.forEach((from, i) => {
-    const { unit, note } = split[i]!;
-    const to = suggested.get(i) ?? { name: from.name, note, prep: null };
-    if (unit || to.name !== from.name || to.note !== from.note || to.prep !== null) changes.push({ from, to, unit });
+  lines.forEach((line, pos) => {
+    const { unit, note } = splitUnitNote(line.note);
+    const to = suggested.get(pos) ?? { name: line.name, plural: line.plural, note, prep: line.prep };
+    const differs = to.name !== line.name || to.plural !== line.plural || to.note !== line.note || to.prep !== line.prep;
+    if (unit || differs) changes.push({ pos, from: { name: line.name, note: line.note }, to, unit });
   });
   return changes;
 }
-
-// The numbered pairs for the prompt, with the unit taken out of the note.
-export const aiPairs = (pairs: Pair[]): AiPair[] => pairs.map((p, i) => ({ i, name: p.name, note: splitUnitNote(p.note).note }));
