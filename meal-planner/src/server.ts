@@ -35,6 +35,7 @@ log.info("starting", {
   log_level: logLevel,
   ai_entity_recipe: aiEntity.recipe,
   ai_entity_titles: aiEntity.titles,
+  ai_entity_image: aiEntity.image,
   tz: process.env.TZ,
   node: process.version,
 });

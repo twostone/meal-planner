@@ -12,10 +12,14 @@ export function readAddonOptions(path: string): AddonOptions {
   }
 }
 
-// AI task entity per task (`ai_entity_recipe`, `ai_entity_titles`); null = Home Assistant's preferred entity.
+// AI task entity per task (`ai_entity_recipe`, `ai_entity_titles`, `ai_entity_image`); null = Home Assistant's preferred entity.
 // The format is checked by the schema in config.yaml; a wrong id shows up in the AI status as `no_entity`.
-export type AiEntities = { recipe: string | null; titles: string | null };
+export type AiEntities = { recipe: string | null; titles: string | null; image: string | null };
 export function aiEntities(options: AddonOptions): AiEntities {
   const entity = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim() : null);
-  return { recipe: entity(options.ai_entity_recipe), titles: entity(options.ai_entity_titles) };
+  return {
+    recipe: entity(options.ai_entity_recipe),
+    titles: entity(options.ai_entity_titles),
+    image: entity(options.ai_entity_image),
+  };
 }

@@ -4,6 +4,9 @@ import path from "node:path";
 
 export type ImageType = { ext: "jpg" | "png" | "webp" | "gif" | "avif"; mime: string };
 
+// Largest image the app takes from a link or an upload (the browser shrinks photos before uploading).
+export const MAX_IMAGE_BYTES = 3_000_000;
+
 // File names are content hashes, so they are safe to use in URLs and paths and identical images are stored once.
 export const IMAGE_NAME = /^[a-f0-9]{16}\.(jpg|png|webp|gif|avif)$/;
 

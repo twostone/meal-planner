@@ -19,6 +19,8 @@ dieselbe Liste.
 - Aus einem eingefügten Link (Rezeptseite, Instagram, …) holt der Server Titel und Vorschaubild. Klappt das nicht,
   trägt man den Titel selbst ein. Dazu gibt es Titelvorschläge: zwei aus festen Regeln (der Originaltitel und ein
   bereinigter) und, wenn Home Assistant eine KI hat, zwei von der KI.
+- Eigene Bilder: Im Gericht lässt sich ein Foto wählen (das Handy verkleinert es vor dem Hochladen) oder, wenn die KI von
+  Home Assistant Bilder erzeugen kann, mit „Bild erzeugen“ ein Bild aus Titel und Zutaten erstellen.
 - Rezepte: Zutaten (Menge, Einheit, Zutat), Portionen und Zubereitung pro Gericht, von Hand oder aus dem Text, den die
   App beim Link-Abruf sichert (Rezeptseite oder Instagram-Caption). Optional zerlegt die KI von Home Assistant den Text in
   Zutaten und Schritte. Das Ergebnis ist ein Entwurf, den man mit dem Originaltext vergleicht und erst dann speichert.
@@ -83,10 +85,16 @@ für die Zutaten ein stärkeres nutzen will, trägt in der App-Konfiguration die
 
 - `ai_entity_recipe`: Entität für „Zutaten erkennen“ und „Zutaten vereinheitlichen“
 - `ai_entity_titles`: Entität für die KI-Titelvorschläge
+- `ai_entity_image`: Entität für „Bild erzeugen“ (muss Bilder erzeugen können; leer heißt: die in Home Assistant
+  bevorzugte Entität für Bilder)
 
 Leer heißt: die bevorzugte Entität. Eine Änderung gilt nach einem Neustart der App. Gibt es eine eingetragene Entität nicht
-(Tippfehler) oder ist sie nicht verfügbar, sind **beide** KI-Funktionen aus; das Protokoll nennt dann die Option
+(Tippfehler) oder ist sie nicht verfügbar, sind **alle** KI-Funktionen aus; das Protokoll nennt dann die Option
 (`configured_entity_missing option=… entity=…`).
+
+„Bild erzeugen“ erscheint nur, wenn eine AI-Task-Entität Bilder erzeugen kann (z. B. OpenAI oder Google). Das dauert bis
+zu einer Minute. Ein vorhandenes Bild wird erst nach einer zweiten Bestätigung ersetzt, gespeichert wird es wie jede andere
+Änderung mit „Speichern“.
 
 Die KI-Titel erscheinen automatisch nach jeder Link-Vorschau, zunächst als zwei Platzhalter mit „KI“-Kennzeichen. Fehlt
 die Antwort oder dauert sie länger als 15 Sekunden, verschwinden die Platzhalter, die übrigen Vorschläge bleiben. Die
@@ -131,7 +139,9 @@ In der App-Konfiguration stellt `log_level` ein, wie viel geschrieben wird (`deb
   Apps, Router) sind dabei gesperrt. Der Browser lädt nichts von Drittservern: Schriften und Bilder kommen vom eigenen Server.
 - „Zutaten erkennen“ schickt den gesicherten Rezepttext an den KI-Dienst, der in Home Assistant eingerichtet ist (bei
   einem Cloud-Dienst also ins Internet), zusammen mit der Liste der schon verwendeten Zutatennamen (höchstens 300), und
-  zwar nur auf Knopfdruck. „Zutaten vereinheitlichen“ schickt auf Knopfdruck die Zutaten des Rezepts und die Liste der Zutatennamen dorthin. **Die KI-Titelvorschläge dagegen laufen automatisch:**
+  zwar nur auf Knopfdruck. „Zutaten vereinheitlichen“ schickt auf Knopfdruck die Zutaten des Rezepts und die Liste der Zutatennamen dorthin.
+  „Bild erzeugen“ schickt auf Knopfdruck den Titel und die Zutatennamen des gespeicherten Rezepts. Hochgeladene Fotos
+  bleiben in der App und gehen an keinen Dienst. **Die KI-Titelvorschläge dagegen laufen automatisch:**
   Jede Link-Vorschau schickt den Seitentitel und den gefundenen Text (höchstens 10 000 Zeichen) an denselben Dienst (oder an
   den unter `ai_entity_titles` eingetragenen). Wer das
   nicht möchte, richtet in Home Assistant keine AI-Task-Entität ein (oder entfernt sie): dann bleiben beide Funktionen aus.

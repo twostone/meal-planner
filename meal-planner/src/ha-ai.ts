@@ -3,7 +3,7 @@ import type { RawDraft } from "./recipe-draft.ts";
 import { UNITS } from "./repo.ts";
 import { FOREIGN_UNITS } from "./units.ts";
 import { logger } from "./log.ts";
-import { errorBody, isAbort, request, SUPERVISOR_CORE_URL } from "./ha-core.ts";
+import { CORE_DIRECT_URL, errorBody, isAbort, request, SUPERVISOR_CORE_URL } from "./ha-core.ts";
 import type { AiEntities } from "./options.ts";
 import { clip, toJson } from "./text.ts";
 
@@ -13,8 +13,15 @@ const STATUS_TIMEOUT_MS = 5000;
 export const GENERATE_TIMEOUT_MS = 30_000;
 // Title suggestions are a convenience next to the preview, so they get less time than a recipe draft.
 export const TITLES_TIMEOUT_MS = 15_000;
+// Image models take noticeably longer than text: up to a minute is normal.
+export const IMAGE_TIMEOUT_MS = 60_000;
+// The generated file is stored as it comes (no resizing on the server), and image models return large PNGs.
+export const MAX_GENERATED_IMAGE_BYTES = 10_000_000;
+// AITaskEntityFeature.GENERATE_IMAGE in homeassistant/components/ai_task/const.py.
+const GENERATE_IMAGE_FEATURE = 4;
 
-export type AiStatus = { ai: boolean; reason: "disabled" | "no_entity" | "unreachable" | null };
+// `image`: an AI task entity that can generate images is there (decides whether the sheet offers "Bild erzeugen").
+export type AiStatus = { ai: boolean; reason: "disabled" | "no_entity" | "unreachable" | null; image: boolean };
 export class AiError extends Error {
   constructor(public reason: "disabled" | "timeout" | "unreachable" | "bad_response") {
     super(reason);
@@ -28,6 +35,8 @@ export type RecipeAi = {
   titles(input: { title: string; text: string; lang: string }): Promise<unknown>;
   // The model's raw `items` field for the lines of a saved recipe (turn it into changes with buildChanges).
   normalize(items: AiItem[], knownNames: string[]): Promise<unknown>;
+  // The bytes of a generated photo of the dish (store them with ImageStore.save, which checks the type).
+  image(input: { title: string; ingredients: string[] }): Promise<Buffer>;
 };
 
 export const DEFAULT_LANGUAGE = "Deutsch";
@@ -100,6 +109,18 @@ const TITLES_STRUCTURE = {
   titles: { description: "Genau 2 Titel, einer pro Zeile", required: true, selector: { text: {} } },
 };
 
+export const IMAGE_PROMPT = `Ein appetitliches Foto des folgenden Gerichts, wie in einem Kochbuch.
+Regeln:
+- Das fertige Gericht angerichtet auf einem Teller oder in einer Schüssel, von schräg oben, natürliches Licht.
+- Keine Schrift, keine Logos, keine Personen, keine Hände.`;
+// How much of the ingredient list goes into the image prompt (names only, the amounts do not change the picture).
+const MAX_IMAGE_INGREDIENTS_CHARS = 1000;
+
+export function imagePrompt(title: string, ingredients: string[]): string {
+  const list = clip(ingredients.join(", "), MAX_IMAGE_INGREDIENTS_CHARS);
+  return `${IMAGE_PROMPT}\n\nGericht:\n${title}${list ? `\n\nZutaten:\n${list}` : ""}`;
+}
+
 // Output fields of the ai_task. Ingredients are a JSON array as text: nested structures are not needed.
 const STRUCTURE = {
   servings: { description: "Anzahl Portionen, nur wenn im Text genannt", required: false, selector: { number: {} } },
@@ -108,41 +129,46 @@ const STRUCTURE = {
   instructions: { description: "Zubereitungsschritte, ein Schritt pro Zeile", required: false, selector: { text: {} } },
 };
 
-// Talks to Home Assistant's AI task (ai_task.generate_data) through the Supervisor's Core proxy (see ha-core.ts
-// for why this is plain fetch). The recipe text goes to the LLM service configured in
+// Talks to Home Assistant's AI task (ai_task.generate_data / generate_image) through the Supervisor's Core proxy (see
+// ha-core.ts for why this is plain fetch). The recipe text goes to the LLM service configured in
 // Home Assistant (possibly a cloud service). `token` null (dev, tests) -> disabled. `entities` picks the AI task entity
-// per task (app options), null = Home Assistant's preferred one. `baseUrl` is for tests.
-export const PREFERRED_AI_ENTITIES: AiEntities = { recipe: null, titles: null };
+// per task (app options), null = Home Assistant's preferred one. `urls` and `timeouts` are for tests.
+export const PREFERRED_AI_ENTITIES: AiEntities = { recipe: null, titles: null, image: null };
+export type HaAiSettings = {
+  baseUrl?: string;
+  coreUrl?: string;
+  timeoutMs?: number;
+  titlesTimeoutMs?: number;
+  imageTimeoutMs?: number;
+};
 export function createHaAi(
   token: string | null,
   entities: AiEntities = PREFERRED_AI_ENTITIES,
-  baseUrl = SUPERVISOR_CORE_URL,
-  timeoutMs = GENERATE_TIMEOUT_MS,
-  titlesTimeoutMs = TITLES_TIMEOUT_MS,
+  {
+    baseUrl = SUPERVISOR_CORE_URL,
+    coreUrl = CORE_DIRECT_URL,
+    timeoutMs = GENERATE_TIMEOUT_MS,
+    titlesTimeoutMs = TITLES_TIMEOUT_MS,
+    imageTimeoutMs = IMAGE_TIMEOUT_MS,
+  }: HaAiSettings = {},
 ): RecipeAi {
-  // One ai_task call. Errors become AiError reasons; the answer is `service_response.data` (documented by the
-  // plan's test), tolerating a layer keyed by the entity id.
-  async function run(
-    taskName: string,
-    entity: string | null,
-    instructions: string,
-    structure: object,
-    timeout: number,
-  ): Promise<Record<string, unknown>> {
+  // One ai_task call. Errors become AiError reasons; the answer is `service_response` (for generate_data its `data`),
+  // tolerating a layer keyed by the entity id.
+  async function call(service: string, taskName: string, entity: string | null, fields: object, timeout: number): Promise<Record<string, unknown>> {
     if (!token) throw new AiError("disabled");
     const t0 = performance.now();
     const ms = () => Math.round(performance.now() - t0);
     let res: Response;
     try {
       res = await request(
-        "services/ai_task/generate_data?return_response",
+        `services/ai_task/${service}?return_response`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          // Without entity_id Home Assistant uses its preferred AI task entity, which is one for all generate_data
-          // calls; the app options pick one per task. The model gets no tools.
+          // Without entity_id Home Assistant uses its preferred AI task entity (one for all generate_data calls, one
+          // for images); the app options pick one per task. The model gets no tools.
           // toJson, not JSON.stringify: Home Assistant answers 400 to a lone surrogate (see text.ts).
-          body: toJson({ task_name: taskName, ...(entity ? { entity_id: entity } : {}), instructions, structure }),
+          body: toJson({ task_name: taskName, ...(entity ? { entity_id: entity } : {}), ...fields }),
         },
         token,
         baseUrl,
@@ -168,40 +194,90 @@ export function createHaAi(
       throw new AiError("bad_response");
     }
     const sr = body?.service_response;
-    const data = sr?.data ?? Object.values(sr ?? {}).map((v: any) => v?.data).find((d) => d && typeof d === "object");
-    if (!data || typeof data !== "object") {
+    if (!sr || typeof sr !== "object") {
       log.warn("task_bad_response", { task: taskName, ms: ms(), why: "no_data" });
       throw new AiError("bad_response");
     }
     log.info("task_done", { task: taskName, ms: ms() });
+    return sr as Record<string, unknown>;
+  }
+
+  async function run(taskName: string, entity: string | null, instructions: string, structure: object, timeout: number) {
+    const sr: any = await call("generate_data", taskName, entity, { instructions, structure }, timeout);
+    const data = sr.data ?? Object.values(sr).map((v: any) => v?.data).find((d) => d && typeof d === "object");
+    if (!data || typeof data !== "object") {
+      log.warn("task_bad_response", { task: taskName, why: "no_data" });
+      throw new AiError("bad_response");
+    }
     return data as Record<string, unknown>;
+  }
+
+  // The generated image sits behind a signed path of Home Assistant (`/ai_task/image/<file>?authSig=…`, valid for an
+  // hour). It is not under /api/, so the Supervisor's Core proxy does not pass it on: it is fetched from Core directly,
+  // and the signature is the authorization. Only a relative path is accepted, so the answer can never point the
+  // download at another host.
+  async function download(signedPath: unknown, timeout: number): Promise<Buffer> {
+    if (typeof signedPath !== "string" || !SIGNED_PATH.test(signedPath)) {
+      log.warn("task_bad_response", { task: IMAGE_TASK, why: "no_url" });
+      throw new AiError("bad_response");
+    }
+    const t0 = performance.now();
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), timeout);
+    try {
+      const res = await fetch(`${coreUrl}${signedPath}`, { signal: ctl.signal });
+      if (!res.ok) {
+        log.error("image_download_failed", { status: res.status, body: await errorBody(res) });
+        throw new AiError("unreachable");
+      }
+      const data = await readLimited(res, MAX_GENERATED_IMAGE_BYTES);
+      if (!data) {
+        log.warn("image_too_large", { limit_bytes: MAX_GENERATED_IMAGE_BYTES });
+        throw new AiError("bad_response");
+      }
+      log.info("image_downloaded", { bytes: data.length, ms: Math.round(performance.now() - t0) });
+      return data;
+    } catch (e) {
+      if (e instanceof AiError) throw e;
+      if (isAbort(e)) {
+        log.warn("image_download_timeout", { limit_ms: timeout });
+        throw new AiError("timeout");
+      }
+      log.error("image_download_unreachable", { err: e });
+      throw new AiError("unreachable");
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   return {
     async status() {
-      if (!token) return { ai: false, reason: "disabled" };
+      if (!token) return { ai: false, reason: "disabled", image: false };
       try {
         const res = await request("states", { method: "GET" }, token, baseUrl, STATUS_TIMEOUT_MS);
         if (!res.ok) {
           log.warn("status_check_failed", { status: res.status, body: await errorBody(res) });
-          return { ai: false, reason: "unreachable" };
+          return { ai: false, reason: "unreachable", image: false };
         }
         const body: unknown = await res.json();
-        const states = Array.isArray(body) ? (body as { entity_id?: unknown; state?: unknown }[]) : [];
-        const usable = (s: { entity_id?: unknown; state?: unknown }) => typeof s.entity_id === "string" && s.entity_id.startsWith("ai_task.") && s.state !== "unavailable";
-        const usableIds = new Set(states.filter(usable).map((s) => s.entity_id));
+        const states = Array.isArray(body) ? (body as AiState[]) : [];
+        const usable = states.filter((s) => typeof s.entity_id === "string" && s.entity_id.startsWith("ai_task.") && s.state !== "unavailable");
+        const usableIds = new Set(usable.map((s) => s.entity_id));
         // A configured entity must exist and be available; an unset one needs any AI task entity (the preferred one
         // cannot be read here). One status for the whole UI: a typo in one option switches all AI features off.
-        for (const [option, entity] of [["ai_entity_recipe", entities.recipe], ["ai_entity_titles", entities.titles]] as const) {
+        for (const [option, entity] of [["ai_entity_recipe", entities.recipe], ["ai_entity_titles", entities.titles], ["ai_entity_image", entities.image]] as const) {
           if (entity && !usableIds.has(entity)) {
             log.warn("configured_entity_missing", { option, entity });
-            return { ai: false, reason: "no_entity" };
+            return { ai: false, reason: "no_entity", image: false };
           }
         }
-        return usableIds.size > 0 ? { ai: true, reason: null } : { ai: false, reason: "no_entity" };
+        // Images need an entity that can generate them: the configured one, else any.
+        const canDraw = (s: AiState) => (Number(s.attributes?.supported_features) & GENERATE_IMAGE_FEATURE) !== 0;
+        const image = usable.some((s) => (entities.image ? s.entity_id === entities.image : true) && canDraw(s));
+        return usableIds.size > 0 ? { ai: true, reason: null, image } : { ai: false, reason: "no_entity", image: false };
       } catch (e) {
         log.warn("status_check_failed", { err: e });
-        return { ai: false, reason: "unreachable" };
+        return { ai: false, reason: "unreachable", image: false };
       }
     },
 
@@ -219,5 +295,33 @@ export function createHaAi(
       const instructions = `${titlesPrompt(languageName(lang))}\n\nTitel der Seite:\n${title}\n\nText:\n${text}`;
       return (await run("meal_planner_title", entities.titles, instructions, TITLES_STRUCTURE, titlesTimeoutMs)).titles;
     },
+
+    async image({ title, ingredients }) {
+      const t0 = performance.now();
+      const sr: any = await call("generate_image", IMAGE_TASK, entities.image, { instructions: imagePrompt(title, ingredients) }, imageTimeoutMs);
+      const url = sr.url ?? Object.values(sr).map((v: any) => v?.url).find((u) => typeof u === "string");
+      // Generating and downloading share one time limit, so the request never waits longer than that.
+      return await download(url, Math.max(0, imageTimeoutMs - (performance.now() - t0)));
+    },
   };
+}
+
+const IMAGE_TASK = "meal_planner_image";
+// A path on Home Assistant itself ("/ai_task/image/…"), never "//host" or a full URL.
+const SIGNED_PATH = /^\/(?!\/)[^\s\\]*$/;
+type AiState = { entity_id?: unknown; state?: unknown; attributes?: { supported_features?: unknown } };
+
+// The whole body, or null as soon as it gets bigger than `max` (the rest is not read).
+async function readLimited(res: Response, max: number): Promise<Buffer | null> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of res.body ?? []) {
+    size += chunk.length;
+    if (size > max) {
+      await res.body?.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
 }

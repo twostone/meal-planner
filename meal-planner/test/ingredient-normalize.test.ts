@@ -44,7 +44,7 @@ const ing = (name: string, note: string | null, over: object = {}) => ({ section
 
 function setup(normalize: RecipeAi["normalize"] = async () => "[]") {
   const repo = createRepo(openDb(":memory:"));
-  const ai: RecipeAi = { status: async () => ({ ai: true, reason: null }), generate: async () => ({}), titles: async () => "", normalize };
+  const ai: RecipeAi = { status: async () => ({ ai: true, reason: null, image: false }), generate: async () => ({}), titles: async () => "", normalize, image: async () => Buffer.alloc(0) };
   const app = createApp(repo, { ai });
   const call = async (method: string, url: string, body?: unknown) => {
     const res = await app.request(url, {

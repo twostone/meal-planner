@@ -1,11 +1,12 @@
 import { Hono, type Context } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { zValidator } from "@hono/zod-validator";
 import * as z from "zod";
 import { AiError, MAX_KNOWN_NAMES, type RecipeAi } from "./ha-ai.ts";
 import { TodoError, type HaTodo, type OpenTodoItem } from "./ha-todo.ts";
 import type { HaEventInput, HaUser } from "./ha-notify.ts";
-import { IMAGE_NAME, type ImageStore } from "./images.ts";
+import { detectImageType, IMAGE_NAME, MAX_IMAGE_BYTES, type ImageStore } from "./images.ts";
 import { logger } from "./log.ts";
 import type { PreviewResult } from "./preview.ts";
 import { buildDraft, DraftError, MAX_INGREDIENTS } from "./recipe-draft.ts";
@@ -113,6 +114,8 @@ const LANG = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
 const titleSuggestBody = z
   .object({ title: z.string().trim().max(200).optional(), text: z.string().max(10000).optional(), lang: z.string().max(35).optional() })
   .refine((v) => !!(v.title || v.text?.trim()), { message: "title or text needed" });
+// The title as typed in the sheet; with dish_id the saved recipe's ingredient names go into the prompt too.
+const imageGenerateBody = z.object({ title, dish_id: id.optional() });
 const checkBody = z.object({ kind: z.enum(["ingredient", "step"]), idx: z.number().int().min(0).max(1000), checked: z.boolean() });
 // A Home Assistant to-do entity id ("todo.essen"). Whether it exists is checked against Home Assistant before sending.
 const todoEntity = z.string().regex(/^todo\.[a-z0-9_]+$/);
@@ -155,6 +158,8 @@ const SLOW_REQUEST_MS = 2000;
 const MAX_PARALLEL_PREVIEWS = 4;
 const MAX_PARALLEL_DRAFTS = 2;
 const MAX_PARALLEL_TITLES = 2;
+// Generating an image takes up to a minute and costs the most: one at a time.
+const MAX_PARALLEL_IMAGES = 1;
 const MAX_PARALLEL_NORMALIZE = 2;
 
 // Is the item already open on the to-do list? Items may share a name ("Nüsse" for Macadamia and for Walnuss), so one with a
@@ -262,7 +267,7 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
     c.json(repo.setRecipe(c.req.valid("param").id, c.req.valid("json"))),
   );
 
-  app.get("/api/recipe/status", async (c) => c.json(opts.ai ? await opts.ai.status() : { ai: false, reason: "disabled" }));
+  app.get("/api/recipe/status", async (c) => c.json(opts.ai ? await opts.ai.status() : { ai: false, reason: "disabled", image: false }));
   if (opts.ai) {
     const ai = opts.ai;
     let drafting = 0;
@@ -421,6 +426,51 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
         "Content-Security-Policy": "default-src 'none'",
       });
     });
+
+    // An own photo (shrunk by the browser) as the raw body. Only stored: the dish gets it via its `image` field when
+    // the sheet is saved, an unsaved one is swept like an unused preview image.
+    app.post(
+      "/api/images",
+      bodyLimit({ maxSize: MAX_IMAGE_BYTES, onError: (c) => c.json({ error: "image too large" }, 413) }),
+      async (c) => {
+        const data = Buffer.from(await c.req.arrayBuffer());
+        if (!detectImageType(data)) return c.json({ error: "not a supported image" }, 400);
+        const name = await images.save(data);
+        sweep();
+        return c.json({ image: name }, 201);
+      },
+    );
+
+    if (opts.ai) {
+      const ai = opts.ai;
+      let drawing = 0;
+      // A photo of the dish from Home Assistant's AI task. Title from the sheet (a new dish has no id yet), the
+      // ingredient names from the saved recipe. Only stored as a file, like an upload.
+      app.post("/api/images/generate", zValidator("json", imageGenerateBody), async (c) => {
+        const body = c.req.valid("json");
+        if (drawing >= MAX_PARALLEL_IMAGES) return c.json({ error: "busy" }, 429);
+        drawing++;
+        try {
+          const ingredients = body.dish_id ? repo.getRecipe(body.dish_id).ingredients.map((i) => i.name) : [];
+          const data = await ai.image({ title: body.title, ingredients });
+          if (!detectImageType(data)) {
+            log.warn("image_failed", { reason: "bad_response", detail: "not a supported image" });
+            return c.json({ error: "ai failed", reason: "bad_response" }, 502);
+          }
+          const name = await images.save(data);
+          sweep();
+          return c.json({ image: name });
+        } catch (e) {
+          if (e instanceof AiError) {
+            log.warn("image_failed", { reason: e.reason });
+            return c.json({ error: "ai failed", reason: e.reason }, 502);
+          }
+          throw e;
+        } finally {
+          drawing--;
+        }
+      });
+    }
   }
 
   if (opts.preview) {

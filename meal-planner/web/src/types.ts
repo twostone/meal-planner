@@ -71,7 +71,8 @@ export type Recipe = {
 // Same list as UNITS in the server's repo.ts. Counted things ("1 Zwiebel") have no unit.
 export const UNITS = ["g", "kg", "ml", "l", "EL", "TL", "Prise", "Zehe", "Bund", "Dose", "Packung", "Becher", "Scheibe", "Handvoll"];
 export type RecipeDraft = Pick<Recipe, "servings" | "instructions"> & { ingredients: (Ingredient & { verified: boolean })[] };
-export type AiStatus = { ai: boolean; reason: string | null };
+// image: an AI task in Home Assistant can generate images ("Bild erzeugen").
+export type AiStatus = { ai: boolean; reason: string | null; image: boolean };
 export type Checks = { ingredients: number[]; steps: number[] }; // ticked in cook mode (positions)
 export type CookEntry = {
   entry_id: number;
