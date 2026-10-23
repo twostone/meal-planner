@@ -5,11 +5,11 @@
   import { fmtAmount, groupBySection, ingredientExtra, ingredientText, parseAmount, stepLines } from "./recipe";
   import Sheet from "./Sheet.svelte";
   import { app, closeSheet } from "./store.svelte";
-  import { UNITS, type AiStatus, type Recipe, type RecipeDraft } from "./types";
+  import { UNITS, type AiStatus, type IngredientChange, type Recipe, type RecipeDraft } from "./types";
 
   let { dishId }: { dishId: number } = $props();
 
-  type Row = { key: number; section: string; amount: string; unit: string; name: string; note: string; prep: string; raw: string | null; sig: string; verified: boolean };
+  type Row = { key: number; section: string; amount: string; unit: string; name: string; plural: string; note: string; prep: string; raw: string | null; sig: string; verified: boolean };
 
   const dish = $derived(app.dishes.find((d) => d.id === dishId));
   let recipe = $state<Recipe | null>(null);
@@ -27,6 +27,11 @@
   let ai = $state<AiStatus>({ ai: false, reason: null, image: false });
   let drafting = $state(false);
   let draftMode = $state(false); // the editor shows a draft from the AI, not the saved recipe
+  // "Zutaten vereinheitlichen": suggestions of the AI for the saved lines, each can be left out (null = none asked for)
+  let changes = $state<IngredientChange[] | null>(null);
+  let keptPos = $state<number[]>([]);
+  let normalizing = $state(false);
+  let confirmApply = $state(false);
 
   const hasLink = $derived(!!dish?.url);
   // Structured part only: a recipe that has just the original text is still shown, not edited.
@@ -56,7 +61,7 @@
     servings = r.servings === null ? "" : String(r.servings);
     instructions = r.instructions ?? "";
     rows = r.ingredients.map((i) => {
-      const row = { section: i.section ?? "", amount: fmtAmount(i), unit: i.unit ?? "", name: i.name, note: i.note ?? "", prep: i.prep ?? "" };
+      const row = { section: i.section ?? "", amount: fmtAmount(i), unit: i.unit ?? "", name: i.name, plural: i.plural ?? "", note: i.note ?? "", prep: i.prep ?? "" };
       return { key: nextKey++, ...row, raw: i.raw, sig: sigOf(row), verified: !("verified" in i) || i.verified };
     });
     problem = "";
@@ -65,7 +70,7 @@
 
   function addRow() {
     // A new ingredient starts in the section of the previous one.
-    rows.push({ key: nextKey++, section: rows.at(-1)?.section ?? "", amount: "", unit: "", name: "", note: "", prep: "", raw: null, sig: "", verified: true });
+    rows.push({ key: nextKey++, section: rows.at(-1)?.section ?? "", amount: "", unit: "", name: "", plural: "", note: "", prep: "", raw: null, sig: "", verified: true });
   }
 
   function cancel() {
@@ -85,6 +90,50 @@
       drafting = false;
     }
   }
+
+  async function suggestUniform() {
+    normalizing = true;
+    sourceHint = "";
+    app.error = "";
+    try {
+      changes = (await api.normalizeRecipe(dishId)).changes;
+      keptPos = changes.map((c) => c.pos);
+      confirmApply = false;
+    } catch (err) {
+      app.error = err instanceof Error ? err.message : String(err);
+    } finally {
+      normalizing = false;
+    }
+  }
+
+  function toggleChange(pos: number) {
+    confirmApply = false;
+    keptPos = keptPos.includes(pos) ? keptPos.filter((p) => p !== pos) : [...keptPos, pos];
+  }
+
+  // Replacing cannot be undone by the app, so it takes a second tap. The ticks of cook mode stay.
+  async function applyUniform() {
+    if (!confirmApply) return void (confirmApply = true);
+    confirmApply = false;
+    busy = true;
+    app.error = "";
+    try {
+      recipe = await api.applyNormalizedRecipe(dishId, changes!.filter((c) => keptPos.includes(c.pos)));
+      changes = null;
+    } catch (err) {
+      app.error = err instanceof Error ? err.message : String(err);
+    } finally {
+      busy = false;
+    }
+  }
+
+  // "Zwiebel (Mz. Zwiebeln), rot, gewürfelt": what a line becomes.
+  const changedText = (c: IngredientChange) =>
+    [c.to.name + (c.to.plural ? ` (Mz. ${c.to.plural})` : ""), ingredientExtra(c.to)].filter(Boolean).join(", ");
+  const lineText = (pos: number) => {
+    const i = recipe!.ingredients[pos]!;
+    return [ingredientText(i), ingredientExtra(i)].filter(Boolean).join(", ");
+  };
 
   // A line the AI changed or made up is marked until the user touches it.
   const suspicious = (r: Row) => !r.verified && r.sig === sigOf(r);
@@ -122,6 +171,7 @@
         ...a,
         unit: r.unit || null,
         name: r.name.trim(),
+        plural: r.plural.trim() || null,
         note: r.note.trim() || null,
         prep: r.prep.trim() || null,
         raw: r.raw !== null && r.sig === sigOf(r) ? r.raw : null,
@@ -176,11 +226,12 @@
             </div>
             <input type="text" aria-label="Zutat" placeholder="Zutat" maxlength="80" bind:value={r.name} autocomplete="off" />
             {#if draftMode && r.raw}<small class="ing-raw">Original: {r.raw}</small>{/if}
-            <details class="more" open={!!(r.note || r.prep || r.section)}>
-              <summary>Sorte, Zubereitung, Abschnitt</summary>
+            <details class="more" open={!!(r.plural || r.note || r.prep || r.section)}>
+              <summary>Mehrzahl, Sorte, Zubereitung, Abschnitt</summary>
               <div class="ing-extra">
+                <input type="text" aria-label="Mehrzahl" placeholder="Mehrzahl" maxlength="80" bind:value={r.plural} autocomplete="off" />
                 <input type="text" aria-label="Sorte" placeholder="Sorte, z. B. rot" maxlength="200" bind:value={r.note} autocomplete="off" />
-                <input type="text" aria-label="Zubereitung" placeholder="Zubereitung, z. B. gewürfelt" maxlength="200" bind:value={r.prep} autocomplete="off" />
+                <input type="text" aria-label="Zubereitung" placeholder="Zubereitung" maxlength="200" bind:value={r.prep} autocomplete="off" />
                 <input type="text" aria-label="Abschnitt" placeholder="Abschnitt" maxlength="80" bind:value={r.section} autocomplete="off" />
               </div>
             </details>
@@ -236,8 +287,42 @@
         </details>
       {/if}
     </article>
-{#if recipe.source_text || hasLink}
+    {#if changes}
+      <section class="form-group" aria-label="Vorschläge zum Vereinheitlichen">
+        {#if changes.length}
+          <ul class="rows shop-items">
+            {#each changes as c (c.pos)}
+              {@const on = keptPos.includes(c.pos)}
+              <li>
+                <button type="button" class="row shop-item" class:off={!on} role="checkbox" aria-checked={on} onclick={() => toggleChange(c.pos)}>
+                  <span class="check" aria-hidden="true"><span class="box">{#if on}<Icon name="check" size={16} />{/if}</span></span>
+                  <span class="shop-text">
+                    <span class="shop-name">{changedText(c)}{#if c.unit}<span class="shop-spec">{" · "}{c.unit} → g/ml</span>{/if}</span>
+                    <small>vorher: {lineText(c.pos)}</small>
+                  </span>
+                </button>
+              </li>
+            {/each}
+          </ul>
+          <small class="field-hint">Die App kann das Ersetzen nicht rückgängig machen. Die Originalzeilen bleiben gespeichert.</small>
+          <div class="actions">
+            <button type="button" class="btn outline" onclick={() => (changes = null)}>Verwerfen</button>
+            <button type="button" class="btn primary" disabled={busy || !keptPos.length} onclick={applyUniform}>
+              {confirmApply ? `Wirklich ${keptPos.length} ersetzen?` : `${keptPos.length} übernehmen`}
+            </button>
+          </div>
+        {:else}
+          <p class="status" aria-live="polite">Die Zutaten sind schon einheitlich.</p>
+        {/if}
+      </section>
+    {/if}
+{#if recipe.source_text || hasLink || (ai.ai && recipe.ingredients.length && !changes)}
 <section class="form-group">
+    {#if ai.ai && recipe.ingredients.length && !changes}
+      <button type="button" class="btn outline wide" disabled={normalizing} onclick={suggestUniform}>
+        {normalizing ? "Frage KI …" : "Zutaten vereinheitlichen"}
+      </button>
+    {/if}
     {#if recipe.source_text}
       {#if ai.ai}
         <button type="button" class="btn primary wide" disabled={drafting} onclick={recognize}>

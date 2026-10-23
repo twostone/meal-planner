@@ -45,7 +45,7 @@ meal-planner/            das Add-on (Docker-Build-Kontext)
     shopping.ts             Einkaufsliste aus den Rezepten zusammenfassen (rein, ohne Netz und DB)
     recipe-draft.ts         prüft und bereinigt die LLM-Antwort, gleicht sie mit dem Originaltext ab
     units.ts                englische Einheiten (cup, oz, …) in g/ml/EL/TL umrechnen, Dichte je Zutat (rein)
-    ingredient-normalize.ts Bestand vereinheitlichen: KI-Antwort prüfen, Einheit aus der Notiz lösen (rein)
+    ingredient-normalize.ts Rezept vereinheitlichen: KI-Antwort prüfen, Einheit aus der Notiz lösen (rein)
     text.ts                 clip (Kürzen ohne halbes Zeichen) und toJson (JSON für Home Assistant)
     options.ts              App-Optionen aus /data/options.json lesen (log_level, ai_entity_*)
     log.ts                  Logger: eine logfmt-Zeile pro Ereignis, Stufe aus der App-Option `log_level`
@@ -92,7 +92,8 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   bleiben unverändert bestehen.
 - **Rezept** (Plan: `docs/plan-rezepte.md`, Stufe 1 bis 3, 5 und 7 gebaut): gehört zum Gericht, nicht zum Listeneintrag. `dish.servings`
   (1–50) und `dish.instructions` (ein Schritt pro Zeile, höchstens 10 000 Zeichen) plus `dish_ingredient` (Reihenfolge `pos`,
-  `section`, `amount`/`amount_max`, `unit`, `name`, `note`, `prep`, `raw`). `note` ist die **Sorte** (kaufrelevant: rot,
+  `section`, `amount`/`amount_max`, `unit`, `name`, `plural`, `note`, `prep`, `raw`). `name` ist die Grundform (Singular),
+  `plural` die Mehrzahl (höchstens 80 Zeichen, fehlt im PUT = keine). `note` ist die **Sorte** (kaufrelevant: rot,
   TK, Macadamia), `prep` die **Zubereitung** (gewürfelt, zimmerwarm, für den Einkauf egal); beide höchstens 200 Zeichen,
   `prep` fehlt im PUT = keine (ältere Clients). `GET/PUT /api/dishes/:id/recipe`: PUT ersetzt alles in einer
   Transaktion (wie `setTags`), ein leeres Rezept löscht es. Höchstens 60 Zutaten. `unit` nur aus `UNITS` in `repo.ts`
@@ -124,35 +125,37 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   `entity_id`. `status()` verlangt, dass jede gesetzte Entität existiert und nicht `unavailable` ist, sonst `no_entity` und
   eine Warnzeile `configured_entity_missing` mit dem Optionsnamen; ein Status für die ganze UI (ein Tippfehler schaltet alle
   KI-Funktionen ab, bewusst). Für Bilder hat HA eine eigene Voreinstellung (`gen_image_entity_id`). Optionen für künftige KI-Funktionen kommen erst mit dem jeweiligen Feature.
-  **Zutaten vereinheitlichen** (Plan: `docs/plan-zutaten.md`, PR 1): Der Prompt verlangt `name` in der **Grundform Singular**
-  ohne Sorte und Zubereitung („2 rote Zwiebeln, gewürfelt“ -> Zwiebel / `note` rot / `prep` gewürfelt; die Anzeige „3
-  Zwiebel“ ist hingenommen) und hängt die schon verwendeten Namen an (`listIngredientNames` in `repo.ts`, gleiche
-  `nameKey`-Form = ein Name, häufigste zuerst, höchstens `MAX_KNOWN_NAMES` = 300, mit `clip` begrenzt). Erlaubt sind
-  zusätzlich die englischen Einheiten `FOREIGN_UNITS` (`units.ts`), die das Modell nicht selbst umrechnet: `buildDraft` rechnet
-  sie per `convert` um (cup = US 236,588 ml; mit Eintrag in `CUP_GRAMS` nach g, sonst ml; tbsp/tsp -> EL/TL; oz/lb -> g;
-  unter 20 ganzzahlig, darüber auf 5 gerundet). `raw` bleibt die Originalzeile, im Entwurf steht sie unter jeder Zeile
-  („Original: …“). Die Einkaufsliste rät weiterhin nicht (keine Synonyme): Vereinheitlicht wird beim Import.
-  **Bestand vereinheitlichen** (PR 2): leiser Knopf „Zutaten vereinheitlichen“ unter dem Katalog (nur bei `ai: true` und
-  vorhandenen Zutaten) öffnet `NormalizeSheet.svelte` (`openNormalize`, Sheet-Art `normalize`). Der Client holt
-  `GET /api/ingredients/pairs` (jedes genaue Paar `name`/`note` mit Anzahl Gerichte) und schickt es in Blöcken von höchstens
-  80 (`MAX_PAIRS_PER_BLOCK`) **nacheinander** an `POST /api/ingredients/normalize/preview` (schreibt nichts, höchstens 1
-  gleichzeitig, sonst 429; Fehler 502 bricht ab, bisherige Vorschläge bleiben wählbar). Der KI-Task `meal_planner_normalize`
-  (`normalize` in `ha-ai.ts`, 30 s, ein Paar als JSON-Zeile) liefert `items` (`[{i, name, note, prep}]`), `buildChanges`
-  prüft sie wie Nutzereingabe (Längen, Typen, unbekannte/doppelte `i` fallen weg, unveränderte Paare entfallen). Eine
-  englische Einheit am Anfang der Notiz (so hat `buildDraft` sie früher gespeichert: „cups, gesiebt“, `splitUnitNote`) wird
-  vorher abgetrennt und ist allein schon eine Änderung (`unit`). Das Blatt zeigt „nachher“ und „vorher“ je Paar, alles
-  abwählbar, „Übernehmen“ zweistufig, mit Hinweis auf ein HA-Backup. `POST /api/ingredients/normalize/apply` (höchstens 500
-  Änderungen, der Client teilt auf) ändert in einer Transaktion nur Zeilen, die noch die alten Werte haben
-  (`normalizeIngredients` in `repo.ts`), rechnet die Einheit je Zeile ohne eigene Einheit um und lässt `pos`, `raw`, eine
-  schon gespeicherte `prep` (wenn die Änderung keine hat) und die Kochmodus-Haken unberührt (nicht über `setRecipe`).
-  Kein Rückgängig (YAGNI, dafür das Backup).
+  **Zutaten vereinheitlichen** (Plan: `docs/plan-zutaten.md`): Der Prompt verlangt `name` in der **Grundform Singular**
+  ohne Sorte und Zubereitung, dazu `plural` („2 rote Zwiebeln, gewürfelt“ -> Zwiebel / `plural` Zwiebeln / `note` rot /
+  `prep` gewürfelt; `plural` null, wenn es keine Mehrzahl gibt, `pluralOf` verwirft eine gleichlautende) und hängt die schon
+  verwendeten Namen an (`listIngredientNames` in `repo.ts`, gleiche `nameKey`-Form = ein Name, häufigste zuerst, höchstens
+  `MAX_KNOWN_NAMES` = 300, mit `clip` begrenzt). **Anzeige** (`displayName` in `web/src/recipe.ts`): Plural bei Menge über
+  1, bei Spanne und nach einer Einheit („3 Zwiebeln“, „200 g Zwiebeln“), sonst Singular („1 Zwiebel“, „Salz“); ohne
+  `plural` immer `name`. Erlaubt sind zusätzlich die englischen Einheiten `FOREIGN_UNITS` (`units.ts`), die das Modell nicht
+  selbst umrechnet: `buildDraft` rechnet sie per `convert` um (cup = US 236,588 ml; mit Eintrag in `CUP_GRAMS` nach g, sonst
+  ml; tbsp/tsp -> EL/TL; oz/lb -> g; unter 20 ganzzahlig, darüber auf 5 gerundet). `raw` bleibt die Originalzeile, im
+  Entwurf steht sie unter jeder Zeile („Original: …“). Die Einkaufsliste rät weiterhin nicht (keine Synonyme): gruppiert
+  wird nach dem Singular, der Artikel heißt nach dem ersten vorhandenen Plural (`ShoppingItem.name`, `base` = Singular; ein
+  offener Todo-Eintrag zählt mit beiden Formen, `isOnList`).
+  **Pro Rezept vereinheitlichen:** Knopf „Zutaten vereinheitlichen“ in der Rezeptansicht (nur bei `ai: true` und
+  vorhandenen Zutaten). `POST /api/dishes/:id/recipe/normalize` (schreibt nichts, höchstens 2 gleichzeitig, sonst 429; ohne
+  Zutaten 400; Fehler 502) schickt die Zeilen des Rezepts (`aiItems`: `{i, name, plural, note, prep}`, `i` = Position) und
+  die bekannten Namen an den KI-Task `meal_planner_normalize` (`normalize` in `ha-ai.ts`, Entität `ai_entity_recipe`,
+  30 s). `buildChanges` (`ingredient-normalize.ts`) prüft die Antwort wie Nutzereingabe (Längen, Typen, unbekannte/doppelte
+  `i` fallen weg, unveränderte Zeilen entfallen, eine weggelassene Zubereitung bleibt). Eine englische Einheit am Anfang der
+  Notiz (so hat `buildDraft` sie früher gespeichert: „cups, gesiebt“, `splitUnitNote`) wird vorher abgetrennt und ist allein
+  schon eine Änderung (`unit`). Das Rezeptblatt zeigt je Zeile „nachher“ und „vorher“, abwählbar, „übernehmen“ zweistufig.
+  `POST /api/dishes/:id/recipe/normalize/apply` (höchstens 60 Änderungen) ändert in einer Transaktion nur Zeilen, die an
+  ihrer Position noch die alten Werte haben (`normalizeRecipe` in `repo.ts`), rechnet die Einheit je Zeile ohne eigene
+  Einheit um und lässt `pos`, `raw` und die Kochmodus-Haken unberührt (nicht über `setRecipe`); Antwort ist das Rezept.
+  Kein Sammel-Umbau aller Rezepte (am 23.10.2026 verworfen: zu unübersichtlich), kein Rückgängig.
   **Zutatensuche (Stufe 5):** `GET /api/dishes?ingredient=zucchini` liefert Gerichte, in deren Rezept eine Zutat (`dish_ingredient.name`)
   den Text enthält. Der Vergleich läuft in JS (`toLocaleLowerCase("de")`), weil SQLite-`LIKE` nur ASCII ohne Beachtung der
   Schreibweise vergleicht; `q` und `ingredient` zusammen verlangen beides. Der Katalog fragt ab zwei Zeichen (250 ms Pause) nach und zeigt Gerichte, deren
   Titel **oder** Zutat passt; schlägt die Anfrage fehl, bleibt die Titelsuche. Gesucht wird nur im strukturierten Rezept, nicht in `source_text`.
   Plural: `matchesIngredient` trifft auch, wenn der Name der Anfang der Suche ist und höchstens `MAX_PLURAL_SUFFIX` (2)
-  Zeichen fehlen („zwiebeln“ -> Zwiebel, „eier“ -> Ei; hingenommen: „eis“ -> Ei). Umlaut-Plurale („äpfel“) deckt das
-  Autocomplete ab: `GET /api/ingredients/names` füllt ein natives `<datalist>` am Suchfeld (einmal beim Öffnen des
+  Zeichen fehlen („zwiebeln“ -> Zwiebel, „eier“ -> Ei; hingenommen: „eis“ -> Ei). Gespeicherte Plurale werden als Teilstring
+  mitdurchsucht („äpfel“ -> Apfel mit `plural` Äpfel). Für Zeilen ohne Plural hilft das Autocomplete: `GET /api/ingredients/names` füllt ein natives `<datalist>` am Suchfeld (einmal beim Öffnen des
   Katalogs geladen, Fehler still). Keine Fuzzy-Suche, keine Stemming-Bibliothek.
 - **Kochmodus** (Stufe 7): Knopf „Kochen“ in der Kopfzeile der Liste öffnet `CookView.svelte`, eine Vollbild-Ansicht (kein Blatt) über der
   Shell mit **allen Einträgen der Liste** als Reiter (offene zuerst, fertige hinten, einmal beim Öffnen sortiert).
@@ -568,7 +571,7 @@ Rezept-Text einfügen und per KI zerlegen sowie Portionen umrechnen (beides am 1
   offen ist, ob das Modell vorhandene Namen wiederverwendet, Sorte und Zubereitung sauber trennt und englische Einheiten
   unverändert lässt (Phase 0 in `docs/plan-zutaten.md`). `cup` gilt als US-Cup (AU 250 ml, UK 284 ml weichen ab), die
   Dichten in `units.ts` (King Arthur, ±20 % je nach Füllweise) sind nicht nachgewogen. Ebenso `NORMALIZE_PROMPT`: offen, ob
-  das Modell Verschiedenes zusammenlegt (Sahne/Schmand) und ob ein Block mit 80 Paaren in 30 s fertig wird.
+  das Modell Verschiedenes zusammenlegt (Sahne/Schmand) und ob die Plurale stimmen.
 - Das KI-Bild (`image()` in `ha-ai.ts`) ist **nur gegen einen Fake-Server getestet**: offen sind die Antwortform von
   `generate_image` über die REST-API (erwartet: `service_response.url`), ob `http://homeassistant:8123` aus dem Container
   erreichbar ist (bei HA mit eigenem SSL-Zertifikat auf 8123 nicht), ob der signierte Pfad dort ohne Token gilt, die

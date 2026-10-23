@@ -83,8 +83,8 @@ test("shopping list: open entries by default, chosen entries on request, entries
     { entry_id: salat.id, title: "Salat", done: false, selected: true, has_recipe: false },
   ]);
   assert.deepEqual(def.items, [
-    { key: "salz\u0000", name: "Salz", note: null, spec: null, sources: ["Suppe"], on_list: false },
-    { key: "zwiebel\u0000", name: "Zwiebel", note: null, spec: "2", sources: ["Suppe"], on_list: false },
+    { key: "salz\u0000", name: "Salz", base: "Salz", note: null, spec: null, sources: ["Suppe"], on_list: false },
+    { key: "zwiebel\u0000", name: "Zwiebel", base: "Zwiebel", note: null, spec: "2", sources: ["Suppe"], on_list: false },
   ]);
   const both = (await call("GET", `/api/plans/${p.id}/shopping?entries=${suppe.id},${pasta.id}`)).json;
   assert.deepEqual(
@@ -163,13 +163,14 @@ test("migration v8 adds the setting table", async () => {
     const file = path.join(dir, "v8.db");
     const first = openDb(file);
     const plan = createRepo(first).createPlan({ start_date: "2026-10-10", end_date: "2026-10-16" });
+    first.exec("ALTER TABLE dish_ingredient DROP COLUMN plural");
     first.exec("ALTER TABLE dish_ingredient DROP COLUMN prep");
     first.exec("DROP TABLE setting");
     first.exec("PRAGMA user_version = 8");
     first.close();
 
     const db = openDb(file);
-    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 10);
+    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 11);
     const repo = createRepo(db);
     assert.equal(repo.getPlan(plan.id).id, plan.id);
     assert.equal(repo.getSetting("shopping_list_entity"), null);
@@ -219,4 +220,12 @@ test("send: takes a spec of the full length and refuses a longer one", async () 
   const send = (spec: string) => call("POST", "/api/shopping/send", { list: "todo.essen", items: [{ name: "Mandeln", spec }] });
   assert.equal((await send("x".repeat(200))).status, 200);
   assert.equal((await send("x".repeat(201))).status, 400);
+});
+
+test("on_list: an open item named with the plural or the singular counts", async () => {
+  const { call, plan: p, suppe } = await plan(fakeTodo({ open: [{ summary: "Zwiebel", description: null }] }));
+  const ingredients = [{ ...ing(2, null, "Zwiebel"), plural: "Zwiebeln" }, ing(null, null, "Salz")];
+  await call("PUT", `/api/dishes/${suppe.dish_id}/recipe`, { servings: null, instructions: null, ingredients });
+  const items = (await call("GET", `/api/plans/${p.id}/shopping?list=todo.essen`)).json.items;
+  assert.deepEqual(items.map((i: any) => [i.name, i.on_list]), [["Salz", false], ["Zwiebeln", true]]);
 });

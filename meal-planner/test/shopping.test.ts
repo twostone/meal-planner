@@ -147,3 +147,11 @@ test("the preparation (prep) does not split items: same name and note with diffe
   }
   assert.deepEqual(view(buildShoppingList(repo.getPlanIngredients(plan.id))), [["Zwiebel", "rot", "rot, 2", ["Salat", "Suppe"]]]);
 });
+
+test("items are grouped by the singular and named with the first plural given", () => {
+  const list = buildShoppingList([
+    recipe("Suppe", { ...ing(2, null, "Zwiebel"), plural: null }),
+    recipe("Salat", { ...ing(1, null, "zwiebel"), plural: "Zwiebeln" }, { ...ing(100, "g", "Mehl"), plural: null }),
+  ]);
+  assert.deepEqual(list.map((i) => [i.name, i.base, i.spec]), [["Mehl", "Mehl", "100 g"], ["Zwiebeln", "Zwiebel", "3"]]);
+});

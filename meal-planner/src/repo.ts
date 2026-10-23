@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import { transaction } from "./db.ts";
-import type { Change, Pair } from "./ingredient-normalize.ts";
+import type { Change } from "./ingredient-normalize.ts";
 import { nameKey } from "./shopping.ts";
 import { convert } from "./units.ts";
 
@@ -51,7 +51,8 @@ export type Ingredient = {
   amount: number | null; // null = "etwas", "nach Geschmack"
   amount_max: number | null; // only for ranges ("1-2 Zehen")
   unit: string | null; // one of UNITS; null = counted without unit ("1 Zwiebel") or no amount
-  name: string;
+  name: string; // base form, singular ("Zwiebel"); shopping and search group by it
+  plural: string | null; // "Zwiebeln"; null = same as name or none ("Mehl")
   note: string | null; // variety, relevant for shopping ("rot", "Macadamia", "TK")
   prep: string | null; // preparation, irrelevant for shopping ("gewürfelt", "zimmerwarm")
   raw: string; // original line; built from amount/unit/name when entered by hand
@@ -59,7 +60,7 @@ export type Ingredient = {
 export type RecipeInput = {
   servings: number | null;
   instructions: string | null; // one step per line
-  ingredients: (Omit<Ingredient, "raw" | "prep"> & { prep?: string | null; raw?: string | null })[];
+  ingredients: (Omit<Ingredient, "raw" | "prep" | "plural"> & { prep?: string | null; plural?: string | null; raw?: string | null })[];
 };
 // source_text: the recipe as found at the link, unchanged; only a fetch from the link writes it, never setRecipe.
 export type Recipe = Omit<RecipeInput, "ingredients"> & {
@@ -202,7 +203,7 @@ export function createRepo(db: DatabaseSync) {
       );
       if (!d) throw new NotFoundError("dish");
       const ingredients = all<Ingredient>(
-        "SELECT section, amount, amount_max, unit, name, note, prep, raw FROM dish_ingredient WHERE dish_id = ? ORDER BY pos",
+        "SELECT section, amount, amount_max, unit, name, plural, note, prep, raw FROM dish_ingredient WHERE dish_id = ? ORDER BY pos",
         dishId,
       );
       return {
@@ -231,10 +232,10 @@ export function createRepo(db: DatabaseSync) {
         db.prepare("UPDATE dish SET servings = ?, instructions = ? WHERE id = ?").run(recipe.servings, recipe.instructions, dishId);
         db.prepare("DELETE FROM dish_ingredient WHERE dish_id = ?").run(dishId);
         const ins = db.prepare(
-          "INSERT INTO dish_ingredient (dish_id, pos, section, amount, amount_max, unit, name, note, prep, raw) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO dish_ingredient (dish_id, pos, section, amount, amount_max, unit, name, plural, note, prep, raw) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         );
         recipe.ingredients.forEach((i, pos) =>
-          ins.run(dishId, pos, i.section, i.amount, i.amount_max, i.unit, i.name, i.note, i.prep ?? null, i.raw?.trim() || rawLine(i)),
+          ins.run(dishId, pos, i.section, i.amount, i.amount_max, i.unit, i.name, i.plural ?? null, i.note, i.prep ?? null, i.raw?.trim() || rawLine(i)),
         );
         return self.getRecipe(dishId);
       });
@@ -254,8 +255,8 @@ export function createRepo(db: DatabaseSync) {
       }
       if (needle) {
         const ids = new Set(
-          all<{ dish_id: number; name: string }>("SELECT DISTINCT dish_id, name FROM dish_ingredient")
-            .filter((r) => matchesIngredient(r.name.toLocaleLowerCase("de"), needle))
+          all<{ dish_id: number; name: string; plural: string | null }>("SELECT DISTINCT dish_id, name, plural FROM dish_ingredient")
+            .filter((r) => matchesIngredient(r.name.toLocaleLowerCase("de"), needle) || !!r.plural?.toLocaleLowerCase("de").includes(needle))
             .map((r) => r.dish_id),
         );
         rows = rows.filter((d) => ids.has(d.id));
@@ -279,33 +280,26 @@ export function createRepo(db: DatabaseSync) {
         .map((c) => c.name);
     },
 
-    // Every distinct (name, note) of the stored ingredients with the number of dishes using it, for making them uniform.
-    // Exact spellings: applying a change compares with exactly these values.
-    listIngredientPairs(): (Pair & { dishes: number })[] {
-      return all<Pair & { dishes: number }>(
-        "SELECT name, note, COUNT(DISTINCT dish_id) AS dishes FROM dish_ingredient GROUP BY name, note",
-      ).sort((a, b) => a.name.localeCompare(b.name, "de") || (a.note ?? "").localeCompare(b.note ?? "", "de"));
-    },
-
-    // Applies reviewed changes in one transaction and returns the number of changed rows. Only rows that still have
-    // the old name and note change (an outdated preview changes nothing). Unlike setRecipe this keeps pos, raw and
-    // the ticks of cook mode: the lines stay where they are. A prep already stored stays when the change has none.
-    normalizeIngredients(changes: Change[]): number {
+    // Applies reviewed changes to the lines of one recipe in one transaction and returns the number of changed lines.
+    // A line only changes while it still has the old name and note (an outdated preview changes nothing). Unlike
+    // setRecipe this keeps pos, raw and the ticks of cook mode: the lines stay where they are.
+    normalizeRecipe(dishId: number, changes: Change[]): number {
       return transaction(db, () => {
-        const rows = db.prepare(
-          "SELECT id, amount, amount_max, unit FROM dish_ingredient WHERE name = ? AND note IS ?",
+        getDish(dishId);
+        const line = db.prepare(
+          "SELECT id, amount, amount_max, unit FROM dish_ingredient WHERE dish_id = ? AND pos = ? AND name = ? AND note IS ?",
         );
         const update = db.prepare(
-          "UPDATE dish_ingredient SET name = ?, note = ?, prep = COALESCE(?, prep), amount = ?, amount_max = ?, unit = ? WHERE id = ?",
+          "UPDATE dish_ingredient SET name = ?, plural = ?, note = ?, prep = ?, amount = ?, amount_max = ?, unit = ? WHERE id = ?",
         );
         let changed = 0;
-        for (const { from, to, unit } of changes) {
-          for (const r of rows.all(from.name, from.note) as { id: number; amount: number | null; amount_max: number | null; unit: string | null }[]) {
-            // A unit taken from the note only applies to rows without a unit of their own.
-            const q = unit && r.unit === null ? convert(r.amount, r.amount_max, unit, to.name) : r;
-            update.run(to.name, to.note, to.prep, q.amount, q.amount_max, q.unit, r.id);
-            changed++;
-          }
+        for (const { pos, from, to, unit } of changes) {
+          const r = line.get(dishId, pos, from.name, from.note) as { id: number; amount: number | null; amount_max: number | null; unit: string | null } | undefined;
+          if (!r) continue;
+          // A unit taken from the note only applies to a line without a unit of its own.
+          const q = unit && r.unit === null ? convert(r.amount, r.amount_max, unit, to.name) : r;
+          update.run(to.name, to.plural, to.note, to.prep, q.amount, q.amount_max, q.unit, r.id);
+          changed++;
         }
         return changed;
       });
@@ -437,14 +431,14 @@ export function createRepo(db: DatabaseSync) {
     },
 
     // The ingredients of every entry of a plan in list order (for the shopping list). Entries without a recipe have none.
-    getPlanIngredients(planId: number): { entry_id: number; title: string; done: boolean; ingredients: Pick<Ingredient, "amount" | "amount_max" | "unit" | "name" | "note">[] }[] {
+    getPlanIngredients(planId: number): { entry_id: number; title: string; done: boolean; ingredients: Pick<Ingredient, "amount" | "amount_max" | "unit" | "name" | "plural" | "note">[] }[] {
       const entries = self.getPlan(planId).entries;
-      const stmt = db.prepare("SELECT amount, amount_max, unit, name, note FROM dish_ingredient WHERE dish_id = ? ORDER BY pos");
+      const stmt = db.prepare("SELECT amount, amount_max, unit, name, plural, note FROM dish_ingredient WHERE dish_id = ? ORDER BY pos");
       return entries.map((e) => ({
         entry_id: e.id,
         title: e.dish.title,
         done: e.done,
-        ingredients: stmt.all(e.dish_id) as Pick<Ingredient, "amount" | "amount_max" | "unit" | "name" | "note">[],
+        ingredients: stmt.all(e.dish_id) as Pick<Ingredient, "amount" | "amount_max" | "unit" | "name" | "plural" | "note">[],
       }));
     },
 

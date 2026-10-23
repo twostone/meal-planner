@@ -9,8 +9,8 @@ import type { HaEventInput, HaUser } from "./ha-notify.ts";
 import { detectImageType, IMAGE_NAME, MAX_IMAGE_BYTES, type ImageStore } from "./images.ts";
 import { logger } from "./log.ts";
 import type { PreviewResult } from "./preview.ts";
-import { buildDraft, DraftError } from "./recipe-draft.ts";
-import { aiPairs, buildChanges, MAX_PAIRS_PER_BLOCK } from "./ingredient-normalize.ts";
+import { buildDraft, DraftError, MAX_INGREDIENTS } from "./recipe-draft.ts";
+import { aiItems, buildChanges } from "./ingredient-normalize.ts";
 import { FOREIGN_UNITS } from "./units.ts";
 import { ConflictError, NotFoundError, UNITS, type Entry, type Repo } from "./repo.ts";
 import { buildShoppingList, MAX_SPEC_LENGTH, nameKey, type ShoppingItem } from "./shopping.ts";
@@ -80,6 +80,7 @@ const ingredient = z
     amount_max: z.number().min(0).max(100000).nullable(),
     unit: z.enum(UNITS).nullable(),
     name: z.string().trim().min(1).max(80),
+    plural: text(80).optional(), // missing (older client) = none
     note: text(200),
     prep: text(200).optional(), // missing (older client) = none
     raw: z.string().trim().max(200).nullish(), // built from amount/unit/name when missing
@@ -91,23 +92,21 @@ const ingredient = z
 const recipeBody = z.object({
   servings: z.number().int().min(1).max(50).nullable(),
   instructions: text(10000),
-  ingredients: z.array(ingredient).max(60),
+  ingredients: z.array(ingredient).max(MAX_INGREDIENTS),
 });
-// Making stored ingredients uniform: the pairs of one preview block, and the reviewed changes to apply.
-const MAX_NORMALIZE_CHANGES = 500;
-const pair = z.object({ name: z.string().min(1).max(80), note: z.string().max(200).nullable() });
-const normalizePreviewBody = z.object({ pairs: z.array(pair).min(1).max(MAX_PAIRS_PER_BLOCK) });
+// Making the ingredients of one recipe uniform: the reviewed changes to apply (at most one per line).
 const normalizeApplyBody = z.object({
   changes: z
     .array(
       z.object({
-        from: pair,
-        to: z.object({ name: z.string().trim().min(1).max(80), note: text(200), prep: text(200) }),
+        pos: z.number().int().min(0).max(MAX_INGREDIENTS - 1),
+        from: z.object({ name: z.string().min(1).max(80), note: z.string().max(200).nullable() }),
+        to: z.object({ name: z.string().trim().min(1).max(80), plural: text(80), note: text(200), prep: text(200) }),
         unit: z.enum(FOREIGN_UNITS).nullable(),
       }),
     )
     .min(1)
-    .max(MAX_NORMALIZE_CHANGES),
+    .max(MAX_INGREDIENTS),
 });
 // Input of the AI title suggestions: the page title and the text found at the link (or, without one, the title again).
 // `lang` comes from the browser; anything that is not a plain language code ("de", "en-GB") counts as missing.
@@ -161,16 +160,16 @@ const MAX_PARALLEL_DRAFTS = 2;
 const MAX_PARALLEL_TITLES = 2;
 // Generating an image takes up to a minute and costs the most: one at a time.
 const MAX_PARALLEL_IMAGES = 1;
-// Making the stored ingredients uniform is a household-wide action: one preview at a time.
-const MAX_PARALLEL_NORMALIZE = 1;
+const MAX_PARALLEL_NORMALIZE = 2;
 
 // Is the item already open on the to-do list? Items may share a name ("Nüsse" for Macadamia and for Walnuss), so one with a
 // note only counts when an open item of that name mentions the note in its description. The amount is not compared: it
 // changes with the plan, and a match must not fail on "80 g" against "100 g".
+// An item sent before the plural existed carries the singular, so both forms count.
 function isOnList(item: ShoppingItem, open: OpenTodoItem[]): boolean {
-  const name = nameKey(item.name);
+  const names = new Set([nameKey(item.name), nameKey(item.base)]);
   const note = item.note ? nameKey(item.note) : null;
-  return open.some((o) => nameKey(o.summary) === name && (note === null || (o.description !== null && nameKey(o.description).includes(note))));
+  return open.some((o) => names.has(nameKey(o.summary)) && (note === null || (o.description !== null && nameKey(o.description).includes(note))));
 }
 
 export function createApp(repo: Repo, opts: AppOptions = {}) {
@@ -318,20 +317,20 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
       }
     });
 
-    // Making the stored ingredients uniform (button in the catalog). The client loads the pairs, sends them block by
-    // block to the preview (nothing is stored) and applies what the user kept.
-    app.get("/api/ingredients/pairs", (c) => c.json(repo.listIngredientPairs()));
+    // Making the ingredients of one saved recipe uniform (button in the recipe view): a preview that stores nothing,
+    // then the changes the user kept. Applying keeps the ticks of cook mode (see normalizeRecipe).
     let normalizing = 0;
-    app.post("/api/ingredients/normalize/preview", zValidator("json", normalizePreviewBody), async (c) => {
-      const { pairs } = c.req.valid("json");
+    app.post("/api/dishes/:id/recipe/normalize", zValidator("param", z.object({ id })), async (c) => {
+      const lines = repo.getRecipe(c.req.valid("param").id).ingredients;
+      if (!lines.length) return c.json({ error: "recipe has no ingredients" }, 400);
       if (normalizing >= MAX_PARALLEL_NORMALIZE) return c.json({ error: "busy" }, 429);
       normalizing++;
       try {
-        return c.json({ changes: buildChanges(pairs, await ai.normalize(aiPairs(pairs))) });
+        return c.json({ changes: buildChanges(lines, await ai.normalize(aiItems(lines), repo.listIngredientNames(MAX_KNOWN_NAMES))) });
       } catch (e) {
         if (e instanceof AiError || e instanceof DraftError) {
           const reason = e instanceof AiError ? e.reason : "bad_response";
-          log.warn("normalize_failed", { reason, pairs: pairs.length });
+          log.warn("normalize_failed", { reason, lines: lines.length });
           return c.json({ error: "ai failed", reason }, 502);
         }
         throw e;
@@ -339,11 +338,12 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
         normalizing--;
       }
     });
-    app.post("/api/ingredients/normalize/apply", zValidator("json", normalizeApplyBody), (c) => {
+    app.post("/api/dishes/:id/recipe/normalize/apply", zValidator("param", z.object({ id })), zValidator("json", normalizeApplyBody), (c) => {
+      const dishId = c.req.valid("param").id;
       const { changes } = c.req.valid("json");
-      const changed = repo.normalizeIngredients(changes);
-      log.info("ingredients_normalized", { changes: changes.length, rows: changed });
-      return c.json({ changed });
+      const changed = repo.normalizeRecipe(dishId, changes);
+      log.info("recipe_normalized", { changes: changes.length, lines: changed });
+      return c.json(repo.getRecipe(dishId));
     });
   }
 

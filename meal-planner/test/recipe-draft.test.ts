@@ -128,3 +128,17 @@ test("English units are converted, the preparation is kept apart, other units st
   assert.equal(d.ingredients[5]!.prep!.length, 200);
   assert.equal(d.ingredients[0]!.raw, "2 cups Mehl", "the original line stays");
 });
+
+test("plural: taken when it differs from the name, otherwise none", () => {
+  const d = buildDraft(
+    raw({
+      ingredients: JSON.stringify([
+        ing({ amount: 1, unit: null, name: "Zwiebel", plural: "Zwiebeln", raw: "1 Zwiebel" }),
+        ing({ name: "Mehl", plural: "mehl", raw: "400 g Hähnchenbrust" }),
+        ing({ name: "Salz", plural: 3, raw: "Salz & Pfeffer" }),
+      ]),
+    }),
+    SOURCE,
+  );
+  assert.deepEqual(d.ingredients.map((i) => [i.name, i.plural]), [["Zwiebel", "Zwiebeln"], ["Mehl", null], ["Salz", null]]);
+});

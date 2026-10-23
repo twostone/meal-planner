@@ -84,15 +84,20 @@ test("knownNamesPrompt: at most MAX_KNOWN_NAMES names; the prompt allows the Eng
   assert.ok(PROMPT.includes("cup") && PROMPT.includes("prep"));
 });
 
-test("normalize: own task with one JSON line per pair, returns the items field", async () => {
+test("normalize: own task with the known names and one JSON line per recipe line, returns the items field", async () => {
   const f = await fakeSupervisor(() => ({ json: { service_response: { data: { items: "[]" } } } }));
   try {
-    assert.equal(await createHaAi("tok", PREFERRED_AI_ENTITIES, { baseUrl: f.base }).normalize([{ i: 0, name: "Zwiebeln", note: null }, { i: 1, name: "Mehl", note: "gesiebt" }]), "[]");
+    const items = [
+      { i: 0, name: "Zwiebeln", plural: null, note: null, prep: null },
+      { i: 1, name: "Mehl", plural: null, note: "gesiebt", prep: null },
+    ];
+    assert.equal(await createHaAi("tok", PREFERRED_AI_ENTITIES, { baseUrl: f.base }).normalize(items, ["Ei"]), "[]");
     const body = f.seen[0]!.body;
     assert.equal(body.task_name, "meal_planner_normalize");
     assert.deepEqual(Object.keys(body.structure), ["items"]);
     assert.ok(body.instructions.startsWith(NORMALIZE_PROMPT));
-    assert.ok(body.instructions.endsWith('{"i":0,"name":"Zwiebeln","note":null}\n{"i":1,"name":"Mehl","note":"gesiebt"}'));
+    assert.ok(body.instructions.includes("Bereits verwendete Namen"));
+    assert.ok(body.instructions.endsWith('{"i":0,"name":"Zwiebeln","plural":null,"note":null,"prep":null}\n{"i":1,"name":"Mehl","plural":null,"note":"gesiebt","prep":null}'));
   } finally {
     f.close();
   }
@@ -368,7 +373,7 @@ test("entities: each task sends its configured entity_id (unifying uses the reci
     await ai.titles({ title: "T", text: "t", lang: "de" });
     assert.equal(f.seen[0]!.body.entity_id, "ai_task.strong");
     assert.equal(f.seen[1]!.body.entity_id, "ai_task.fast");
-    await ai.normalize([{ i: 0, name: "Zwiebeln", note: null }]);
+    await ai.normalize([{ i: 0, name: "Zwiebeln", plural: null, note: null, prep: null }], []);
     assert.equal(f.seen[2]!.body.entity_id, "ai_task.strong", "unifying ingredients uses the recipe entity");
     await createHaAi("tok", { recipe: null, titles: "ai_task.fast", image: null }, { baseUrl: f.base }).generate("t", []);
     assert.equal("entity_id" in f.seen[3]!.body, false, "unset -> Home Assistant's preferred entity");

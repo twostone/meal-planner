@@ -5,6 +5,7 @@ type Ingredient = {
   amount_max: number | null;
   unit: string | null;
   name: string;
+  plural?: string | null;
   note: string | null;
   prep?: string | null;
 };
@@ -27,8 +28,15 @@ export function parseAmount(v: string): { amount: number | null; amount_max: num
   return { amount: a, amount_max: b };
 }
 
+// The name as it reads after the amount: the plural for more than one ("3 Zwiebeln"), for a range and after a unit
+// ("200 g Zwiebeln", "1 Dose Tomaten"); the singular for one, for none and without an amount ("1 Zwiebel", "Salz").
+export function displayName(i: Pick<Ingredient, "amount" | "amount_max" | "unit" | "name" | "plural">): string {
+  const many = i.amount !== null && (i.unit !== null || i.amount > 1 || i.amount_max !== null);
+  return (many && i.plural) || i.name;
+}
+
 // "2 EL Olivenöl" for the recipe view
-export const ingredientText = (i: Ingredient) => [fmtAmount(i), i.unit, i.name].filter(Boolean).join(" ");
+export const ingredientText = (i: Ingredient) => [fmtAmount(i), i.unit, displayName(i)].filter(Boolean).join(" ");
 
 // ", rot, gewürfelt" after the ingredient: variety (note), then preparation (prep). "" without either.
 export const ingredientExtra = (i: Pick<Ingredient, "note" | "prep">) => [i.note, i.prep].filter(Boolean).join(", ");
