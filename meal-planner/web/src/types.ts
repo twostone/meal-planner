@@ -55,7 +55,8 @@ export type Ingredient = {
   amount: number | null;
   amount_max: number | null; // only for ranges ("1-2")
   unit: string | null;
-  name: string;
+  name: string; // singular base form ("Zwiebel")
+  plural: string | null; // "Zwiebeln"; null = none ("Mehl")
   note: string | null; // variety, relevant for shopping ("rot")
   prep: string | null; // preparation ("gewürfelt")
   raw: string; // original line
@@ -92,10 +93,10 @@ export type ShoppingItem = { key: string; name: string; note: string | null; spe
 export type ShoppingList = { entries: ShoppingEntry[]; items: ShoppingItem[]; list_error: boolean };
 export type SendResult = { added: number; failed: number; reason: string | null };
 
-// Making the stored ingredients uniform (see NormalizeSheet).
-export type IngredientPair = { name: string; note: string | null; dishes: number };
+// Making the ingredients of one recipe uniform (see RecipeSheet).
 export type IngredientChange = {
+  pos: number; // position of the line in the recipe
   from: { name: string; note: string | null };
-  to: { name: string; note: string | null; prep: string | null };
+  to: { name: string; plural: string | null; note: string | null; prep: string | null };
   unit: string | null; // English unit taken out of the note; the server converts amount and unit
 };

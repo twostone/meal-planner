@@ -6,7 +6,6 @@
   import DishSheet from "./DishSheet.svelte";
   import Icon from "./Icon.svelte";
   import ListView from "./ListView.svelte";
-  import NormalizeSheet from "./NormalizeSheet.svelte";
   import PeriodSheet from "./PeriodSheet.svelte";
   import RecipeSheet from "./RecipeSheet.svelte";
   import ShoppingSheet from "./ShoppingSheet.svelte";
@@ -79,7 +78,5 @@
     <ShoppingSheet />
   {:else if app.sheet.kind === "periods"}
     <PeriodSheet />
-  {:else if app.sheet.kind === "normalize"}
-    <NormalizeSheet />
   {/if}
 </div>

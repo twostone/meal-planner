@@ -90,3 +90,11 @@ test("GET /api/ingredients/names: each name once (case and spaces do not matter)
   await dish(call, "C", ["Zwiebel", "Möhre"]);
   assert.deepEqual((await call("GET", "/api/ingredients/names")).json, ["Zwiebel", "Möhre", "Apfel"]);
 });
+
+test("?ingredient= also finds the stored plural, umlaut plurals included", async () => {
+  const call = setup();
+  const d = (await call("POST", "/api/dishes", { title: "Kuchen" })).json;
+  await call("PUT", `/api/dishes/${d.id}/recipe`, { servings: null, instructions: null, ingredients: [{ ...ing("Apfel"), plural: "Äpfel" }] });
+  assert.deepEqual(await titles(call, "ingredient=%C3%A4pfel"), ["Kuchen"]);
+  assert.deepEqual(await titles(call, "ingredient=apfel"), ["Kuchen"]);
+});

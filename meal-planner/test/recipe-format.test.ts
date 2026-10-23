@@ -29,3 +29,14 @@ test("stepLines: non-empty trimmed lines (the server splits the same way)", () =
   assert.deepEqual(stepLines("Schneiden.\n\n  Kochen.\nServieren.\n"), ["Schneiden.", "Kochen.", "Servieren."]);
   assert.deepEqual(stepLines(null), []);
 });
+
+test("ingredientText: plural for more than one, a range or after a unit; singular for one, none and without amount", () => {
+  const z = { section: null, amount: 3, amount_max: null, unit: null, name: "Zwiebel", plural: "Zwiebeln", note: null };
+  assert.equal(ingredientText(z), "3 Zwiebeln");
+  assert.equal(ingredientText({ ...z, amount: 1 }), "1 Zwiebel");
+  assert.equal(ingredientText({ ...z, amount: 0.5 }), "0,5 Zwiebel");
+  assert.equal(ingredientText({ ...z, amount: 1, amount_max: 2 }), "1–2 Zwiebeln");
+  assert.equal(ingredientText({ ...z, amount: 200, unit: "g" }), "200 g Zwiebeln");
+  assert.equal(ingredientText({ ...z, amount: null }), "Zwiebel");
+  assert.equal(ingredientText({ ...z, plural: null }), "3 Zwiebel", "without a plural the name stays");
+});

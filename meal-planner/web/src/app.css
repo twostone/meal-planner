@@ -151,11 +151,6 @@ main {
 .sheet .error {
   margin: 0;
 }
-.catalog-tools {
-  margin: 16px 0 0;
-  text-align: center;
-  color: var(--muted);
-}
 .link-btn {
   min-height: 44px;
   padding: 0 12px;
@@ -919,9 +914,6 @@ fieldset.ingredients legend {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 8px;
-}
-.ing-extra > :nth-child(3) {
-  grid-column: 1 / -1; /* section below variety and preparation */
 }
 .ing-raw {
   font-size: 13px;

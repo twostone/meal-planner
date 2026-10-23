@@ -6,12 +6,17 @@ import { clip } from "./text.ts";
 // Nüsse (Walnuss) stay two items, because "100 g Nüsse" would not say how much of which. No network, no database.
 // Synonyms ("Knoblauchzehe" vs. "Knoblauch") stay separate items on purpose: guessing would merge different things.
 // Names are made uniform earlier, when a recipe is recognized (base form, see PROMPT in ha-ai.ts); the preparation
-// ("gewürfelt") is a field of its own (prep) and not part of the key, so it does not split items.
+// ("gewürfelt") is a field of its own (prep) and not part of the key, so it does not split items. Items are grouped by
+// the singular base form and named with the plural ("Zwiebeln"), as one writes a shopping list.
 
-export type ShoppingRecipe = { title: string; ingredients: Pick<Ingredient, "amount" | "amount_max" | "unit" | "name" | "note">[] };
+export type ShoppingRecipe = {
+  title: string;
+  ingredients: (Pick<Ingredient, "amount" | "amount_max" | "unit" | "name" | "note"> & { plural?: string | null })[];
+};
 export type ShoppingItem = {
   key: string; // unique per name and note: the name alone is not, two items may share it
-  name: string; // spelling of the first occurrence
+  name: string; // the first plural given, else the spelling of the first occurrence
+  base: string; // the singular base form (first spelling); an open to-do item may carry either form
   note: string | null; // spelling of the first occurrence
   spec: string | null; // "Macadamia, 400 g + 1 Dose"; null = neither note nor amount ("Salz")
   sources: string[]; // titles of the dishes that need it
@@ -39,7 +44,7 @@ const tidy = (text: string) => text.replace(/\s+/g, " ").trim();
 export const nameKey = (name: string) => tidy(name).toLocaleLowerCase("de");
 
 type Sum = { min: number; max: number };
-type Collected = { name: string; note: string | null; sums: Map<string, Sum>; sources: string[] };
+type Collected = { name: string; plural: string | null; note: string | null; sums: Map<string, Sum>; sources: string[] };
 
 export function buildShoppingList(recipes: ShoppingRecipe[]): ShoppingItem[] {
   const groups = new Map<string, Collected & { key: string }>();
@@ -50,7 +55,8 @@ export function buildShoppingList(recipes: ShoppingRecipe[]): ShoppingItem[] {
       const note = i.note ? tidy(i.note) || null : null;
       const key = nameOnly + KEY_SEPARATOR + (note ? nameKey(note) : "");
       let c = groups.get(key);
-      if (!c) groups.set(key, (c = { key, name: tidy(i.name), note, sums: new Map(), sources: [] }));
+      if (!c) groups.set(key, (c = { key, name: tidy(i.name), plural: null, note, sums: new Map(), sources: [] }));
+      if (!c.plural && i.plural) c.plural = tidy(i.plural) || null;
       if (!c.sources.includes(r.title)) c.sources.push(r.title);
       if (i.amount === null) continue;
       const conv = i.unit ? BASE_UNIT[i.unit] : undefined;
@@ -63,7 +69,7 @@ export function buildShoppingList(recipes: ShoppingRecipe[]): ShoppingItem[] {
     }
   }
   return [...groups.values()]
-    .map((c) => ({ key: c.key, name: c.name, note: c.note, spec: formatSpec(c.note, c.sums), sources: c.sources }))
+    .map((c) => ({ key: c.key, name: c.plural ?? c.name, base: c.name, note: c.note, spec: formatSpec(c.note, c.sums), sources: c.sources }))
     .sort((a, b) => a.name.localeCompare(b.name, "de") || (a.note ?? "").localeCompare(b.note ?? "", "de"));
 }
 

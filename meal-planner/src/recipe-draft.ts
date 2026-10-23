@@ -11,6 +11,7 @@ export type DraftIngredient = {
   amount_max: number | null;
   unit: string | null;
   name: string;
+  plural: string | null;
   note: string | null;
   prep: string | null;
   raw: string;
@@ -23,13 +24,19 @@ export type RawDraft = { servings?: unknown; servings_quote?: unknown; ingredien
 
 export class DraftError extends Error {}
 
-const MAX_INGREDIENTS = 60;
+export const MAX_INGREDIENTS = 60;
 const MAX_INSTRUCTIONS = 10_000;
 
 // Comparison form: no whitespace, bullets, list dashes, emojis, colons. So "• 2 Eier" matches "2 Eier",
 // but a changed letter ("Auflerdin") does not match. Case stays: it is a word-for-word check.
 const IGNORED = /[\s​‍️⃣•·●▪◦‣⁃*✓✔→\-–—:]|\p{Extended_Pictographic}/gu;
 export const normalizeForCompare = (s: string) => s.normalize("NFC").replace(IGNORED, "");
+
+// The plural only when it differs from the name: "Mehl"/"Mehl" means there is none.
+export function pluralOf(name: string, v: unknown): string | null {
+  const plural = str(v, 80);
+  return plural && plural.toLocaleLowerCase("de") !== name.toLocaleLowerCase("de") ? plural : null;
+}
 
 export const str = (v: unknown, max: number): string | null => {
   if (typeof v !== "string") return null;
@@ -105,6 +112,7 @@ export function buildDraft(raw: RawDraft, source: string): RecipeDraft {
       amount_max: amountMax,
       unit,
       name,
+      plural: pluralOf(name, o.plural),
       note,
       prep: str(o.prep, 200),
       raw: rawLine,
