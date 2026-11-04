@@ -9,10 +9,5 @@ permissions:
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
-    steps:
-      # Release-Please leitet Version und Changelog aus Conventional Commits ab; bei Squash-Merge
-      # ist der PR-Titel die Commit-Message.
-      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    name: Lint
+    uses: twostone/hassio-workflows/.github/workflows/lint-pr-title.yml@e8fa22248618d4114434940c6f7f44d77270e6ca # v1.0.0

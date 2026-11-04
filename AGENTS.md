@@ -17,8 +17,9 @@ README.md                Installation, Updates, Entwicklung (das Repository ist 
 LICENSE                  Apache-2.0
 AGENTS.md                diese Datei
 release-please-config.json, .release-please-manifest.json   Release-Automatik (Version, Changelog)
-.github/workflows/       ci.yml (Tests, Docker-Build, Smoke-Test), release.yml (Release Please, Image)
-renovate.json            Renovate: hält Actions, npm und Docker-Basisimage aktuell (gruppierte PRs)
+.github/workflows/       ci.yml (→ hassio-workflows app-ci), release.yml (Release Please, Image + Dispatch an hassio-apps)
+renovate.json            Renovate: Preset aus hassio-workflows + Python-Gruppe
+scripts/smoke.sh         Smoke-Test des Images (von der CI aufgerufen)
 custom_components/meal_planner/   HA-Integration + Lovelace-Karte (Details unter „HA-Integration und Lovelace-Karte“)
 tests/, pyproject.toml, uv.lock   Python-Tests der Integration (uv)
 hacs.json                         HACS-Metadaten, wird ins Mirror-Repo kopiert
@@ -465,14 +466,23 @@ raten (`async_update_reload_and_abort`, `HassioServiceInfo`, `StaticPathConfig`,
   zählen nicht). Ist die CI dort wegen eines inzwischen behobenen Fehlers rot, den Branch mit `main` aktualisieren.
 - **Integration prüfen** (`validate-integration.yml`): hassfest, HACS-Validierung (ohne Topics/Beschreibung, die gehören zum
   Mirror) und `uv run --locked pytest tests -q`.
-- **CI** (`ci.yml`, bei Push auf `main`, bei Pull Requests und vor jedem Release): `npm ci`, `tsc`, `svelte-check`,
-  Tests, Build. Dazu ein Docker-Build für amd64 mit **Smoke-Test** (Frontend und API antworten, SQLite funktioniert,
-  ohne Ingress-Sperre; mit Standard-Konfiguration antwortet der Server Fremden mit 403) und ein Build für amd64 + arm64.
+- **CI** (`ci.yml`, bei Push auf `main`, bei Pull Requests und vor jedem Release) ruft den gemeinsamen Workflow
+  `app-ci.yml` aus [twostone/hassio-workflows](https://github.com/twostone/hassio-workflows) auf: App-Linter, Hadolint,
+  `npm ci`, `tsc`, `svelte-check`, Tests, Build, Docker-Build für amd64 mit **Smoke-Test** (`scripts/smoke.sh <image>`:
+  Frontend und API antworten, SQLite funktioniert, ohne Ingress-Sperre; mit Standard-Konfiguration antwortet der Server
+  Fremden mit 403) und ein Build für amd64 + arm64. Projektspezifisches gehört in `scripts/smoke.sh`, Gemeinsames nach
+  `hassio-workflows` (neuer Tag, Pin hier per Renovate).
+- **Veröffentlichen** (`publish` → `app-publish.yml`): Image bauen und pushen, danach `repository_dispatch` an
+  [twostone/hassio-apps](https://github.com/twostone/hassio-apps) (Secret `DISPATCH_TOKEN`). Dort holt der
+  `repository-updater` die **neueste GitHub-Release dieses Repos, die keine Prerelease ist**, und schreibt `config.yaml`,
+  Icon, Übersetzungen und Changelog ins Verzeichnis `essensplanung/`. Deshalb markiert der Job `integration-prerelease`
+  jede `integration-v*`-Release sofort als Prerelease (Release Please tut das nur vor 1.0). HACS ist davon nicht
+  betroffen, es liest die Releases des Mirrors. `repository.yaml` hier bleibt nur bis zur Umstellung aller Installationen.
 - **Image:** `ghcr.io/twostone/meal-planner:<version>` und `:latest`, Tag = Version aus `config.yaml`. Das Paket muss
   **öffentlich** sein (Package settings → Change visibility), sonst kann Home Assistant es nicht ohne Zugangsdaten laden.
   Provenance und SBOM sind aus (KISS).
-- **Renovate** (`renovate.json`): npm (ohne Major), Python (`uv.lock`), GitHub Actions und Docker-Basisimages je in einem gruppierten PR, Majors
-  einzeln. TypeScript bleibt per `allowedVersions: "<7"` unter 7 (siehe „Regeln beim Ändern“). Config prüfen mit
+- **Renovate** (`renovate.json`): erbt das Preset `github>twostone/hassio-workflows` (npm ohne Major, GitHub Actions,
+  Docker-Basisimages, Node.js je gruppiert); hier nur Python (`uv.lock`) als eigene Gruppe. Majors einzeln. TypeScript bleibt per `allowedVersions: "<7"` unter 7 (siehe „Regeln beim Ändern“). Config prüfen mit
   `npx --package renovate -- renovate-config-validator renovate.json`.
 - **Actions nur mit vollem Commit-SHA pinnen** (Kommentar mit der Version), Renovate aktualisiert sie (`helpers:pinGitHubActionDigests`, alle Actions in einem PR).
   Rechte in den Workflows so klein wie möglich lassen (`packages: write` nur im Job `publish`).

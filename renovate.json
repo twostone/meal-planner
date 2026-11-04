@@ -1,40 +1,21 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended",
-    "helpers:pinGitHubActionDigests"
+    "github>twostone/hassio-workflows"
   ],
   "packageRules": [
     {
-      "description": "Alle npm-Updates ohne Major in einem PR",
-      "matchManagers": ["npm"],
-      "matchUpdateTypes": ["minor", "patch", "lockFileMaintenance"],
-      "groupName": "npm-Abhängigkeiten"
-    },
-    {
-      "description": "Alle GitHub-Actions-Updates in einem PR",
-      "matchManagers": ["github-actions"],
-      "groupName": "GitHub Actions"
-    },
-    {
       "description": "Python-Abhängigkeiten der HA-Integration (uv.lock) in einem PR",
-      "matchManagers": ["pep621"],
+      "matchManagers": [
+        "pep621"
+      ],
       "groupName": "Python-Abhängigkeiten"
     },
     {
-      "description": "Node-Basisimage im Dockerfile",
-      "matchManagers": ["dockerfile"],
-      "groupName": "Docker-Basisimages"
-    },
-    {
-      "description": "Node.js in einem PR: Docker-Basisimage, Version in der CI und @types/node (steht nach den Gruppen oben, damit diese Gruppe gewinnt)",
-      "matchPackageNames": ["node", "@types/node", "actions/node-versions"],
-      "matchManagers": ["dockerfile", "github-actions", "npm"],
-      "groupName": "Node.js"
-    },
-    {
       "description": "svelte-check unterstützt TypeScript 7 noch nicht (siehe AGENTS.md)",
-      "matchPackageNames": ["typescript"],
+      "matchPackageNames": [
+        "typescript"
+      ],
       "allowedVersions": "<7"
     }
   ]

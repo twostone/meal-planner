@@ -49,8 +49,10 @@ Voraussetzung: Home Assistant mit App-Store (Home Assistant OS oder Supervised),
    eintragen:
 
    ```
-   https://github.com/twostone/meal-planner
+   https://github.com/twostone/hassio-apps
    ```
+
+   Das ist das gemeinsame Repository aller twostone-Apps; es wird nach jedem Release automatisch aktualisiert.
 
 2. „Essensplanung“ installieren und starten, danach „In Seitenleiste anzeigen“ aktivieren.
 
