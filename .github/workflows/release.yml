@@ -22,6 +22,7 @@ jobs:
     outputs:
       addon_released: ${{ steps.rp.outputs['meal-planner--release_created'] }}
       integration_released: ${{ steps.rp.outputs['custom_components/meal_planner--release_created'] }}
+      integration_tag: ${{ steps.rp.outputs['custom_components/meal_planner--tag_name'] }}
     steps:
       - id: rp
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
@@ -39,69 +40,38 @@ jobs:
     permissions:
       contents: read
 
+  # Builds and pushes ghcr.io/<repo>:<version>, then asks twostone/hassio-apps to pull the release.
   publish:
-    name: Image veröffentlichen
+    name: Veröffentlichen
     needs: [release-please, ci]
     if: ${{ needs.release-please.outputs.addon_released == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
     permissions:
       contents: read
       packages: write
-    env:
-      IMAGE: ghcr.io/${{ github.repository }}
+    uses: twostone/hassio-workflows/.github/workflows/app-publish.yml@e8fa22248618d4114434940c6f7f44d77270e6ca # v1.0.0
+    with:
+      app-dir: meal-planner
+      slug: essensplanung
+    secrets:
+      DISPATCH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
+
+  # twostone/hassio-apps publishes the newest release of this repo that is not a prerelease, so an
+  # integration release must never count as one. Release Please only marks pre-1.0 versions as prerelease,
+  # hence this step. HACS is unaffected: it reads the mirror's own releases.
+  integration-prerelease:
+    name: Integration-Release als Prerelease markieren
+    needs: release-please
+    if: ${{ needs.release-please.outputs.integration_released == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
     steps:
-      - name: Checkout (Release-Commit)
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      # The image tag must equal `version` in config.yaml, otherwise Home Assistant cannot find the image.
-      # config.yaml is the source of truth; Release Please has just bumped it in the release commit.
-      - name: Version aus config.yaml
-        id: version
-        working-directory: meal-planner
-        run: |
-          version=$(sed -n 's/^version: "\([0-9][0-9A-Za-z.+-]*\)".*/\1/p' config.yaml)
-          test -n "$version" || { echo "no version found in config.yaml"; exit 1; }
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
-      - name: QEMU (für arm64)
-        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
-        with:
-          platforms: arm64
-
-      - name: Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - name: Login bei ghcr.io
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Tags und Labels
-        id: meta
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
-        with:
-          images: ${{ env.IMAGE }}
-          flavor: latest=false
-          tags: |
-            type=raw,value=${{ steps.version.outputs.version }}
-            type=raw,value=latest
-
-      - name: Build und Push (amd64, arm64)
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: ./meal-planner
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          provenance: false
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: gh release edit --prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release-please.outputs.integration_tag }}
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --prerelease --latest=false
 
   # HACS installs from the latest GitHub release of a repository, so add-on and integration releases
   # cannot share one repo there. The released component is copied into the mirror repo, which gets a
