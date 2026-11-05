@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.1](https://github.com/twostone/meal-planner/compare/v0.16.0...v0.16.1) (2026-11-05)
+
+
+### Behoben
+
+* bei SIGTERM sauber beenden (Exit 0), damit der Supervisor "stopped" statt "error" zeigt ([#71](https://github.com/twostone/meal-planner/issues/71)) ([04c1467](https://github.com/twostone/meal-planner/commit/04c14678c67b3d5222af87ac2af2355d35fd3c80))
+
 ## [0.16.0](https://github.com/twostone/meal-planner/compare/v0.15.0...v0.16.0) (2026-10-23)
 
 
