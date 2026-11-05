@@ -14,6 +14,7 @@ import { logger, resolveLogLevel, setLogLevel } from "./log.ts";
 import { aiEntities, readAddonOptions } from "./options.ts";
 import { createPreviewService } from "./preview.ts";
 import { createRepo } from "./repo.ts";
+import { installShutdownHandlers } from "./shutdown.ts";
 
 // The add-on's options (Supervisor writes /data/options.json); changing one needs a restart of the add-on.
 // `log_level` beats LOG_LEVEL, else info.
@@ -44,7 +45,8 @@ log.info("starting", {
 const dbPath = process.env.DB_PATH ?? "./data/meal-planner.db";
 if (dbPath !== ":memory:") mkdirSync(dirname(dbPath), { recursive: true });
 
-const repo = createRepo(openDb(dbPath));
+const db = openDb(dbPath);
+const repo = createRepo(db);
 const images = new ImageStore(process.env.IMAGE_DIR ?? join(dbPath === ":memory:" ? "." : dirname(dbPath), "images"));
 void images.sweep(repo.listImages()); // drop leftovers from previews that were never saved
 
@@ -63,15 +65,19 @@ const app = createApp(repo, {
 // API routes are registered first; anything else is the built frontend (npm run build).
 app.use("/*", serveStatic({ root: "./dist" }));
 const port = Number(process.env.PORT ?? 8099);
-serve({ fetch: app.fetch, port }, (i) => log.info("listening", { port: i.port }));
+const servers = [serve({ fetch: app.fetch, port }, (i) => log.info("listening", { port: i.port }))];
 
 // Second, read-only listener for the Home Assistant integration (token-protected, one route).
 // Only started where HA_API_PORT is set (the Dockerfile does); the token sits next to the database.
 const haPort = process.env.HA_API_PORT ? Number(process.env.HA_API_PORT) : null;
 if (haPort) {
   const apiToken = loadOrCreateToken(join(dirname(dbPath), "ha-token"));
-  serve({ fetch: createHaApi(repo, apiToken).fetch, port: haPort }, (i) => {
+  const haServer = serve({ fetch: createHaApi(repo, apiToken).fetch, port: haPort }, (i) => {
     log.info("ha_api_listening", { port: i.port });
     if (supervisorToken) void announceToHomeAssistant({ supervisorToken, port: i.port, apiToken });
   });
+  servers.push(haServer);
 }
+
+// SIGTERM from `docker stop` / the Supervisor: stop accepting requests, close the database, exit 0 (not "error").
+installShutdownHandlers({ servers, cleanup: () => db.close() });
