@@ -427,9 +427,9 @@ raten (`async_update_reload_and_abort`, `HassioServiceInfo`, `StaticPathConfig`,
   nur `GET /ha/state`, Token-Vergleich zeitkonstant, kein `ports:`-Mapping (nur im Supervisor-Netz erreichbar).
 - **Das Repository ist öffentlich:** keine Zugangsdaten, Tokens, privaten Hostnamen oder Adressen aus dem Heimnetz
   einchecken (auch nicht in Tests, Kommentaren oder Beispielen).
-- Workflows: keine eigenen Secrets, mit einer Ausnahme: `INTEGRATION_MIRROR_DEPLOY_KEY` (Deploy-Key mit Schreibrecht nur auf
-  `twostone/ha-meal-planner`), nur im Job `mirror-integration`. Veröffentlicht wird sonst nur mit dem `GITHUB_TOKEN`
-  (Job `publish` nach einem Add-on-Release).
+- Workflows: keine eigenen Secrets, mit zwei Ausnahmen: `INTEGRATION_MIRROR_DEPLOY_KEY` (Deploy-Key mit Schreibrecht nur auf
+  `twostone/ha-meal-planner`), nur im Job `mirror-integration`, und `RELEASE_PLEASE_TOKEN` (fine-grained PAT nur für dieses Repo: Contents, Pull requests und Issues lesen/schreiben), nur im
+  Job `release-please`. Veröffentlicht wird sonst nur mit dem `GITHUB_TOKEN` (Job `publish` nach einem Add-on-Release).
 
 ## CI und Releases
 
@@ -459,9 +459,12 @@ raten (`async_update_reload_and_abort`, `HassioServiceInfo`, `StaticPathConfig`,
   annotierten Tag `vX.Y.Z` (Nachricht = Release-Notes); `release-on-tag.yml` im Mirror macht daraus das Release. Das Mirror
   bekommt nie Handarbeit. Neu einrichten: Deploy-Key (Schreibrecht) im Mirror, privater Schlüssel als Secret
   `INTEGRATION_MIRROR_DEPLOY_KEY` hier.
-- **Warum alles in einem Workflow:** Was Release Please mit dem eingebauten `GITHUB_TOKEN` erzeugt (PR, Tag, Release),
-  löst keine weiteren Workflows aus. Deshalb rufen `ci` und `publish` in `release.yml` erst nach einem Release an.
-  Der Release-PR selbst bekommt dadurch keine automatischen Checks. Die Tests laufen auf `main` und beim Release.
+- **Token und Checks:** Release Please läuft mit `RELEASE_PLEASE_TOKEN`, nicht mit dem `GITHUB_TOKEN`. Was mit dem
+  `GITHUB_TOKEN` entsteht, löst keine weiteren Workflows aus; mit dem PAT bekommt der Release-PR die üblichen Checks (CI,
+  PR-Titel, Integration). Autor des Release-PR ist damit der Besitzer des PAT. Läuft der PAT ab, scheitert der Job
+  `release-please`, bis das Secret erneuert ist.
+- **Warum `ci` und `publish` trotzdem in `release.yml`:** Nach einem Release testet `ci` den Release-Commit im selben Lauf
+  noch einmal, erst danach baut `publish` das Image. So kommt das Image immer von einem getesteten Commit.
   Release Please baut den Branch des Release-PR nur neu, wenn sich der Release-Inhalt ändert (`chore`/`docs` auf `main`
   zählen nicht). Ist die CI dort wegen eines inzwischen behobenen Fehlers rot, den Branch mit `main` aktualisieren.
 - **Integration prüfen** (`validate-integration.yml`): hassfest, HACS-Validierung (ohne Topics/Beschreibung, die gehören zum
@@ -594,7 +597,7 @@ Rezept-Text einfügen und per KI zerlegen sowie Portionen umrechnen (beides am 1
   an einer echten Entität bestätigt.
 - Die Releases laufen über Release Please (siehe „CI und Releases“). Der Stand des Pakets auf ghcr.io ist hier nicht
   festgehalten.
-- Voraussetzung im Repository (gesetzt): Einstellungen → Actions → General → „Allow GitHub Actions to create and approve pull requests“.
+- Voraussetzung im Repository: Secret `RELEASE_PLEASE_TOKEN` (siehe „Regeln beim Ändern“).
 - Die Einkaufsliste ist nur gegen eine Fake-Core-API getestet, **nicht gegen Bring in HA**: offen sind die Antwortform von
   `todo.get_items` über die REST-API, ob Bring die `description` als Spezifikation zeigt, `supported_features` der
   Bring-Entitäten und wie lange 20 bis 30 `add_item` nacheinander dauern (Bring aktualisiert nach jedem Artikel).

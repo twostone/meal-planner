@@ -15,10 +15,10 @@ jobs:
   release-please:
     name: Release Please
     runs-on: ubuntu-latest
+    # Runs with RELEASE_PLEASE_TOKEN (fine-grained PAT: contents, pull requests, issues read/write), not GITHUB_TOKEN,
+    # so the release PR gets the usual checks. GITHUB_TOKEN is not used here, hence read-only.
     permissions:
-      contents: write
-      pull-requests: write
-      issues: write
+      contents: read
     outputs:
       addon_released: ${{ steps.rp.outputs['meal-planner--release_created'] }}
       integration_released: ${{ steps.rp.outputs['custom_components/meal_planner--release_created'] }}
@@ -29,9 +29,10 @@ jobs:
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 
-  # Resources created with GITHUB_TOKEN do not trigger other workflows, so tests and the image build
-  # run here, in the same workflow run, and only when an add-on release was just created.
+  # Tests run again on the release commit, in the same workflow run, so the image is only built from a
+  # commit that passed. Runs only when an add-on release was just created.
   ci:
     name: CI
     needs: release-please
