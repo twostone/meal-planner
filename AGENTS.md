@@ -593,7 +593,8 @@ raten (`async_update_reload_and_abort`, `HassioServiceInfo`, `StaticPathConfig`,
 
 ## Bewusst nicht gebaut (nur auf ausdrücklichen Wunsch)
 
-Nährwerte, Anbindung an den HA-Kalender, Tageszuordnung, Drag-and-Drop, OAuth, Instagram-oEmbed,
+Nährwerte, Anbindung an den HA-Kalender, Tageszuordnung, Drag-and-Drop, OAuth für die App selbst (nur der MCP-Server
+nutzt es), Instagram-oEmbed,
 Bildverkleinerung auf dem Server (verkleinert wird nur im Browser vor dem Hochladen), Image-Signatur/SBOM,
 Kategorien umbenennen/zusammenführen, Mehrfachauswahl im Kategorie-Filter.
 Rezept-Text einfügen und per KI zerlegen sowie Portionen umrechnen (beides am 10.10.2026 aus `docs/plan-rezepte.md` gestrichen).
