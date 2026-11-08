@@ -11,7 +11,11 @@ import { createHaNotify } from "./ha-notify.ts";
 import { createHaTodo } from "./ha-todo.ts";
 import { ImageStore } from "./images.ts";
 import { logger, resolveLogLevel, setLogLevel } from "./log.ts";
-import { aiEntities, readAddonOptions } from "./options.ts";
+import { aiEntities, mcpSettings, readAddonOptions } from "./options.ts";
+import { createHaTokenVerifier, DEFAULT_HA_WS_URL } from "./auth/ha-token.ts";
+import { fetchHaExternalUrl } from "./auth/ha-url.ts";
+import { createMcpEndpoint } from "./mcp.ts";
+import { createMcpListener } from "./mcp-listener.ts";
 import { createPreviewService } from "./preview.ts";
 import { createRepo } from "./repo.ts";
 import { installShutdownHandlers } from "./shutdown.ts";
@@ -22,8 +26,10 @@ const log = logger("server");
 const options = readAddonOptions(process.env.OPTIONS_PATH ?? "/data/options.json");
 const { level: logLevel, invalid: invalidLevel } = resolveLogLevel(options, process.env.LOG_LEVEL);
 const aiEntity = aiEntities(options);
+const mcp = mcpSettings(options);
 setLogLevel(logLevel);
 if (invalidLevel) log.warn("invalid_log_level", { value: invalidLevel, using: logLevel });
+for (const name of mcp.invalid) log.warn("invalid_option", { option: name });
 const version = (() => {
   try {
     return (JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version?: string }).version;
@@ -37,6 +43,7 @@ log.info("starting", {
   ai_entity_recipe: aiEntity.recipe,
   ai_entity_titles: aiEntity.titles,
   ai_entity_image: aiEntity.image,
+  mcp_host: mcp.appUrl ? new URL(mcp.appUrl).host : undefined,
   tz: process.env.TZ,
   node: process.version,
 });
@@ -77,6 +84,28 @@ if (haPort) {
     if (supervisorToken) void announceToHomeAssistant({ supervisorToken, port: i.port, apiToken });
   });
   servers.push(haServer);
+}
+
+// Third, optional listener: the MCP server for AI assistants, reached from outside through the user's reverse proxy.
+// Needs the port (the Dockerfile sets MCP_PORT), the option `mcp_app_url` and the public URL of Home Assistant (option
+// `mcp_ha_url`, else Home Assistant's own external URL). Without any of them it does not start at all.
+const mcpPort = process.env.MCP_PORT ? Number(process.env.MCP_PORT) : null;
+if (mcpPort && mcp.appUrl) {
+  const appUrl = mcp.appUrl;
+  void (async () => {
+    const haUrl = mcp.haUrl ?? (await fetchHaExternalUrl(supervisorToken));
+    if (!haUrl) {
+      log.warn("mcp_disabled", { reason: "no public Home Assistant URL (option mcp_ha_url or external URL in Home Assistant)" });
+      return;
+    }
+    const listener = createMcpListener({
+      appUrl,
+      haUrl,
+      verifier: createHaTokenVerifier({ wsUrl: process.env.HA_WS_URL ?? DEFAULT_HA_WS_URL }),
+      mcp: createMcpEndpoint({ repo, notify: haNotify, version }),
+    });
+    servers.push(serve({ fetch: listener.fetch, port: mcpPort }, (i) => log.info("mcp_listening", { port: i.port, ha_host: new URL(haUrl).host })));
+  })();
 }
 
 // SIGTERM from `docker stop` / the Supervisor: stop accepting requests, close the database, exit 0 (not "error").

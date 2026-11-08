@@ -18,3 +18,14 @@ configuration:
       Entity ID of an AI task that can generate images, e.g. ai_task.openai_ai_task. Leave empty to use Home
       Assistant's preferred AI task for images. If the entity does not exist, the AI features are off (the log names
       the option).
+  mcp_app_url:
+    name: MCP server – public address
+    description: >-
+      Optional. HTTPS address where your reverse proxy serves port 8101, e.g. https://meals.example.com. Leave empty
+      to keep the MCP server off. Sign-in through Home Assistant (OAuth), see the README.
+  mcp_ha_url:
+    name: MCP server – public address of Home Assistant
+    description: >-
+      Optional. Leave empty to use the external URL from Home Assistant's network settings. MCP clients sign in there.
+network:
+  8101/tcp: MCP server (only with mcp_app_url, run it behind a TLS reverse proxy)

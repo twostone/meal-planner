@@ -5,7 +5,7 @@ import { zValidator } from "@hono/zod-validator";
 import * as z from "zod";
 import { AiError, MAX_KNOWN_NAMES, type RecipeAi } from "./ha-ai.ts";
 import { TodoError, type HaTodo, type OpenTodoItem } from "./ha-todo.ts";
-import type { HaEventInput, HaUser } from "./ha-notify.ts";
+import { entryEvent as entryEventInput, planUpdatedEvent, type EntryEventType, type HaEventInput, type HaUser } from "./ha-notify.ts";
 import { detectImageType, IMAGE_NAME, MAX_IMAGE_BYTES, type ImageStore } from "./images.ts";
 import { logger } from "./log.ts";
 import type { PreviewResult } from "./preview.ts";
@@ -46,8 +46,8 @@ const tags = z.array(z.string().trim().min(1).max(30)).max(10);
 // The recipe text from a link preview (see POST /api/preview). Stored unchanged, never interpreted.
 const source = { source_text: optional(z.string().max(10000)), source_truncated: z.boolean().optional() };
 
-const dishBody = z.object({ title, url: optional(url), note: optional(note), image: optional(image), tags: tags.optional(), ...source });
-const dishPatch = z.object({
+export const dishBody = z.object({ title, url: optional(url), note: optional(note), image: optional(image), tags: tags.optional(), ...source });
+export const dishPatch = z.object({
   title: title.optional(),
   url: optional(url),
   note: optional(note),
@@ -55,13 +55,13 @@ const dishPatch = z.object({
   tags: tags.optional(),
   ...source,
 });
-const planBody = z
+export const planBody = z
   .object({ start_date: date, end_date: date })
   .refine((v) => v.end_date >= v.start_date, { message: "end_date before start_date", path: ["end_date"] });
 // Optional name of a plan; "" or null clears it.
 const planTitle = z.string().trim().min(1).max(100);
 // The period is changed as a whole: both dates or none, so the end-after-start check needs no stored values.
-const planPatch = z
+export const planPatch = z
   .object({ title: optional(planTitle), start_date: date.optional(), end_date: date.optional() })
   .refine((v) => (v.start_date === undefined) === (v.end_date === undefined), {
     message: "start_date and end_date go together",
@@ -89,7 +89,7 @@ const ingredient = z
     message: "amount_max needs an amount and must not be smaller",
     path: ["amount_max"],
   });
-const recipeBody = z.object({
+export const recipeBody = z.object({
   servings: z.number().int().min(1).max(50).nullable(),
   instructions: text(10000),
   ingredients: z.array(ingredient).max(MAX_INGREDIENTS),
@@ -127,7 +127,7 @@ const shoppingSend = z.object({
 });
 const entryBody = z.union([z.object({ dish_id: id }), dishBody]);
 // note: only for this entry (dish in one plan); "" or null clears it
-const entryPatch = z.object({
+export const entryPatch = z.object({
   done: z.boolean().optional(),
   position: z.number().int().min(0).optional(),
   note: optional(note),
@@ -185,10 +185,8 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
   const notifyHa = (event: HaEventInput) => {
     if (opts.notify) void opts.notify(event).catch(() => {});
   };
-  const entryEvent = (type: "entry_added" | "entry_removed" | "entry_done" | "entry_undone", e: Entry, user: HaUser | null) => {
-    if (!opts.notify) return;
-    const { id, start_date, end_date } = repo.getPlan(e.plan_id);
-    notifyHa({ type, plan: { id, start_date, end_date }, entry: { id: e.id, dish_id: e.dish_id, title: e.dish.title }, user });
+  const entryEvent = (type: EntryEventType, e: Entry, user: HaUser | null) => {
+    if (opts.notify) notifyHa(entryEventInput(type, repo.getPlan(e.plan_id), e, user));
   };
 
   // First in line, so refused (403) requests show up as well. Path only, never the query string.
@@ -516,15 +514,8 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
   app.get("/api/plans/:id", zValidator("param", z.object({ id })), (c) => c.json(repo.getPlan(c.req.valid("param").id)));
   app.patch("/api/plans/:id", zValidator("param", z.object({ id })), zValidator("json", planPatch), (c) => {
     const { before, plan } = repo.updatePlan(c.req.valid("param").id, c.req.valid("json"));
-    // Only a real change is an event: saving the sheet unchanged must not wake any automation.
-    if (plan.title !== before.title || plan.start_date !== before.start_date || plan.end_date !== before.end_date) {
-      notifyHa({
-        type: "plan_updated",
-        plan: { id: plan.id, start_date: plan.start_date, end_date: plan.end_date, title: plan.title },
-        previous: { start_date: before.start_date, end_date: before.end_date, title: before.title },
-        user: haUser(c),
-      });
-    }
+    const event = planUpdatedEvent(before, plan, haUser(c));
+    if (event) notifyHa(event);
     return c.json(plan);
   });
   app.delete("/api/plans/:id", zValidator("param", z.object({ id })), (c) => {

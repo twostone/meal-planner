@@ -1,8 +1,9 @@
 import { logger } from "./log.ts";
+import type { Entry, Plan } from "./repo.ts";
 
 const log = logger("ha-notify");
 
-export type HaEventType ="plan_created" | "plan_updated" | "entry_added" | "entry_removed" | "entry_done" | "entry_undone";
+export type HaEventType = "plan_created" | "plan_updated" | "entry_added" | "entry_removed" | "entry_done" | "entry_undone";
 // Any field is null when Ingress did not send it (unknown session, or unset on the HA user).
 export type HaUser = { id: string; name: string | null; display_name: string | null };
 export type HaEventInput = {
@@ -14,6 +15,24 @@ export type HaEventInput = {
   entry?: { id: number; dish_id: number; title: string };
   user: HaUser | null;
 };
+
+export type EntryEventType = "entry_added" | "entry_removed" | "entry_done" | "entry_undone";
+
+// The event payloads, shared by the Ingress API (app.ts) and the MCP tools (mcp.ts) so both report changes alike.
+export function entryEvent(type: EntryEventType, plan: Plan, e: Entry, user: HaUser | null): HaEventInput {
+  return { type, plan: { id: plan.id, start_date: plan.start_date, end_date: plan.end_date }, entry: { id: e.id, dish_id: e.dish_id, title: e.dish.title }, user };
+}
+
+// Only a real change is an event: saving unchanged must not wake any automation. null = nothing changed.
+export function planUpdatedEvent(before: Plan, plan: Plan, user: HaUser | null): HaEventInput | null {
+  if (plan.title === before.title && plan.start_date === before.start_date && plan.end_date === before.end_date) return null;
+  return {
+    type: "plan_updated",
+    plan: { id: plan.id, start_date: plan.start_date, end_date: plan.end_date, title: plan.title },
+    previous: { start_date: before.start_date, end_date: before.end_date, title: before.title },
+    user,
+  };
+}
 
 export const SUPERVISOR_EVENTS_URL = "http://supervisor/core/api/events/";
 const TIMEOUT_MS = 5000;

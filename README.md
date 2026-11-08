@@ -40,10 +40,14 @@ dieselbe Liste.
   addiert, g/kg und ml/l umgerechnet) und schickt die angehakten Artikel an eine Todo-Liste in Home Assistant, z. B. eine
   Bring-Liste. Was dort schon offen steht, ist abgewählt. Siehe „Einkaufsliste (Bring)“.
 - Bedienung für das Handy ausgelegt, auch in der Home-Assistant-Companion-App.
+- Optional ein **MCP-Server** für KI-Assistenten (z. B. Claude): Listen lesen und bearbeiten, Gerichte und Rezepte pflegen,
+  Anmeldung über Home Assistant. Siehe „MCP-Server (für Claude & Co.)“.
 
 ## Installation
 
-Voraussetzung: Home Assistant mit App-Store (Home Assistant OS oder Supervised), Architektur amd64 oder arm64.
+Voraussetzung: Home Assistant **2026.10.1 oder neuer** mit App-Store (Home Assistant OS oder Supervised), Architektur amd64
+oder arm64. Die Version braucht die Anmeldung des MCP-Servers (OAuth mit PKCE, Client-ID-Metadaten und
+Loopback-Weiterleitungen); sie gilt auch, wenn man ihn nicht nutzt.
 
 1. In Home Assistant: *Einstellungen → Apps* (in älteren Versionen *Add-ons*) *→ App-Store → ⋮ → Repositories* und
    eintragen:
@@ -120,6 +124,37 @@ einer Todo-Entität. Die App braucht keine eigenen Zugangsdaten, sie nutzt die I
   Assistant) bekommen sie in Klammern hinter den Namen.
 - Was auf der Liste schon offen steht, ist abgewählt und markiert; vorhandene Einträge werden nie geändert.
 
+## MCP-Server (für Claude & Co.)
+
+Optional. Über einen MCP-Server kann ein KI-Assistent die Essensplanung lesen und bearbeiten, z. B. „Plane mir nächste Woche
+drei vegetarische Gerichte aus dem Katalog“ oder „Trag das Rezept von diesem Text ein“. Ohne Einrichtung ist er aus, der Port
+ist dann zu.
+
+**Einrichtung**
+
+1. Einen **Reverse-Proxy mit TLS** (HTTPS) einrichten, der eine eigene Adresse (z. B. `https://essen.example.com`, ohne
+   Unterpfad) an Port **8101** der App weiterleitet. Läuft der Proxy selbst als App in Home Assistant (z. B. Nginx Proxy
+   Manager), erreicht er die App im internen Netz unter ihrem Hostnamen (*App → Info*), ohne Port-Freigabe. Sonst unter
+   *Konfiguration → Netzwerk* einen Host-Port für 8101 eintragen. Die App spricht dort nur HTTP.
+   `proxy_buffering off` (nginx) ist für MCP wichtig.
+2. In der App-Konfiguration `mcp_app_url` auf diese Adresse setzen. `mcp_ha_url` nur, wenn Home Assistant von außen unter
+   einer anderen Adresse erreichbar ist als unter *Einstellungen → System → Netzwerk* eingetragen. App neu starten; das
+   Protokoll zeigt `mcp_listening` (oder `mcp_disabled` mit Grund).
+3. Im Client die Adresse `https://<mcp_app_url>/mcp` eintragen:
+   - **claude.ai:** *Einstellungen → Konnektoren → Benutzerdefinierten Konnektor hinzufügen*.
+   - **Claude Code:** `claude mcp add --transport http essen https://essen.example.com/mcp`, danach `/mcp` und anmelden.
+
+Die Anmeldung läuft über **Home Assistant als Authorization Server**: Unter `/.well-known/oauth-protected-resource` nennt die
+App Home Assistant, der Client leitet zur Anmeldung von Home Assistant weiter und holt sich dort selbst ein Token. Die App
+stellt keine Tokens aus und speichert keine.
+
+**Tools:** lesen `list_plans`, `get_plan` (ohne ID die aktuelle, sonst die nächste Liste), `search_dishes` (Titel, Zutat,
+Kategorie), `get_recipe`; schreiben `create_plan`, `update_plan`, `add_to_plan`, `update_plan_entry` (abhaken, Notiz),
+`remove_from_plan`, `create_dish`, `update_dish`, `set_recipe` (ersetzt das ganze Rezept). Es gelten dieselben Regeln wie in
+der App (Grenzen, keine überlappenden Listen, eindeutige Titel), und Änderungen an Listen lösen dieselben Events in Home
+Assistant aus, mit dem angemeldeten Benutzer. Bewusst nicht dabei: Listen oder Gerichte löschen, Bilder, die KI-Funktionen
+und die Einkaufsliste.
+
 ## Protokoll
 
 Die App schreibt eine Zeile pro Ereignis ins Protokoll der App (*Einstellungen → Apps → Essensplanung → Protokoll*), mit
@@ -136,7 +171,15 @@ In der App-Konfiguration stellt `log_level` ein, wie viel geschrieben wird (`deb
 ## Datenschutz und Sicherheit
 
 - Die App ist nur über Home-Assistant-Ingress erreichbar. Der Server nimmt ausschließlich Verbindungen von Supervisor
-  an. Einzige Ausnahme ist der nur lesende, per Token geschützte Port für die HA-Integration (siehe oben).
+  an. Ausnahmen sind der nur lesende, per Token geschützte Port für die HA-Integration (siehe oben) und, nur wenn
+  eingerichtet, der MCP-Server (Port 8101). Dort gibt es nichts außer `/mcp` und den OAuth-Metadaten; die Oberfläche, die
+  API und die Bilder der App sind dort nicht erreichbar.
+- **MCP-Server – die Zielgruppe (Audience) der Tokens wird nicht geprüft:** Home-Assistant-Tokens haben keine. Die App nimmt
+  **jedes** gültige Token eines echten Home-Assistant-Benutzers an, auch ein langlebiges Zugriffstoken, und prüft es bei
+  Home Assistant (kurz zwischengespeichert). Wer ein solches Token hat, kann über den MCP-Server alles, was die Tools
+  erlauben (Listen, Gerichte und Rezepte ändern), wie jeder in der App. Gib Home-Assistant-Tokens nur Programmen, denen du
+  vertraust. System-Benutzer (andere Apps) werden abgelehnt; ist Home Assistant nicht erreichbar, gibt es einen Fehler,
+  nie Zugriff ohne Anmeldung. Was ein KI-Assistent über die Tools liest (Listen, Gerichte, Rezepte), geht an dessen Anbieter.
 - Extern ruft nur der Server ab, und nur Links, die jemand selbst eingegeben hat. Interne Adressen (Heimnetz, andere
   Apps, Router) sind dabei gesperrt. Der Browser lädt nichts von Drittservern: Schriften und Bilder kommen vom eigenen Server.
 - „Zutaten erkennen“ schickt den gesicherten Rezepttext an den KI-Dienst, der in Home Assistant eingerichtet ist (bei

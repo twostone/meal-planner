@@ -5,6 +5,8 @@ version: "0.16.1" # x-release-please-version
 slug: essensplanung
 description: Wöchentliche Essensplanung für den Haushalt
 url: "https://github.com/twostone/meal-planner"
+# Home Assistant 2026.10.1 brings PKCE (S256), client-ID metadata documents and loopback redirects for OAuth (MCP sign-in).
+homeassistant: "2026.10.1"
 arch:
   - aarch64
   - amd64
@@ -20,9 +22,14 @@ panel_admin: false
 homeassistant_api: true
 discovery:
   - meal_planner
+# 8099 (Ingress) and 8100 (HA integration) stay unmapped. 8101 is the optional MCP server (only with mcp_app_url): closed on
+# the host until the user sets a host port (null). Put a TLS reverse proxy in front; the app speaks plain HTTP there.
+ports:
+  8101/tcp: null
 # Options land in /data/options.json (written by the Supervisor); a change needs a restart.
 # log_level: how much the app writes to its log. ai_entity_*: AI task entity per task, unset = Home Assistant's preferred
-# one. They are not under `options` so they stay unset; single quotes because "\." is no valid YAML escape.
+# one. mcp_app_url / mcp_ha_url: public URLs of the MCP server and of Home Assistant (unset = MCP off / HA's external URL).
+# The optional ones are not under `options` so they stay unset; single quotes because "\." is no valid YAML escape.
 options:
   log_level: info
 schema:
@@ -30,3 +37,5 @@ schema:
   ai_entity_recipe: 'match(^ai_task\.[a-z0-9_]+$)?'
   ai_entity_titles: 'match(^ai_task\.[a-z0-9_]+$)?'
   ai_entity_image: 'match(^ai_task\.[a-z0-9_]+$)?'
+  mcp_app_url: url?
+  mcp_ha_url: url?

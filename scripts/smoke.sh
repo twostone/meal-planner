@@ -43,6 +43,28 @@ token=$(docker exec hastate cat /data/ha-token)
 curl -fsS -H "Authorization: Bearer $token" http://localhost:8098/ha/state | grep -q '"current":null' || { dump hastate; exit 1; }
 docker rm -f hastate
 
+# 4) MCP port: off without the option; with it 401 pointing to the OAuth metadata, nothing of the Ingress API.
+docker run -d --name nomcp -p 8097:8101 -e INGRESS_ONLY_IP= "$IMAGE"
+for _ in $(seq 1 30); do
+  docker logs nomcp 2>&1 | grep -q 'listening port=8099' && break
+  sleep 1
+done
+[ "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8097/mcp || true)" = "000" ] || { echo "MCP port open without mcp_app_url"; dump nomcp; exit 1; }
+docker rm -f nomcp
+docker run -d --name mcp -p 8097:8101 -e INGRESS_ONLY_IP= --entrypoint sh "$IMAGE" -c \
+  'mkdir -p /data && echo "{\"mcp_app_url\":\"https://essen.example.test\",\"mcp_ha_url\":\"https://ha.example.test\"}" > /data/options.json && exec node --import tsx src/server.ts'
+code=000
+for _ in $(seq 1 30); do
+  code=$(curl -s -o /dev/null -D /tmp/mcp.headers -w '%{http_code}' -X POST http://localhost:8097/mcp || true)
+  [ "$code" != "000" ] && break
+  sleep 1
+done
+[ "$code" = "401" ] || { echo "expected 401 from /mcp, got $code"; dump mcp; exit 1; }
+grep -qi '^www-authenticate:.*resource_metadata=' /tmp/mcp.headers || { dump mcp; exit 1; }
+curl -fsS http://localhost:8097/.well-known/oauth-protected-resource/mcp | grep -q '"authorization_servers":\["https://ha.example.test"\]' || { dump mcp; exit 1; }
+[ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8097/api/plans)" = "404" ] || { dump mcp; exit 1; }
+docker rm -f mcp
+
 # Shutdown: SIGTERM (what `ha apps stop` sends) must end the app cleanly with exit code 0 within the Supervisor's
 # 10 s timeout. Otherwise the Supervisor shows the app as "error" instead of "stopped".
 docker run -d --name stopping -p 8099:8099 -e INGRESS_ONLY_IP= "$IMAGE"

@@ -23,3 +23,38 @@ export function aiEntities(options: AddonOptions): AiEntities {
     image: entity(options.ai_entity_image),
   };
 }
+
+// MCP server (optional): public URL of the app's MCP listener (behind the user's TLS reverse proxy) and of Home Assistant,
+// which signs MCP clients in (OAuth). Unset `mcp_app_url` = no MCP listener at all.
+export type McpSettings = {
+  /** Public base URL of the MCP listener, no trailing slash. */
+  appUrl: string | null;
+  /** Public base URL of Home Assistant, no trailing slash; null = ask Home Assistant for its external URL at start. */
+  haUrl: string | null;
+  /** Names of options that were set but unusable; logged by the caller. */
+  invalid: string[];
+};
+
+// A public base URL: http(s) only, no credentials, query or fragment. A trailing slash must not matter.
+export function parsePublicUrl(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    const url = new URL(value.trim());
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) return null;
+    return url.href.replace(/\/+$/, "");
+  } catch {
+    return null;
+  }
+}
+
+export function mcpSettings(options: AddonOptions): McpSettings {
+  const invalid: string[] = [];
+  const url = (name: string) => {
+    const raw = options[name];
+    if (raw === undefined || raw === null || raw === "") return null;
+    const parsed = parsePublicUrl(raw);
+    if (!parsed) invalid.push(name);
+    return parsed;
+  };
+  return { appUrl: url("mcp_app_url"), haUrl: url("mcp_ha_url"), invalid };
+}

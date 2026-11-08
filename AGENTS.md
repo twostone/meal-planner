@@ -51,6 +51,10 @@ meal-planner/            das Add-on (Docker-Build-Kontext)
     options.ts              App-Optionen aus /data/options.json lesen (log_level, ai_entity_*)
     log.ts                  Logger: eine logfmt-Zeile pro Ereignis, Stufe aus der App-Option `log_level`
     ha-discovery.ts         Meldung von Host, Port und Token per Supervisor-Discovery
+    mcp.ts                  MCP-Server: Tools über repo.ts (Schemas aus app.ts, Events wie die UI), zustandslos je Anfrage
+    mcp-listener.ts         dritter Listener (MCP_PORT, 8101): nur /mcp mit HA-Token und die OAuth-Metadaten
+    auth/                   ha-token.ts (HA-Token per WebSocket auth/current_user prüfen), ha-url.ts (externe URL von HA),
+                            resource-metadata.ts (RFC 9728); alles wie in garmin-insights
   web/                   Frontend: Svelte 5 + Vite (Runes, TypeScript)
     public/favicon.svg     Favicon der App, Vorlage für icon.png
   scripts/screenshot.ts  Screenshot-Werkzeug (playwright-core + installiertes Google Chrome, Beispieldaten, Wegwerf-DB)
@@ -227,8 +231,9 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   Transaktion) an, weil es selbst in einer läuft: SQLite kennt keine verschachtelten `BEGIN`.
 - Optionale Textfelder in der API: `""` und `null` löschen das Feld (`optional()` in `app.ts`, der Zweig für `""` muss
   vor dem String-Schema stehen, sonst wird `""` selbst akzeptiert).
-- **Anmeldung:** nur über HA-Ingress. Kein OAuth, keine eigene Nutzerverwaltung, keine installierbare PWA und kein
-  Web Share Target (beides bräuchte einen eigenen Origin, Ingress läuft im iframe unter dem HA-Origin).
+- **Anmeldung:** die App nur über HA-Ingress. Keine eigene Nutzerverwaltung, keine installierbare PWA und kein
+  Web Share Target (beides bräuchte einen eigenen Origin, Ingress läuft im iframe unter dem HA-Origin). Einzige Ausnahme
+  ist der optionale MCP-Server (OAuth über HA, siehe „MCP-Server“).
   Der HA-Nutzer (`X-Remote-User-*`) ist rein informativ (`/api/me`), die Liste ist gemeinsam.
 - **Links:** nur `http(s)` (Server prüft, sonst 400).
 - **Link-Vorschau:** `POST api/preview {url}` ruft die Seite serverseitig ab und liefert `{title, image, reason}`. Der Titel
@@ -274,6 +279,31 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   (10 MB, weil KI-PNGs groß sind und der Server nicht verkleinert). `status()` meldet `image`, wenn die gesetzte (sonst
   irgendeine) `ai_task`-Entität `GENERATE_IMAGE` (Bit 4 in `supported_features`) kann; nur dann zeigt das Blatt
   „Bild erzeugen“. Ein vorhandenes Bild wird erst nach zweitem Tippen ersetzt.
+- **MCP-Server** (optional, Entscheidungen vom 08.11.2026, Vorbild garmin-insights): eigener Listener auf `MCP_PORT`
+  (8101, `mcp-listener.ts`), **der Port bestimmt den Modus**, nie Header. Er startet nur mit der App-Option `mcp_app_url`
+  (öffentliche Adresse hinter dem TLS-Reverse-Proxy des Nutzers) und einer HA-Adresse (`mcp_ha_url`, sonst `external_url`
+  aus `GET /api/config` über den Supervisor, `auth/ha-url.ts`); sonst Warnzeile `mcp_disabled`. In `config.yaml` steht
+  `8101/tcp: null` (Host-Port zu, bis der Nutzer ihn setzt). Dort gibt es nur `POST/GET /mcp` und
+  `/.well-known/oauth-protected-resource[/mcp]` (RFC 9728, `authorization_servers` = HA, CORS offen), alles andere ist 404:
+  keine `/api`, kein Frontend, keine Bilder, `X-Remote-User-*` wird nie gelesen.
+  **Nur HA-OAuth, keine eigenen Tokens:** HA ist Authorization Server, die App nur Resource Server (stellt nichts aus,
+  speichert nichts). `requireBearerAuth` aus dem SDK prüft das Bearer-Token über `auth/ha-token.ts` (WebSocket
+  `auth/current_user` an `ws://homeassistant:8123/api/websocket`, Cache nach `sha256(token)` ≤ 60 s und ≤ `exp`, abgelaufene
+  ohne Anfrage abgelehnt); 401 trägt `resource_metadata`. **Jedes gültige Token eines echten Nutzers gilt** (HA-Tokens haben
+  keine Audience, im README offen benannt), System-User nicht; HA nicht erreichbar = 5xx, nie anonym. Kein Drosseln
+  falscher Tokens (hinter einem Reverse-Proxy hätten alle Clients dieselbe Adresse). Mindestversion HA 2026.10.1
+  (`homeassistant:` in `config.yaml`: PKCE, Client-ID-Metadaten, Loopback-Weiterleitungen), gilt für das ganze Add-on.
+  **Tools** (`mcp.ts`, englisch, `outputSchema` + `structuredContent` + gleicher JSON-Text): lesen `list_plans`, `get_plan`
+  (ohne ID aktuelle, sonst nächste Liste), `search_dishes` (Titel, Zutat, Kategorie), `get_recipe` (`source_text` nur mit
+  `include_source`); schreiben `create_plan`, `update_plan`, `add_to_plan`, `update_plan_entry`, `remove_from_plan`,
+  `create_dish`, `update_dish`, `set_recipe` (ersetzt alles wie `PUT …/recipe`, Schritte als Liste). Eingaben sind schlicht
+  und beschrieben, danach prüfen dieselben zod-Schemas wie die API (`dishBody`, `planPatch`, `recipeBody` … aus `app.ts`), Grenzen
+  stehen also nur dort. `NotFoundError`/`ConflictError`/zod-Fehler werden zu `isError` mit Text. Änderungen feuern dieselben
+  HA-Events wie die UI (`entryEvent`/`planUpdatedEvent` in `ha-notify.ts`, beide Wege nutzen sie), `user` aus dem Token
+  (`display_name` = HA-`name`, `name` null: `current_user` kennt keinen Login-Namen). Bewusst nicht: Liste/Gericht löschen,
+  Bilder, KI-Funktionen, Einkaufsliste, Prompts/Ressourcen. Neue Tools brauchen ein Ausgabe-Schema und beschriebene Eingaben
+  (ein Test prüft das) und den passenden `readOnlyHint`. **Das MCP-SDK ist exakt gepinnt** (`@modelcontextprotocol/server`,
+  Dev: `client`, 2.4.0, wie garmin-insights); Updates bewusst und einzeln.
 - **Instagram:** Der Abruf ist der allgemeine (`fetchLimited`) mit dem Bot-User-Agent `EssensplanungBot`, **nicht in einen
   Browser-User-Agent ändern**: nur damit liefert Instagram eine vorgerenderte Seite mit der vollständigen Caption in `og:title`
   (`<Name> auf Instagram: "<Caption>"`); mit Browser-UA kommt nur eine JavaScript-Hülle. Das ist undokumentiertes Verhalten,
@@ -423,8 +453,12 @@ raten (`async_update_reload_and_abort`, `HassioServiceInfo`, `StaticPathConfig`,
   `::ffff:0:0/96` würde daher **jede** IPv4-Adresse sperren (der Test `isPublicIp` fängt das).
 - Bildnamen kommen nur aus dem Bildspeicher (Hash + Endung, geprüft per `IMAGE_NAME`), nie Pfade vom Client.
   Ausgeliefert wird mit `nosniff` und `Content-Security-Policy: default-src 'none'`.
-- Neue Ports oder `host_network` nicht ohne Rückfrage freigeben. Der Port 8100 (`ha-api.ts`) ist die eine bewusste Ausnahme:
-  nur `GET /ha/state`, Token-Vergleich zeitkonstant, kein `ports:`-Mapping (nur im Supervisor-Netz erreichbar).
+- Neue Ports oder `host_network` nicht ohne Rückfrage freigeben. Bewusste Ausnahmen: Port 8100 (`ha-api.ts`), nur
+  `GET /ha/state`, Token-Vergleich zeitkonstant, kein `ports:`-Mapping (nur im Supervisor-Netz erreichbar); Port 8101
+  (`mcp-listener.ts`), nur mit `mcp_app_url`, Host-Port standardmäßig `null`, nur `/mcp` mit HA-Token und die
+  OAuth-Metadaten. Die Ingress-Sperre auf 8099 bleibt davon unberührt; nichts aus `/api` auf 8101 einhängen.
+- Die Token-Prüfung (`auth/ha-token.ts`) spricht per WebSocket direkt mit Core (`ws://homeassistant:8123`), wie
+  `ha-core.ts` fest im Code, nie mit Nutzereingaben; nicht über `fetchLimited`.
 - **Das Repository ist öffentlich:** keine Zugangsdaten, Tokens, privaten Hostnamen oder Adressen aus dem Heimnetz
   einchecken (auch nicht in Tests, Kommentaren oder Beispielen).
 - Workflows: keine eigenen Secrets, mit zwei Ausnahmen: `INTEGRATION_MIRROR_DEPLOY_KEY` (Deploy-Key mit Schreibrecht nur auf
@@ -559,7 +593,8 @@ raten (`async_update_reload_and_abort`, `HassioServiceInfo`, `StaticPathConfig`,
 
 ## Bewusst nicht gebaut (nur auf ausdrücklichen Wunsch)
 
-Nährwerte, Anbindung an den HA-Kalender, Tageszuordnung, Drag-and-Drop, OAuth, Instagram-oEmbed,
+Nährwerte, Anbindung an den HA-Kalender, Tageszuordnung, Drag-and-Drop, OAuth für die App selbst (nur der MCP-Server
+nutzt es), Instagram-oEmbed,
 Bildverkleinerung auf dem Server (verkleinert wird nur im Browser vor dem Hochladen), Image-Signatur/SBOM,
 Kategorien umbenennen/zusammenführen, Mehrfachauswahl im Kategorie-Filter.
 Rezept-Text einfügen und per KI zerlegen sowie Portionen umrechnen (beides am 10.10.2026 aus `docs/plan-rezepte.md` gestrichen).
@@ -602,6 +637,10 @@ Rezept-Text einfügen und per KI zerlegen sowie Portionen umrechnen (beides am 1
   `todo.get_items` über die REST-API, ob Bring die `description` als Spezifikation zeigt, `supported_features` der
   Bring-Entitäten und wie lange 20 bis 30 `add_item` nacheinander dauern (Bring aktualisiert nach jedem Artikel).
 - Kein Dunkelmodus (HA-Theme dunkel, App bleibt hell).
+- Der MCP-Server ist nur gegen Tests (Fake-Verifier, nachgebauter HA-WebSocket, SDK-Client) geprüft, **nicht am echten
+  System**: offen sind der OAuth-Ablauf von claude.ai und Claude Code gegen Home Assistant, ob `ws://homeassistant:8123` aus
+  dem Container erreichbar ist (wie beim KI-Bild: nicht bei eigenem SSL-Zertifikat auf 8123), die Erreichbarkeit von Port
+  8101 durch einen Reverse-Proxy und ob die Tool-Beschreibungen für echte Modelle reichen.
 - Die HA-Integration + Lovelace-Karte lebt in `custom_components/meal_planner/` (HACS-Mirror: [twostone/ha-meal-planner](https://github.com/twostone/ha-meal-planner)).
   Die Anbindung (Discovery,
   zweiter Port, Events über den Supervisor) ist nur gegen lokale Testserver getestet, **nicht am echten System**:
