@@ -29,9 +29,11 @@ ENV NODE_ENV=production \
     PORT=8099 \
     DB_PATH=/data/meal-planner.db \
     INGRESS_ONLY_IP=172.30.32.2 \
-    HA_API_PORT=8100
+    HA_API_PORT=8100 \
+    MCP_PORT=8101
 
 # 8099: Ingress. 8100: read-only state for the HA integration (Bearer token, reachable only inside the
-# Supervisor network; no ports: mapping in config.yaml).
-EXPOSE 8099 8100
+# Supervisor network; no ports: mapping in config.yaml). 8101: optional MCP server (HA OAuth tokens, only started with
+# the option mcp_app_url; host port unset by default).
+EXPOSE 8099 8100 8101
 CMD ["node", "--import", "tsx", "src/server.ts"]

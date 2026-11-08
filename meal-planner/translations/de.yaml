@@ -18,3 +18,15 @@ configuration:
       Entitäts-ID einer KI-Aufgabe, die Bilder erzeugen kann, z. B. ai_task.openai_ai_task. Leer lassen, dann nimmt
       Home Assistant die bevorzugte KI-Aufgabe für Bilder. Gibt es die Entität nicht, sind die KI-Funktionen aus (das
       Protokoll nennt die Option).
+  mcp_app_url:
+    name: MCP-Server – öffentliche Adresse
+    description: >-
+      Optional. HTTPS-Adresse, unter der dein Reverse-Proxy den Port 8101 anbietet, z. B. https://essen.example.com.
+      Leer lassen, dann ist der MCP-Server aus. Anmeldung über Home Assistant (OAuth), siehe README.
+  mcp_ha_url:
+    name: MCP-Server – öffentliche Adresse von Home Assistant
+    description: >-
+      Optional. Leer lassen, dann gilt die externe URL aus den Netzwerk-Einstellungen von Home Assistant. Dort melden
+      sich MCP-Clients an.
+network:
+  8101/tcp: MCP-Server (nur mit mcp_app_url, hinter einem TLS-Reverse-Proxy betreiben)
