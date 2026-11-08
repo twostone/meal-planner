@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.0](https://github.com/twostone/meal-planner/compare/v0.16.1...v0.17.0) (2026-11-08)
+
+
+### Neu
+
+* **mcp:** optionaler MCP-Server mit Anmeldung über Home Assistant (OAuth) ([#75](https://github.com/twostone/meal-planner/issues/75)) ([88b902b](https://github.com/twostone/meal-planner/commit/88b902b1c10c43f0a14b0f0ad937d38f1d9dcd01))
+
 ## [0.16.1](https://github.com/twostone/meal-planner/compare/v0.16.0...v0.16.1) (2026-11-05)
 
 
