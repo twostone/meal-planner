@@ -653,6 +653,9 @@ Rezept-Text einfügen und per KI zerlegen sowie Portionen umrechnen (beides am 1
 - **Neue Features und größere Änderungen kommen über einen Pull Request**, nicht direkt auf `main`: Branch `feat/<thema>` bzw.
   `fix/<thema>`, ein PR pro Feature mit Backend, Migration, UI, Tests und angepasster Doku (`AGENTS.md`/`README.md`).
   Kleine Doku-, CI- und Chore-Änderungen dürfen direkt auf `main`.
+- **Gestapelte PRs** (`gh stack`, Skill `gh-stack`) nur für Features, die aufeinander aufbauen: Jede Ebene ist ein
+  vollständiges Feature mit Tests und Doku und hat einen eigenen Conventional-Commit-Titel. Ein Feature nie in Ebenen
+  wie Migration, Backend und UI aufteilen.
 - **Der PR-Titel ist eine Conventional-Commit-Zeile** (`feat(bereich): …`, deutscher Text), weil er beim Squash-Merge zur
   Commit-Nachricht wird und daraus Version und Changelog entstehen. Empfohlen ist in den Repository-Einstellungen nur
   Squash-Merge (Standardnachricht: PR-Titel) und „Automatically delete head branches“.
