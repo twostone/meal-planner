@@ -126,6 +126,10 @@ const shoppingSend = z.object({
   items: z.array(z.object({ name: z.string().trim().min(1).max(80), spec: z.string().trim().max(MAX_SPEC_LENGTH).nullable() })).min(1).max(200),
 });
 const entryBody = z.union([z.object({ dish_id: id }), dishBody]);
+// A new dish from the sheet can bring its recipe along (only here: PATCH and list entries take none).
+const newDishBody = dishBody.extend({ recipe: recipeBody.optional() });
+// Text to make a recipe draft from, before there is a dish (the create sheet, from the link's source text).
+const draftBody = z.object({ text: z.string().trim().min(1).max(10000) });
 // note: only for this entry (dish in one plan); "" or null clears it
 export const entryPatch = z.object({
   done: z.boolean().optional(),
@@ -238,10 +242,10 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
   app.get("/api/dishes", (c) => c.json(repo.listDishes(c.req.query("q"), c.req.query("ingredient"))));
   // Suggestions for the search box of the catalog.
   app.get("/api/ingredients/names", (c) => c.json(repo.listIngredientNames(MAX_KNOWN_NAMES)));
-  app.post("/api/dishes", zValidator("json", dishBody), async (c) => {
-    const body = c.req.valid("json");
+  app.post("/api/dishes", zValidator("json", newDishBody), async (c) => {
+    const { recipe, ...body } = c.req.valid("json");
     if (await imageMissing(body.image)) return c.json({ error: "unknown image" }, 400);
-    const dish = repo.createDish(body);
+    const dish = repo.createDish(body, recipe);
     sweep();
     return c.json(dish, 201);
   });
@@ -269,14 +273,13 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
   if (opts.ai) {
     const ai = opts.ai;
     let drafting = 0;
-    // Draft only: nothing is stored. The user reviews it (with the source text next to it) and saves via PUT …/recipe.
-    app.post("/api/dishes/:id/recipe/draft", zValidator("param", z.object({ id })), async (c) => {
-      const { source_text } = repo.getRecipe(c.req.valid("param").id);
-      if (!source_text) return c.json({ error: "dish has no source text" }, 400);
+    // Draft only: nothing is stored. The user reviews it (with the source text next to it) and saves it with the recipe.
+    // Both routes share the limit of parallel drafts.
+    const draft = async (c: Context, text: string) => {
       if (drafting >= MAX_PARALLEL_DRAFTS) return c.json({ error: "busy" }, 429);
       drafting++;
       try {
-        return c.json(buildDraft(await ai.generate(source_text, repo.listIngredientNames(MAX_KNOWN_NAMES)), source_text));
+        return c.json(buildDraft(await ai.generate(text, repo.listIngredientNames(MAX_KNOWN_NAMES)), text));
       } catch (e) {
         if (e instanceof AiError || e instanceof DraftError) {
           const reason = e instanceof AiError ? e.reason : "bad_response";
@@ -287,7 +290,13 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
       } finally {
         drafting--;
       }
+    };
+    app.post("/api/dishes/:id/recipe/draft", zValidator("param", z.object({ id })), async (c) => {
+      const { source_text } = repo.getRecipe(c.req.valid("param").id);
+      if (!source_text) return c.json({ error: "dish has no source text" }, 400);
+      return draft(c, source_text);
     });
+    app.post("/api/recipe/draft", zValidator("json", draftBody), (c) => draft(c, c.req.valid("json").text));
 
     // Up to two title candidates from the AI, shown next to the rule-based ones. Nothing is stored. Every failure is a
     // plain 502: the sheet just shows no AI suggestions.

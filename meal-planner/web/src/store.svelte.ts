@@ -8,7 +8,7 @@ export type SheetState =
       kind: "dish";
       dishId: number | null; // null = create a new dish
       entryId: number | null; // set when opened from the list (enables "remove from list")
-      addToPlan: boolean; // create mode: also put the new dish into the current plan
+      addToPlan: boolean; // create mode: start value of the switch that also puts the new dish into the current plan
       prefill: { title: string; url: string; tags: string[] };
     }
   | { kind: "recipe"; dishId: number }
@@ -200,13 +200,6 @@ export const addDishToPlan = (dishId: number) =>
     await reload();
   });
 
-export const addByTitle = (title: string) =>
-  guard(async () => {
-    if (!app.plan) throw new Error("Bitte zuerst einen Zeitraum anlegen.");
-    await api.addEntry(app.plan.id, { title });
-    await reload();
-  });
-
 export async function toggleDone(entry: Entry) {
   const next = !entry.done;
   entry.done = next; // optimistic
@@ -239,15 +232,19 @@ export const saveDish = (
   entry?: { id: number; note: string | null },
 ) =>
   guard(async () => {
+    let catalogOnly = false;
     if (dishId === null) {
       const d = await api.createDish(input);
       if (addToPlan && app.plan) await api.addEntry(app.plan.id, { dish_id: d.id });
+      catalogOnly = !addToPlan;
     } else {
       await api.updateDish(dishId, input);
       if (entry) await api.setEntryNote(entry.id, entry.note);
     }
     await reload();
     closeSheet();
+    // In the list nothing visible changes when the dish only went into the catalog: say where it went.
+    if (catalogOnly && app.view === "list") showInfo(`„${input.title}“ im Katalog gespeichert`);
   });
 
 export const deleteDish = (id: number) =>

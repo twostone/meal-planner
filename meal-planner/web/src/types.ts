@@ -41,6 +41,7 @@ export type DishInput = {
   tags: string[];
   source_text?: string | null; // only when a new dish is created from a link preview
   source_truncated?: boolean;
+  recipe?: RecipeInput; // only when a new dish is created; saved together with it
 };
 export type Preview = {
   title: string | null;
@@ -70,6 +71,8 @@ export type Recipe = {
 };
 // Same list as UNITS in the server's repo.ts. Counted things ("1 Zwiebel") have no unit.
 export const UNITS = ["g", "kg", "ml", "l", "EL", "TL", "Prise", "Zehe", "Bund", "Dose", "Packung", "Becher", "Scheibe", "Handvoll"];
+// What PUT …/recipe (and a new dish) takes; raw null = built by the server from amount, unit and name.
+export type RecipeInput = Pick<Recipe, "servings" | "instructions"> & { ingredients: (Omit<Ingredient, "raw"> & { raw: string | null })[] };
 export type RecipeDraft = Pick<Recipe, "servings" | "instructions"> & { ingredients: (Ingredient & { verified: boolean })[] };
 // image: an AI task in Home Assistant can generate images ("Bild erzeugen").
 export type AiStatus = { ai: boolean; reason: string | null; image: boolean };

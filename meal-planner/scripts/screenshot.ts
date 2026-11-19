@@ -114,6 +114,29 @@ async function fakeNormalize(page: Page): Promise<void> {
   );
 }
 
+// A link whose page has a recipe text, and an AI task that turns it into a draft (no Home Assistant here).
+async function fakeLinkWithRecipe(page: Page): Promise<void> {
+  const sourceText = "Für 2 Personen\n500 g Kartoffeln\n2 rote Zwiebeln\n2 EL Olivenöl\n\nAlles schneiden.\nIm Ofen 40 Minuten rösten.";
+  await page.route("**/api/recipe/status", (r) => r.fulfill({ json: { ai: true, reason: null, image: false } }));
+  await page.route("**/api/preview", (r) =>
+    r.fulfill({ json: { title: "Ofengemüse", image: null, reason: null, titleSuggestions: ["Ofengemüse"], sourceText, sourceTruncated: false } }),
+  );
+  await page.route("**/api/title-suggestions", (r) => r.fulfill({ json: { titles: [] } }));
+  await page.route("**/api/recipe/draft", (r) =>
+    r.fulfill({
+      json: {
+        servings: 2,
+        instructions: "Alles schneiden.\nIm Ofen 40 Minuten rösten.",
+        ingredients: [
+          { section: null, amount: 500, amount_max: null, unit: "g", name: "Kartoffel", plural: "Kartoffeln", note: null, prep: null, raw: "500 g Kartoffeln", verified: true },
+          { section: null, amount: 2, amount_max: null, unit: null, name: "Zwiebel", plural: "Zwiebeln", note: "rot", prep: null, raw: "2 rote Zwiebeln", verified: true },
+          { section: null, amount: 3, amount_max: null, unit: "EL", name: "Olivenöl", plural: null, note: null, prep: null, raw: "3 EL Olivenöl", verified: false },
+        ],
+      },
+    }),
+  );
+}
+
 type Shot = { name: string; run: (page: Page) => Promise<void> };
 
 const SHOTS: Shot[] = [
@@ -156,6 +179,42 @@ const SHOTS: Shot[] = [
     },
   },
   { name: "shopping", run: (page) => page.getByRole("button", { name: "Einkaufen", exact: true }).click() },
+  {
+    // A new name from the list's add bar opens the create sheet: recipe filled in by hand, list switch above "Speichern".
+    name: "dish-new",
+    run: async (page) => {
+      await page.getByLabel("Gericht oder Link hinzufügen").fill("Ofengemüse");
+      await page.getByRole("button", { name: /Ofengemüse“ neu anlegen/ }).click();
+      await page.getByText("Rezept (optional)").click();
+      await page.getByRole("button", { name: "Zutat hinzufügen" }).click();
+      await page.getByLabel("Menge").fill("500");
+      await page.getByLabel("Einheit").selectOption("g");
+      await page.getByLabel("Zutat", { exact: true }).fill("Kartoffel");
+    },
+  },
+  {
+    // From a link with recipe text and an AI task: "Zutaten erkennen" fills the editor with a draft to check.
+    name: "dish-new-ai",
+    run: async (page) => {
+      await fakeLinkWithRecipe(page);
+      await page.getByLabel("Gericht oder Link hinzufügen").fill("https://example.org/ofengemuese");
+      await page.getByRole("button", { name: "Link speichern und Gericht benennen" }).click();
+      await page.getByText("Rezept (optional)").click();
+      await page.getByRole("button", { name: /Zutaten erkennen/ }).click();
+      await page.getByText("Entwurf der KI").waitFor();
+    },
+  },
+  {
+    // Saved from the list without a list entry: an info says where the dish went.
+    name: "toast-info",
+    run: async (page) => {
+      await page.getByLabel("Gericht oder Link hinzufügen").fill("Ofengemüse");
+      await page.getByRole("button", { name: /Ofengemüse“ neu anlegen/ }).click();
+      await page.getByLabel("In diese Liste aufnehmen").uncheck();
+      await page.getByRole("button", { name: "Speichern" }).click();
+      await page.getByRole("status").waitFor();
+    },
+  },
   {
     // A failed save inside a long sheet: the toast stays visible at the top, the sheet stays open.
     name: "toast-error",

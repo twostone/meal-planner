@@ -97,7 +97,7 @@
   {/if}
 
   {#if app.dishes.length === 0}
-    <p class="empty">Der Katalog ist noch leer. Gerichte entstehen automatisch, wenn du sie in eine Liste einträgst.</p>
+    <p class="empty">Der Katalog ist noch leer. Lege mit „Neues Gericht“ eins an oder trage eins in eine Liste ein.</p>
   {:else if groups.length === 0}
     <p class="empty">Nichts gefunden.</p>
   {/if}

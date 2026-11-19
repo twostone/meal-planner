@@ -102,6 +102,27 @@ test("limits and units are validated, a rejected PUT changes nothing", async () 
   assert.equal((await call("GET", url)).json.ingredients.length, 60);
 });
 
+test("POST /api/dishes with a recipe stores both; an invalid recipe or a taken title stores nothing", async () => {
+  const { call } = setup();
+  const d = await call("POST", "/api/dishes", { title: "Suppe", recipe: recipe() });
+  assert.equal(d.status, 201);
+  assert.equal("servings" in d.json, false, "the catalog view of the dish stays without recipe columns");
+  const r = (await call("GET", `/api/dishes/${d.json.id}/recipe`)).json;
+  assert.deepEqual([r.servings, r.instructions, r.ingredients.map((i: any) => i.raw)], [4, "Erhitzen.\nServieren.", ["2 EL Olivenöl"]]);
+
+  const tooMany = recipe({ ingredients: Array.from({ length: 61 }, () => ing()) });
+  assert.equal((await call("POST", "/api/dishes", { title: "Eintopf", recipe: tooMany })).status, 400);
+  assert.equal((await call("POST", "/api/dishes", { title: "Eintopf", recipe: recipe({ ingredients: [ing({ unit: "Stück" })] }) })).status, 400);
+  assert.equal((await call("POST", "/api/dishes", { title: "suppe", recipe: recipe() })).status, 409);
+  assert.deepEqual((await call("GET", "/api/dishes")).json.map((x: any) => x.title), ["Suppe"]);
+
+  // a list entry takes no recipe: the field is ignored there
+  const plan = (await call("POST", "/api/plans", { start_date: "2026-01-03", end_date: "2026-01-09" })).json;
+  const e = await call("POST", `/api/plans/${plan.id}/entries`, { title: "Salat", recipe: recipe() });
+  assert.equal(e.status, 201);
+  assert.equal((await call("GET", `/api/dishes/${e.json.dish_id}/recipe`)).json.ingredients.length, 0);
+});
+
 test("unknown dish: 404; deleting a dish removes its ingredients", async () => {
   const { call, db } = setup();
   assert.equal((await call("GET", "/api/dishes/99/recipe")).status, 404);
