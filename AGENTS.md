@@ -75,7 +75,7 @@ npm run check                     # svelte-check Frontend
 npm run build                     # Frontend nach dist/ (wird vom Server ausgeliefert)
 DB_PATH=./data/dev.db PORT=8099 npm start
 npm run dev:web                   # Vite-Dev-Server, /api geht per Proxy an :8099
-npm run screenshot [-- list catalog dish recipe cook shopping] # nach npm run build: PNGs bei 390 px nach screenshots/
+npm run screenshot [-- list catalog dish recipe cook shopping toast-error] # nach npm run build: PNGs bei 390 px nach screenshots/
 ```
 
 Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (genau das prüft auch die CI). Bei Änderungen an
@@ -217,6 +217,12 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   mit dünnem Balken; „Liste | Katalog“ ist eine Tab-Leiste am unteren Rand (Schwebeknopf und Hinzufügen-Leiste sitzen darüber).
   Das Bearbeiten-Blatt ist in Gruppen gegliedert (Titel/Link, Rezept-Karte, Notizen, Kategorien), „Speichern“ klebt unten,
   Entfernen/Löschen stehen als leise Textknöpfe darunter. Im Kochmodus klebt „Fertig“ unten.
+  **Meldungen** sind ein Toast oben (`Toast.svelte`, `app.toast` mit `showError`/`showInfo`/`clearToast` in
+  `store.svelte.ts`, nie `app.toast` direkt setzen): Fehler bleiben bis „OK“, Infos verschwinden nach `INFO_TOAST_MS`.
+  Oben, weil unten Hinzufügen-Leiste, klebendes „Speichern“ und die Tastatur liegen. Ein offenes Blatt ist ein modales
+  `<dialog>` im Top Layer und würde den Toast der Shell verdecken, deshalb zeigt `Sheet.svelte` ihn selbst; die Shell
+  nur ohne Blatt und im Kochmodus (kein Dialog, Toast liegt per `z-index` darüber). Keine Popover-API (in der
+  Companion-App ungeprüft). Eingabeprobleme eines Formulars bleiben inline über „Speichern“.
 - **Zeilen in der Liste bleiben schlank** (auf 360 px Breite ist es sonst zu eng): Checkbox, Vorschaubild, Titel mit Notiz und
   Kategorien darunter, am Ende nur ein Link-Symbol ohne Domainnamen. Keine weiteren Buttons in der Zeile, Bearbeiten läuft
   über Tippen auf den Titel. Lange Wörter im Titel brechen um (`overflow-wrap: anywhere`).

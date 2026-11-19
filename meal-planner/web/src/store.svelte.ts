@@ -16,13 +16,16 @@ export type SheetState =
   | { kind: "shopping" }
   | { kind: "periods" };
 
+// A message at the top of the screen: errors stay until dismissed, infos go away on their own.
+export type Toast = { kind: "error" | "info"; text: string };
+
 export const app = $state({
   ready: false,
   view: "list" as "list" | "catalog",
   plans: [] as PlanSummary[],
   plan: null as PlanDetail | null,
   dishes: [] as Dish[],
-  error: "",
+  toast: null as Toast | null,
   sheet: { kind: "none" } as SheetState,
   // Home Assistant has a to-do list to send the shopping list to (checked once at start; decides the header button).
   shopping: false,
@@ -37,14 +40,29 @@ function pickInitial(plans: PlanSummary[]): number | null {
   return (upcoming ?? plans[0])?.id ?? null; // plans arrive newest-first
 }
 
+const INFO_TOAST_MS = 4000; // long enough to read one short sentence
+let infoTimer: ReturnType<typeof setTimeout> | undefined;
+
+function setToast(t: Toast | null) {
+  clearTimeout(infoTimer);
+  app.toast = t;
+}
+export const clearToast = () => setToast(null);
+export const showError = (e: unknown) => setToast({ kind: "error", text: e instanceof Error ? e.message : String(e) });
+// Every new toast clears the timer, so it only ever removes this info.
+export function showInfo(text: string) {
+  setToast({ kind: "info", text });
+  infoTimer = setTimeout(clearToast, INFO_TOAST_MS);
+}
+
 // Runs an action, shows its error message instead of throwing. Returns success.
 async function guard(fn: () => Promise<void>): Promise<boolean> {
   try {
-    app.error = "";
+    clearToast();
     await fn();
     return true;
   } catch (e) {
-    app.error = e instanceof Error ? e.message : String(e);
+    showError(e);
     return false;
   }
 }
@@ -95,7 +113,6 @@ export function closeSheet() {
     history.back(); // remove our entry; the resulting popstate finds nothing left to do
   }
 }
-export const dismissError = () => void (app.error = "");
 
 export function openDishSheet(opts: {
   dishId?: number | null;
@@ -105,7 +122,7 @@ export function openDishSheet(opts: {
   url?: string;
   tags?: string[];
 }) {
-  app.error = "";
+  clearToast();
   pushSheetEntry();
   app.sheet = {
     kind: "dish",
@@ -118,7 +135,7 @@ export function openDishSheet(opts: {
 
 // From the dish sheet: the history entry of the open sheet is reused.
 export function openRecipe(dishId: number) {
-  app.error = "";
+  clearToast();
   pushSheetEntry();
   app.sheet = { kind: "recipe", dishId };
 }
@@ -126,20 +143,20 @@ export function openRecipe(dishId: number) {
 // Cook mode is a full-screen view, not a dialog, but it owns a history entry like a sheet ("back" leaves it).
 export function openCook() {
   if (!app.plan) return;
-  app.error = "";
+  clearToast();
   pushSheetEntry();
   app.sheet = { kind: "cook" };
 }
 
 export function openShopping() {
   if (!app.plan) return;
-  app.error = "";
+  clearToast();
   pushSheetEntry();
   app.sheet = { kind: "shopping" };
 }
 
 export function openPeriods() {
-  app.error = "";
+  clearToast();
   pushSheetEntry();
   app.sheet = { kind: "periods" };
 }

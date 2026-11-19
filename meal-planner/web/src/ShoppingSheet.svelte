@@ -3,7 +3,7 @@
   import * as api from "./api";
   import Icon from "./Icon.svelte";
   import Sheet from "./Sheet.svelte";
-  import { app } from "./store.svelte";
+  import { app, showError } from "./store.svelte";
   import type { ShoppingList, TodoList } from "./types";
 
   const planId = app.plan!.id;
@@ -31,7 +31,7 @@
       lists = status.lists;
       listId = status.selected ?? status.lists[0]?.entity_id ?? null;
     } catch (e) {
-      app.error = e instanceof Error ? e.message : String(e);
+      showError(e);
     }
     await load();
   }
@@ -47,7 +47,7 @@
       chosen = r.entries.filter((e) => e.selected).map((e) => e.entry_id);
       ticked = r.items.filter((i) => !i.on_list).map((i) => i.key);
     } catch (e) {
-      if (seq === loadSeq) app.error = e instanceof Error ? e.message : String(e);
+      if (seq === loadSeq) showError(e);
     } finally {
       if (seq === loadSeq) loading = false;
     }
@@ -87,7 +87,7 @@
       // Sent items now show as "steht schon auf der Liste".
       await load();
     } catch (e) {
-      app.error = e instanceof Error ? e.message : String(e);
+      showError(e);
     } finally {
       sending = false;
     }

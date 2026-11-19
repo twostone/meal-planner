@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { app, closeSheet, dismissError } from "./store.svelte";
+  import { closeSheet } from "./store.svelte";
+  import Toast from "./Toast.svelte";
 
   let { title, children }: { title: string; children: Snippet } = $props();
   let dlg: HTMLDialogElement;
@@ -21,12 +22,7 @@
 >
   <div class="sheet">
     <h2 id="sheet-title">{title}</h2>
-    {#if app.error}
-      <div class="error" role="alert">
-        <span>{app.error}</span>
-        <button type="button" class="link-btn" onclick={dismissError}>OK</button>
-      </div>
-    {/if}
+    <Toast />
     {@render children()}
   </div>
 </dialog>

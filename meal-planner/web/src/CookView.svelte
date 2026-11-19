@@ -3,7 +3,7 @@
   import * as api from "./api";
   import Icon from "./Icon.svelte";
   import { ingredientExtra, ingredientText, stepLines } from "./recipe";
-  import { app, closeSheet, dismissError, finishEntry } from "./store.svelte";
+  import { app, closeSheet, finishEntry, showError } from "./store.svelte";
   import type { CookEntry, Ingredient } from "./types";
 
   const POLL_MS = 4000;
@@ -88,7 +88,7 @@
       await api.putCheck(e.entry_id, kind, idx, next);
     } catch (err) {
       checked[k] = !next;
-      app.error = err instanceof Error ? err.message : String(err);
+      showError(err);
     } finally {
       const n = (pending.get(k) ?? 1) - 1;
       if (n <= 0) pending.delete(k);
@@ -158,13 +158,6 @@
       {/if}
     {/if}
   </div>
-
-  {#if app.error}
-    <div class="error" role="alert">
-      <span>{app.error}</span>
-      <button type="button" class="link-btn" onclick={dismissError}>OK</button>
-    </div>
-  {/if}
 
   {#if !loaded}
     <p class="empty">Lade …</p>

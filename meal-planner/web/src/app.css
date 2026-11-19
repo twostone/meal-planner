@@ -136,20 +136,30 @@ main {
   padding: 8px 16px 96px;
 }
 
-.error {
-  margin: 12px 16px 0;
+/* Toast at the top: never hides the add bar, the sticky "Speichern" or a field the keyboard pushed up. Fixed to the
+   viewport, so inside a sheet it stays visible however far the sheet is scrolled. */
+.toast {
+  position: fixed;
+  top: calc(12px + env(safe-area-inset-top));
+  left: 16px;
+  right: 16px;
+  z-index: 30; /* above cook mode (20) */
+  max-width: 448px;
+  margin: 0 auto;
   padding: 4px 4px 4px 12px;
   background: #fce8e6;
   color: #7a1a14;
   border-radius: 12px;
+  box-shadow: 0 6px 18px rgba(30, 42, 34, 0.22);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   font-size: 14px;
 }
-.sheet .error {
-  margin: 0;
+.toast.info {
+  background: var(--green-soft);
+  color: var(--ink);
 }
 .link-btn {
   min-height: 44px;

@@ -4,7 +4,7 @@
   import Icon from "./Icon.svelte";
   import { fmtAmount, groupBySection, ingredientExtra, ingredientText, parseAmount, stepLines } from "./recipe";
   import Sheet from "./Sheet.svelte";
-  import { app, closeSheet } from "./store.svelte";
+  import { app, clearToast, closeSheet, showError } from "./store.svelte";
   import { UNITS, type AiStatus, type IngredientChange, type Recipe, type RecipeDraft } from "./types";
 
   let { dishId }: { dishId: number } = $props();
@@ -81,11 +81,11 @@
   async function recognize() {
     drafting = true;
     sourceHint = "";
-    app.error = "";
+    clearToast();
     try {
       startEdit(await api.draftRecipe(dishId));
     } catch (err) {
-      app.error = err instanceof Error ? err.message : String(err);
+      showError(err);
     } finally {
       drafting = false;
     }
@@ -94,13 +94,13 @@
   async function suggestUniform() {
     normalizing = true;
     sourceHint = "";
-    app.error = "";
+    clearToast();
     try {
       changes = (await api.normalizeRecipe(dishId)).changes;
       keptPos = changes.map((c) => c.pos);
       confirmApply = false;
     } catch (err) {
-      app.error = err instanceof Error ? err.message : String(err);
+      showError(err);
     } finally {
       normalizing = false;
     }
@@ -116,12 +116,12 @@
     if (!confirmApply) return void (confirmApply = true);
     confirmApply = false;
     busy = true;
-    app.error = "";
+    clearToast();
     try {
       recipe = await api.applyNormalizedRecipe(dishId, changes!.filter((c) => keptPos.includes(c.pos)));
       changes = null;
     } catch (err) {
-      app.error = err instanceof Error ? err.message : String(err);
+      showError(err);
     } finally {
       busy = false;
     }
@@ -144,13 +144,13 @@
     confirmReplace = false;
     fetching = true;
     sourceHint = "";
-    app.error = "";
+    clearToast();
     try {
       const r = await api.fetchSource(dishId);
       if ("reason" in r) sourceHint = "Auf der Seite wurde kein Rezept gefunden.";
       else recipe = r;
     } catch (err) {
-      app.error = err instanceof Error ? err.message : String(err);
+      showError(err);
     } finally {
       fetching = false;
     }
@@ -179,13 +179,13 @@
     }
     problem = "";
     busy = true;
-    app.error = "";
+    clearToast();
     try {
       recipe = await api.putRecipe(dishId, { servings: sv, instructions: instructions.trim() || null, ingredients });
       if (isBlank(recipe)) startEdit();
       else editing = false;
     } catch (err) {
-      app.error = err instanceof Error ? err.message : String(err);
+      showError(err);
     } finally {
       busy = false;
     }

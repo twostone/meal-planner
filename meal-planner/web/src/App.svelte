@@ -9,7 +9,8 @@
   import PeriodSheet from "./PeriodSheet.svelte";
   import RecipeSheet from "./RecipeSheet.svelte";
   import ShoppingSheet from "./ShoppingSheet.svelte";
-  import { app, dismissError, init, openCook, openPeriods, openShopping } from "./store.svelte";
+  import Toast from "./Toast.svelte";
+  import { app, init, openCook, openPeriods, openShopping } from "./store.svelte";
 
   onMount(() => {
     init();
@@ -44,13 +45,6 @@
     {/if}
   </header>
 
-  {#if app.error && app.sheet.kind === "none"}
-    <div class="error" role="alert">
-      <span>{app.error}</span>
-      <button type="button" class="link-btn" onclick={dismissError}>OK</button>
-    </div>
-  {/if}
-
   {#if !app.ready}
     <p class="empty">Lade …</p>
   {:else if app.view === "list"}
@@ -78,5 +72,9 @@
     <ShoppingSheet />
   {:else if app.sheet.kind === "periods"}
     <PeriodSheet />
+  {/if}
+  <!-- Sheets show the toast themselves; cook mode is no dialog, so the shell's toast lies above it. -->
+  {#if app.sheet.kind === "none" || app.sheet.kind === "cook"}
+    <Toast />
   {/if}
 </div>
