@@ -156,6 +156,17 @@ const SHOTS: Shot[] = [
     },
   },
   { name: "shopping", run: (page) => page.getByRole("button", { name: "Einkaufen", exact: true }).click() },
+  {
+    // A failed save inside a long sheet: the toast stays visible at the top, the sheet stays open.
+    name: "toast-error",
+    run: async (page) => {
+      await page.getByRole("button", { name: "Katalog" }).click();
+      await page.getByRole("button", { name: "Neues Gericht" }).click();
+      await page.getByLabel("Titel").fill("Linsen-Dal");
+      await page.getByRole("button", { name: "Speichern" }).click();
+      await page.getByRole("alert").waitFor();
+    },
+  },
 ];
 
 async function main(): Promise<void> {
