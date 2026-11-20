@@ -3,6 +3,7 @@
   import * as api from "./api";
   import Icon from "./Icon.svelte";
   import { showError } from "./store.svelte";
+  import { groupByInitial } from "./util";
   import type { CatalogIngredient } from "./types";
 
   let ingredients = $state<CatalogIngredient[]>([]);
@@ -33,17 +34,8 @@
     const needle = keyOf(s);
     const shown = ingredients
       .filter((i) => !needle || i.key.includes(needle))
-      .filter((i) => !pantryOnly || i.pantry)
-      .sort((a, b) => a.name.localeCompare(b.name, "de"));
-    const out: { letter: string; items: CatalogIngredient[] }[] = [];
-    for (const i of shown) {
-      const first = i.name.charAt(0).toLocaleUpperCase("de");
-      const letter = /\p{L}/u.test(first) ? first : "#";
-      const last = out[out.length - 1];
-      if (last?.letter === letter) last.items.push(i);
-      else out.push({ letter, items: [i] });
-    }
-    return out;
+      .filter((i) => !pantryOnly || i.pantry);
+    return groupByInitial(shown, (i) => i.name);
   });
 
   function replace(updated: CatalogIngredient) {
