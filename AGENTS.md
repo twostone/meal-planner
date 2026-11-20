@@ -267,6 +267,9 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   die aktive. Snacks sind normale Einträge (Kategorie „Snack“), keine eigene Art. Umbenennen/Zusammenführen von
   Kategorien gibt es bewusst nicht.
 - SQLite `NOCASE` gilt nur für ASCII. Für die Anzeige-Sortierung (Umlaute) wird im Frontend `localeCompare("de")` genutzt.
+  A–Z-Listen (Katalog, Zutaten) gruppieren über `groupByInitial` (`web/src/util.ts`): Umlaute zählen zum Grundbuchstaben
+  („Öl“ unter O). Nach dem rohen ersten Zeichen ergab „Obst, Öl, Orange“ die Gruppen O, Ö, O, also doppelte Schlüssel im
+  `{#each}`, und Svelte bricht im Production-Build das Rendern ab (Liste leer, kein Toast; v0.18.1).
 - `createDish` und `updateDish` sind je eine Transaktion. `addEntry` legt Gerichte über `insertDish` (ohne eigene
   Transaktion) an, weil es selbst in einer läuft: SQLite kennt keine verschachtelten `BEGIN`.
 - Optionale Textfelder in der API: `""` und `null` löschen das Feld (`optional()` in `app.ts`, der Zweig für `""` muss

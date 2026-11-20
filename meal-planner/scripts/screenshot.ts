@@ -64,6 +64,10 @@ async function seed(base: string): Promise<{ pastaDishId: number }> {
       { section: null, amount: 3, amount_max: null, unit: null, name: "Ei", plural: "Eier", note: null, prep: "zimmerwarm" },
       { section: null, amount: null, amount_max: null, unit: null, name: "Salz", note: null },
       { section: null, amount: null, amount_max: null, unit: null, name: "Pfeffer", note: "schwarz" },
+      // An umlaut sorts between the base letters (Olivenöl, Öl, Oregano): the list must still show one group O.
+      { section: null, amount: 1, amount_max: null, unit: "EL", name: "Olivenöl", note: null },
+      { section: null, amount: 1, amount_max: null, unit: "EL", name: "Öl", note: null },
+      { section: null, amount: null, amount_max: null, unit: null, name: "Oregano", note: null },
     ],
   });
   // The ingredient catalog: salt is always at home, sugar was added by hand.
