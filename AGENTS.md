@@ -33,6 +33,8 @@ meal-planner/            das Add-on (Docker-Build-Kontext)
   src/                   Backend: Hono + node:sqlite
     db.ts, repo.ts         Datenbank (Migrationen) und Zugriff
     app.ts, server.ts      API, Ingress-Sperre, Start
+    static.ts              Frontend aus dist/: index.html mit `no-cache`, gehashte assets/* `immutable` (sonst hält der
+                           Browser nach einem Update die alte index.html und lädt nicht mehr)
     net-guard.ts           Adress-Sperre (SSRF)
     safe-fetch.ts          der einzige Weg, fremde URLs abzurufen
     preview.ts             Titel und Bild aus HTML (og:-Tags, schema.org-Rezept)
