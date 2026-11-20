@@ -751,6 +751,30 @@ details.more[open] {
   background: var(--bg);
   border-top: 1px solid var(--line);
 }
+/* "In diese Liste aufnehmen" above "Speichern" of the create sheet: the whole row is the touch target. */
+.check-row {
+  min-height: 44px;
+  margin-bottom: 6px;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.check-row input {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--green);
+}
+.check-row span {
+  color: var(--ink);
+}
+.check-row small {
+  font-weight: 500;
+  color: var(--muted);
+}
 .danger-zone {
   display: flex;
   flex-wrap: wrap;

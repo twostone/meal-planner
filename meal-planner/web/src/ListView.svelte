@@ -2,7 +2,6 @@
   import { imageSrc } from "./api";
   import Icon from "./Icon.svelte";
   import {
-    addByTitle,
     addDishToPlan,
     app,
     openDishSheet,
@@ -33,15 +32,18 @@
     if (await addDishToPlan(id)) q = "";
   }
 
+  // New dishes (typed or from a link) go through the sheet, where the recipe can be filled in and the list entry
+  // switched off. A dish already in the catalog goes straight into the list.
+  function createNew() {
+    openDishSheet(asLink ? { addToPlan: true, url: query } : { addToPlan: true, title: query });
+    q = "";
+  }
+
   async function submit(e: SubmitEvent) {
     e.preventDefault();
     if (!query || exactInPlan) return;
-    if (asLink) {
-      openDishSheet({ addToPlan: true, url: query });
-      q = "";
-    } else if (await addByTitle(query)) {
-      q = "";
-    }
+    if (exact && !asLink) await pickDish(exact.id);
+    else createNew();
   }
 </script>
 
@@ -124,7 +126,7 @@
     {#if query}
       <div class="suggest">
         {#if asLink}
-          <button type="button" class="opt" onclick={() => { openDishSheet({ addToPlan: true, url: query }); q = ""; }}>
+          <button type="button" class="opt" onclick={createNew}>
             <Icon name="link" />
             <span>Link speichern und Gericht benennen</span>
           </button>
@@ -142,9 +144,9 @@
           {#if exactInPlan}
             <p class="hint">„{exact?.title}“ steht schon in der Liste.</p>
           {:else if !exact}
-            <button type="button" class="opt new" onclick={() => addByTitle(query).then((ok) => ok && (q = ""))}>
+            <button type="button" class="opt new" onclick={createNew}>
               <Icon name="plus" />
-              <span>„{query}“ neu anlegen</span>
+              <span>„{query}“ neu anlegen …</span>
             </button>
           {/if}
         {/if}

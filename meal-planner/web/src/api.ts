@@ -11,6 +11,7 @@ import type {
   Preview,
   Recipe,
   RecipeDraft,
+  RecipeInput,
   SendResult,
   ShoppingList,
   ShoppingStatus,
@@ -19,7 +20,7 @@ import type {
 // All URLs are resolved against the document URL (never "/api/..."), so the app
 // keeps working under the HA ingress prefix.
 const MESSAGES: Record<string, string> = {
-  "dish title exists": "Ein Gericht mit diesem Titel gibt es schon.",
+  "dish title exists": "Ein Gericht mit diesem Titel gibt es schon. Bitte anderen Titel wählen.",
   "dish already in plan": "Steht schon in der Liste.",
   "dish is used in a plan": "Das Gericht steht noch in einer Liste und kann nicht gelöscht werden.",
   "plan overlaps": "Der Zeitraum überschneidet sich mit einer anderen Liste.",
@@ -65,7 +66,7 @@ export const deleteDish = (id: number) => request<void>("DELETE", `api/dishes/${
 
 export const getRecipe = (dishId: number) => request<Recipe>("GET", `api/dishes/${dishId}/recipe`);
 // Replaces the whole recipe. An empty one (no servings, steps or ingredients) removes it.
-export const putRecipe = (dishId: number, r: Pick<Recipe, "servings" | "instructions"> & { ingredients: (Omit<Recipe["ingredients"][number], "raw"> & { raw?: string | null })[] }) =>
+export const putRecipe = (dishId: number, r: RecipeInput) =>
   request<Recipe>("PUT", `api/dishes/${dishId}/recipe`, r);
 
 // "Get the recipe from the link": the server fetches the dish's link again. Nothing found -> { reason }.
@@ -75,6 +76,8 @@ export const fetchSource = (dishId: number) => request<Recipe | { reason: string
 export const getRecipeStatus = () => request<AiStatus>("GET", "api/recipe/status");
 // Splits the saved original text into a draft (nothing is stored). Takes a few seconds.
 export const draftRecipe = (dishId: number) => request<RecipeDraft>("POST", `api/dishes/${dishId}/recipe/draft`);
+// A draft from the link's text before the dish exists (create sheet). Stores nothing.
+export const draftRecipeFromText = (text: string) => request<RecipeDraft>("POST", "api/recipe/draft", { text });
 export const normalizeRecipe = (dishId: number) =>
   request<{ changes: IngredientChange[] }>("POST", `api/dishes/${dishId}/recipe/normalize`);
 export const applyNormalizedRecipe = (dishId: number, changes: IngredientChange[]) =>

@@ -264,6 +264,32 @@ test("POST …/recipe/draft: no source text 400, unknown dish 404, no AI configu
   assert.equal((await none("POST", `/api/dishes/${nid}/recipe/draft`)).status, 404);
 });
 
+test("POST /api/recipe/draft: a draft from text without a dish; empty 400, failures 502, parallel limit 429, no AI 404", async () => {
+  const ok = setup(fakeAi(async () => ({ servings: null, servings_quote: null, ingredients: JSON.stringify([{ section: null, amount: 2, amount_max: null, unit: "EL", name: "Öl", note: null, raw: "2 EL Öl" }]), instructions: "Braten" })));
+  const r = await ok("POST", "/api/recipe/draft", { text: "2 EL Öl\nBraten" });
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.json.ingredients.map((i: any) => [i.name, i.verified]), [["Öl", true]]);
+  assert.deepEqual((await ok("GET", "/api/dishes")).json, [], "nothing stored");
+  assert.equal((await ok("POST", "/api/recipe/draft", { text: "  " })).status, 400);
+  assert.equal((await ok("POST", "/api/recipe/draft", { text: "x".repeat(10001) })).status, 400);
+
+  const failing = setup(fakeAi(async () => { throw new AiError("timeout"); }));
+  const f = await failing("POST", "/api/recipe/draft", { text: "Text" });
+  assert.deepEqual([f.status, f.json.reason], [502, "timeout"]);
+
+  // the limit is shared with the route for a saved dish
+  let release!: () => void;
+  const gate = new Promise<void>((done) => (release = done));
+  const slow = setup(fakeAi(async () => (await gate, { ingredients: "[]" })));
+  const id = (await slow("POST", "/api/dishes", { title: "A", source_text: "Text" })).json.id;
+  const pending = [slow("POST", `/api/dishes/${id}/recipe/draft`), slow("POST", "/api/recipe/draft", { text: "1" })];
+  assert.equal((await slow("POST", "/api/recipe/draft", { text: "2" })).status, 429);
+  release();
+  assert.deepEqual((await Promise.all(pending)).map((x) => x.status), [200, 200]);
+
+  assert.equal((await setup()("POST", "/api/recipe/draft", { text: "Text" })).status, 404);
+});
+
 // --- title suggestions ---
 
 test("languageName: language code to German name, unknown or odd codes fall back to German", () => {

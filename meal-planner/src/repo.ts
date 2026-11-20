@@ -195,6 +195,20 @@ export function createRepo(db: DatabaseSync) {
       .filter(Boolean)
       .join(" ");
 
+  // No transaction of its own: also used inside createDish's.
+  function writeRecipe(dishId: number, recipe: RecipeInput): void {
+    // The ticks of cook mode point at ingredient/step numbers, which change with the recipe.
+    db.prepare("DELETE FROM cook_check WHERE entry_id IN (SELECT id FROM plan_entry WHERE dish_id = ?)").run(dishId);
+    db.prepare("UPDATE dish SET servings = ?, instructions = ? WHERE id = ?").run(recipe.servings, recipe.instructions, dishId);
+    db.prepare("DELETE FROM dish_ingredient WHERE dish_id = ?").run(dishId);
+    const ins = db.prepare(
+      "INSERT INTO dish_ingredient (dish_id, pos, section, amount, amount_max, unit, name, plural, note, prep, raw) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    );
+    recipe.ingredients.forEach((i, pos) =>
+      ins.run(dishId, pos, i.section, i.amount, i.amount_max, i.unit, i.name, i.plural ?? null, i.note, i.prep ?? null, i.raw?.trim() || rawLine(i)),
+    );
+  }
+
   const self = {
     getRecipe(dishId: number): Recipe {
       const d = one<{ servings: number | null; instructions: string | null; source_text: string | null; source_truncated: number }>(
@@ -227,16 +241,7 @@ export function createRepo(db: DatabaseSync) {
     setRecipe(dishId: number, recipe: RecipeInput): Recipe {
       return transaction(db, () => {
         getDish(dishId);
-        // The ticks of cook mode point at ingredient/step numbers, which change with the recipe.
-        db.prepare("DELETE FROM cook_check WHERE entry_id IN (SELECT id FROM plan_entry WHERE dish_id = ?)").run(dishId);
-        db.prepare("UPDATE dish SET servings = ?, instructions = ? WHERE id = ?").run(recipe.servings, recipe.instructions, dishId);
-        db.prepare("DELETE FROM dish_ingredient WHERE dish_id = ?").run(dishId);
-        const ins = db.prepare(
-          "INSERT INTO dish_ingredient (dish_id, pos, section, amount, amount_max, unit, name, plural, note, prep, raw) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        );
-        recipe.ingredients.forEach((i, pos) =>
-          ins.run(dishId, pos, i.section, i.amount, i.amount_max, i.unit, i.name, i.plural ?? null, i.note, i.prep ?? null, i.raw?.trim() || rawLine(i)),
-        );
+        writeRecipe(dishId, recipe);
         return self.getRecipe(dishId);
       });
     },
@@ -308,8 +313,13 @@ export function createRepo(db: DatabaseSync) {
     getDish,
     getEntry,
 
-    createDish(input: DishInput): Dish {
-      return transaction(db, () => insertDish(input));
+    // With a recipe both are written in one transaction: a recipe that fails leaves no dish behind.
+    createDish(input: DishInput, recipe?: RecipeInput): Dish {
+      return transaction(db, () => {
+        const dish = insertDish(input);
+        if (recipe) writeRecipe(dish.id, recipe);
+        return dish;
+      });
     },
 
     updateDish(id: number, patch: Partial<DishInput>): Dish {

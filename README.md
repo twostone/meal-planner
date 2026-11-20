@@ -13,7 +13,9 @@ dieselbe Liste.
 ## Funktionen
 
 - Eine gemeinsame Liste pro Zeitraum (frei wählbar, z. B. Samstag bis Freitag). Gerichte lassen sich abhaken.
-- Ein Katalog aller bisherigen Gerichte mit Rezept-Link. Beim Eintragen schlägt die App passende Gerichte vor.
+- Ein Katalog aller bisherigen Gerichte mit Rezept-Link. Beim Eintragen schlägt die App passende Gerichte vor. Ein neues
+  Gericht (Name oder Link) öffnet einen Dialog, in dem man gleich Zutaten und Zubereitung eintragen kann; ein Schalter
+  entscheidet, ob es auch in die aktuelle Liste kommt oder nur in den Katalog.
 - Kategorien: Gerichte lassen sich frei kategorisieren (z. B. Snack, Suppe, Vegan), mehrere pro Gericht. Im Katalog
   filtern Chips nach einer Kategorie.
 - Aus einem eingefügten Link (Rezeptseite, Instagram, …) holt der Server Titel und Vorschaubild. Klappt das nicht,

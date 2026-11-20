@@ -1,9 +1,12 @@
 <script lang="ts">
   import { onDestroy, onMount, untrack } from "svelte";
   import * as api from "./api";
+  import { fmtRange } from "./dates";
   import Icon from "./Icon.svelte";
+  import { collectRecipe, formFrom, hasInput, isEmptyInput } from "./recipe-form";
+  import RecipeEditor from "./RecipeEditor.svelte";
   import Sheet from "./Sheet.svelte";
-  import { app, deleteDish, openRecipe, removeEntry, saveDish, type SheetState } from "./store.svelte";
+  import { app, clearToast, deleteDish, openRecipe, removeEntry, saveDish, showError, type SheetState } from "./store.svelte";
   import { shrinkImage } from "./image-resize";
   import type { Preview } from "./types";
   import { isUrl, sameTag } from "./util";
@@ -47,9 +50,10 @@
   // Without an AI task in Home Assistant there are no placeholders that would only vanish again.
   const aiStatus = api.getRecipeStatus().catch(() => null);
   const aiReady = aiStatus.then((s) => !!s?.ai);
-  // "Bild erzeugen" only when an AI task can generate images.
+  // "Bild erzeugen" only when an AI task can generate images; "Zutaten erkennen" whenever there is an AI task.
   let imageAi = $state(false);
-  void aiStatus.then((s) => (imageAi = !!s?.ai && !!s.image));
+  let recipeAi = $state(false);
+  void aiStatus.then((s) => ((imageAi = !!s?.ai && !!s.image), (recipeAi = !!s?.ai)));
   // Own photo or AI image: one at a time. A generated image replaces an existing one only after a second tap.
   let imageBusy = $state<"upload" | "generate" | null>(null);
   let confirmReplace = $state(false);
@@ -59,6 +63,32 @@
   let sourceTruncated = $state(false);
 
   const creating = start.dishId === null;
+
+  // Create mode only: the recipe goes along with the new dish, and a switch decides about the list entry.
+  let recipeForm = $state(formFrom(null));
+  let recipeOpen = $state(false);
+  let drafting = $state(false);
+  let confirmDraft = $state(false); // a draft replaces typed ingredients only after a second tap
+  let addToList = $state(start.addToPlan);
+  const planLabel = $derived(app.plan ? (app.plan.title ?? fmtRange(app.plan.start_date, app.plan.end_date)) : "");
+
+  async function recognize() {
+    if (!sourceText || drafting) return;
+    if (hasInput(recipeForm) && !confirmDraft) return void (confirmDraft = true);
+    confirmDraft = false;
+    drafting = true;
+    clearToast();
+    try {
+      const draft = await api.draftRecipeFromText(sourceText);
+      if (!alive) return;
+      recipeForm = formFrom(draft, true);
+      recipeOpen = true;
+    } catch (err) {
+      if (alive) showError(err);
+    } finally {
+      if (alive) drafting = false;
+    }
+  }
 
   // All tags in use (plus the ones picked here), each once, sorted.
   const knownTags = $derived.by(() => {
@@ -190,6 +220,12 @@
         : "Bitte einen Titel eingeben.");
     }
     if (u && !isUrl(u)) return void (problem = "Der Link muss mit http:// oder https:// beginnen.");
+    const checked = creating ? collectRecipe(recipeForm) : null;
+    if (checked && "problem" in checked) {
+      recipeOpen = true;
+      return void (problem = checked.problem);
+    }
+    const recipe = checked && !isEmptyInput(checked.recipe) ? checked.recipe : undefined;
     addNewTag(); // a tag typed but not confirmed yet must not get lost
     problem = "";
     busy = true;
@@ -203,8 +239,9 @@
         image,
         tags,
         ...(creating && u && sourceText ? { source_text: sourceText, source_truncated: sourceTruncated } : {}),
+        ...(recipe ? { recipe } : {}),
       },
-      start.addToPlan,
+      creating && addToList,
       start.entryId !== null && listNote !== start.entryNote.trim() ? { id: start.entryId, note: listNote || null } : undefined,
     );
     busy = false;
@@ -287,7 +324,19 @@
       </p>
     </section>
 
-    {#if start.dishId !== null}
+    {#if creating}
+      <details class="form-group more" bind:open={recipeOpen}>
+        <summary>Rezept (optional)</summary>
+        {#if sourceText && recipeAi}
+          <button type="button" class="btn primary wide" disabled={drafting} onclick={recognize}>
+            {drafting ? "Erkenne Zutaten …" : confirmDraft ? "Eingaben ersetzen?" : "Zutaten erkennen"}
+            <small class="ai-tag">KI</small>
+          </button>
+          <small class="field-hint">Der Text vom Link wird an den KI-Dienst von Home Assistant geschickt. Du prüfst das Ergebnis, bevor es gespeichert wird.</small>
+        {/if}
+        <RecipeEditor bind:form={recipeForm} {sourceText} />
+      </details>
+    {:else}
       <button type="button" class="row-card" onclick={() => openRecipe(start.dishId!)}>
         <span>Rezept</span>
         <small>Zutaten und Zubereitung</small>
@@ -349,7 +398,13 @@
     {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
 
     <div class="sticky-actions">
-      <button type="submit" class="btn primary wide" disabled={busy}>Speichern</button>
+      {#if creating && app.plan}
+        <label class="check-row">
+          <input type="checkbox" bind:checked={addToList} />
+          <span>In diese Liste aufnehmen <small>{planLabel}</small></span>
+        </label>
+      {/if}
+      <button type="submit" class="btn primary wide" disabled={busy || drafting}>Speichern</button>
     </div>
 
     {#if start.entryId !== null || start.dishId !== null}

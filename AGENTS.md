@@ -56,6 +56,8 @@ meal-planner/            das Add-on (Docker-Build-Kontext)
     auth/                   ha-token.ts (HA-Token per WebSocket auth/current_user prüfen), ha-url.ts (externe URL von HA),
                             resource-metadata.ts (RFC 9728); alles wie in garmin-insights
   web/                   Frontend: Svelte 5 + Vite (Runes, TypeScript)
+    src/RecipeEditor.svelte, src/recipe-form.ts   Rezept-Editor (nur Felder) und seine Prüfung, genutzt von
+                           RecipeSheet und vom Anlegen im DishSheet
     public/favicon.svg     Favicon der App, Vorlage für icon.png
   scripts/screenshot.ts  Screenshot-Werkzeug (playwright-core + installiertes Google Chrome, Beispieldaten, Wegwerf-DB)
   test/                  Tests (node:test)
@@ -75,7 +77,7 @@ npm run check                     # svelte-check Frontend
 npm run build                     # Frontend nach dist/ (wird vom Server ausgeliefert)
 DB_PATH=./data/dev.db PORT=8099 npm start
 npm run dev:web                   # Vite-Dev-Server, /api geht per Proxy an :8099
-npm run screenshot [-- list catalog dish recipe cook shopping toast-error] # nach npm run build: PNGs bei 390 px nach screenshots/
+npm run screenshot [-- list catalog dish dish-new recipe cook shopping toast-error] # nach npm run build: PNGs bei 390 px nach screenshots/
 ```
 
 Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (genau das prüft auch die CI). Bei Änderungen an
@@ -106,6 +108,16 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   immer erhalten, bei Handeingabe wird sie aus Menge/Einheit/Name gebildet. Die Rezeptspalten kommen nie mit dem Katalog
   (`DISH_COLS` in `repo.ts`, kein `SELECT *` auf `dish`). Im UI öffnet „Rezept“ im Bearbeiten-Blatt ein eigenes Blatt
   (Ansicht und Editor in `RecipeSheet.svelte`).
+  **Rezept beim Anlegen:** `POST /api/dishes` nimmt optional `recipe` (`recipeBody`, nur dort: nicht in `PATCH` und nicht
+  beim Listeneintrag, dort fällt das Feld weg). `createDish` schreibt Gericht und Rezept in **einer** Transaktion
+  (`writeRecipe` ohne eigene Transaktion, wie `insertDish`): ein ungültiges Rezept oder ein vergebener Titel hinterlässt
+  nichts. Im Anlegen-Blatt steht der Editor (`RecipeEditor.svelte`, Felder ohne `<form>`; Prüfung in `collectRecipe`,
+  `recipe-form.ts`, dieselbe wie im Rezept-Blatt) eingeklappt unter „Rezept (optional)“; ein Eingabefehler blockiert das
+  Speichern und klappt ihn auf. Gespeicherte Gerichte bearbeitet man weiter nur über das Rezept-Blatt.
+  **Entwurf ohne Gericht:** `POST /api/recipe/draft {text}` (1–10 000 Zeichen) macht dasselbe wie die Route am Gericht, aber
+  aus dem Text der Vorschau (`sourceText`), bevor es ein Gericht gibt. Beide Routen teilen Zähler und Fehlerbehandlung
+  (`draft` in `app.ts`). Im Anlegen-Blatt nur auf Knopfdruck „Zutaten erkennen“ (nie automatisch nach der Vorschau);
+  vorhandene Eingaben ersetzt ein Entwurf erst nach zweitem Tippen.
   **Originaltext (Stufe 2):** `dish.source_text` (höchstens 10 000 Zeichen) und `source_truncated` sichern das Rezept so, wie es
   am Link steht, ohne LLM und ohne Deutung. Die Vorschau (`extractSource` in `preview.ts`, `sourceText`/`sourceTruncated` in
   `POST /api/preview`) liefert schema.org-Zutatenzeilen, Leerzeile, Schritte, sonst die Instagram-Caption. Ein neues Gericht
@@ -205,7 +217,12 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   höchstens ein Senden gleichzeitig (sonst 429). Es wird nicht gespeichert, was gesendet wurde, und kein HA-Event gefeuert.
   Fehler-Bodies von `add_item` kommen nicht ins Log (Bring wiederholt darin den Artikelnamen).
 - Ein Gericht kann pro Zeitraum nur einmal vorkommen. Der Titel ist im Katalog eindeutig (ohne Groß-/Kleinschreibung).
-  Ein Eintrag per Titel legt das Gericht an oder verwendet ein vorhandenes wieder. Löschen eines Gerichts, das noch
+  Ein Eintrag per Titel (API) legt das Gericht an oder verwendet ein vorhandenes wieder.
+- **Neues Gericht anlegen:** In der Hinzufügen-Leiste der Liste öffnen ein neuer Name („„X“ neu anlegen …“, Enter) und ein
+  Link das Anlegen-Blatt; nur ein exakter Katalogtreffer (Enter) oder ein Vorschlag kommt direkt in die Liste. Im Blatt
+  entscheidet der Schalter „In diese Liste aufnehmen“ (über „Speichern“, nur wenn eine Liste gewählt ist), Startwert an
+  aus der Liste, aus aus dem Katalog („Neues Gericht“). Ziel ist die gewählte Liste. Ohne Listeneintrag zeigt die
+  Listen-Ansicht danach die Info „„X“ im Katalog gespeichert“. Löschen eines Gerichts, das noch
   in einer Liste steht, ist absichtlich gesperrt (409).
 - **Zwei Notizen, bewusst getrennt:** `dish.note` gilt für das Gericht überall (im Bearbeiten-Blatt, dort „Notiz zum
   Gericht (gilt überall)“), `plan_entry.note` nur für dieses Gericht in genau dieser Liste. Die Listen-Notiz hat ein eigenes
