@@ -158,6 +158,32 @@ export function registerTools(server: McpServer, deps: McpDeps, user: HaUser | n
   );
 
   server.registerTool(
+    "list_ingredients",
+    {
+      title: "List ingredients",
+      description:
+        "The ingredient catalog of the household: every ingredient name used in a recipe or added by hand, sorted by name. pantry = always at home, the shopping list leaves it unticked. Read only: the catalog is edited in the app.",
+      inputSchema: z.object({ pantry_only: z.boolean().default(false).describe("only ingredients that are always at home") }),
+      outputSchema: z.object({
+        ingredients: z.array(
+          z.object({
+            name: z.string(),
+            pantry: z.boolean().describe("always at home"),
+            dishes: z.number().describe("number of dishes whose recipe uses it; 0 = added by hand or no longer used"),
+          }),
+        ),
+      }),
+      annotations: readOnly,
+    },
+    async ({ pantry_only }) =>
+      guarded(() => {
+        const all = repo.listIngredients();
+        const found = pantry_only ? all.filter((i) => i.pantry) : all;
+        return result({ ingredients: found.map(({ name, pantry, dishes }) => ({ name, pantry, dishes })) });
+      }),
+  );
+
+  server.registerTool(
     "get_plan",
     {
       title: "Get plan",

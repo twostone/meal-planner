@@ -33,7 +33,7 @@ const call = async (c: Client, name: string, args: Record<string, unknown> = {})
 // Events are fired without waiting; let them land.
 const settle = () => new Promise((r) => setImmediate(r));
 
-const READ_TOOLS = ["get_plan", "get_recipe", "list_plans", "search_dishes"];
+const READ_TOOLS = ["get_plan", "get_recipe", "list_ingredients", "list_plans", "search_dishes"];
 const WRITE_TOOLS = ["add_to_plan", "create_dish", "create_plan", "remove_from_plan", "set_recipe", "update_dish", "update_plan", "update_plan_entry"];
 
 test("tools: curated list, described inputs, structured outputs, read-only hints", async () => {
@@ -229,4 +229,21 @@ test("listener: an MCP client with a token works end to end and acts as the toke
   await settle();
   assert.deepEqual(events[0]!.user, { id: "u1", name: null, display_name: "Anna" });
   await client.close();
+});
+
+test("list_ingredients: the catalog with pantry flag and dish count, optionally only the pantry", async () => {
+  const { repo, deps } = setup();
+  const dish = repo.createDish({ title: "Suppe" });
+  repo.setRecipe(dish.id, { servings: null, instructions: null, ingredients: [{ section: null, amount: null, amount_max: null, unit: null, name: "Salz", note: null }] });
+  repo.createIngredient("Zucker");
+  repo.setIngredient("salz", { pantry: true });
+  const c = await connect(deps);
+  const all = await call(c, "list_ingredients");
+  assert.deepEqual(all.structuredContent, {
+    ingredients: [
+      { name: "Salz", pantry: true, dishes: 1 },
+      { name: "Zucker", pantry: false, dishes: 0 },
+    ],
+  });
+  assert.deepEqual((await call(c, "list_ingredients", { pantry_only: true })).structuredContent, { ingredients: [{ name: "Salz", pantry: true, dishes: 1 }] });
 });

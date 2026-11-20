@@ -1,6 +1,6 @@
 // Dev tool: starts the server on a throw-away database with sample data and saves phone-sized screenshots of the
 // built app to screenshots/<name>.png, so a change can be looked at (by a person or by a coding agent).
-// Usage (from meal-planner/, after `npm run build`):  npm run screenshot [-- list catalog dish recipe cook shopping]
+// Usage (from meal-planner/, after `npm run build`):  npm run screenshot [-- list catalog ingredients dish recipe cook shopping]
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdirSync, mkdtempSync, existsSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
@@ -62,8 +62,13 @@ async function seed(base: string): Promise<{ pastaDishId: number }> {
       { section: null, amount: 400, amount_max: null, unit: "g", name: "Spaghetti", note: null },
       { section: null, amount: 150, amount_max: null, unit: "g", name: "Speck", note: "durchwachsen", prep: "gewürfelt" },
       { section: null, amount: 3, amount_max: null, unit: null, name: "Ei", plural: "Eier", note: null, prep: "zimmerwarm" },
+      { section: null, amount: null, amount_max: null, unit: null, name: "Salz", note: null },
+      { section: null, amount: null, amount_max: null, unit: null, name: "Pfeffer", note: "schwarz" },
     ],
   });
+  // The ingredient catalog: salt is always at home, sugar was added by hand.
+  await call(base, "PATCH", "ingredients", { key: "salz", pantry: true });
+  await call(base, "POST", "ingredients", { name: "Zucker" });
   return { pastaDishId };
 }
 
@@ -87,11 +92,13 @@ async function fakeShopping(page: Page): Promise<void> {
           { entry_id: 3, title: "Linsen-Dal", done: false, selected: true, has_recipe: false },
         ],
         items: [
-          { key: "eier\0", name: "Eier", note: null, spec: "3", sources: ["Spaghetti Carbonara"], on_list: true },
-          { key: "nüsse\0macadamia", name: "Nüsse", note: "Macadamia", spec: "Macadamia, 50 g", sources: ["Linsen-Dal"], on_list: false },
-          { key: "nüsse\0walnuss", name: "Nüsse", note: "Walnuss", spec: "Walnuss, 50 g", sources: ["Linsen-Dal"], on_list: false },
-          { key: "parmesan\0", name: "Parmesan", note: null, spec: "80 g", sources: ["Spaghetti Carbonara"], on_list: false },
-          { key: "spaghetti\0", name: "Spaghetti", note: null, spec: "400 g", sources: ["Spaghetti Carbonara"], on_list: false },
+          { key: "eier\0", name: "Eier", note: null, spec: "3", sources: ["Spaghetti Carbonara"], on_list: true, pantry: false },
+          { key: "nüsse\0macadamia", name: "Nüsse", note: "Macadamia", spec: "Macadamia, 50 g", sources: ["Linsen-Dal"], on_list: false, pantry: false },
+          { key: "nüsse\0walnuss", name: "Nüsse", note: "Walnuss", spec: "Walnuss, 50 g", sources: ["Linsen-Dal"], on_list: false, pantry: false },
+          { key: "parmesan\0", name: "Parmesan", note: null, spec: "80 g", sources: ["Spaghetti Carbonara"], on_list: false, pantry: false },
+          { key: "spaghetti\0", name: "Spaghetti", note: null, spec: "400 g", sources: ["Spaghetti Carbonara"], on_list: false, pantry: false },
+          { key: "pfeffer\0schwarz", name: "Pfeffer", note: "schwarz", spec: "schwarz", sources: ["Spaghetti Carbonara"], on_list: false, pantry: true },
+          { key: "salz\0", name: "Salz", note: null, spec: null, sources: ["Spaghetti Carbonara"], on_list: true, pantry: true },
         ],
         list_error: false,
       },
@@ -142,6 +149,16 @@ type Shot = { name: string; run: (page: Page) => Promise<void> };
 const SHOTS: Shot[] = [
   { name: "list", run: async () => {} },
   { name: "catalog", run: (page) => page.getByRole("button", { name: "Katalog" }).click() },
+  { name: "ingredients", run: (page) => page.getByRole("button", { name: "Zutaten", exact: true }).click() },
+  {
+    // The pantry section of the shopping list unfolded: unticked, but can be ticked when something runs out.
+    name: "shopping-pantry",
+    run: async (page) => {
+      await page.getByRole("button", { name: "Einkaufen", exact: true }).click();
+      await page.getByText("Haben wir immer (2)").click();
+      await page.locator(".pantry-items li").last().scrollIntoViewIfNeeded();
+    },
+  },
   { name: "dish", run: (page) => pastaTitle(page).click() },
   {
     // With an AI task that can generate images, the sheet offers "Bild erzeugen" next to "Foto wählen".

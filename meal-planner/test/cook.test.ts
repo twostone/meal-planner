@@ -133,13 +133,14 @@ test("migration v7 keeps entries and adds the ticks table", async () => {
     repo.addEntry(plan.id, { title: "Suppe" });
     first.exec("ALTER TABLE dish_ingredient DROP COLUMN plural");
     first.exec("ALTER TABLE dish_ingredient DROP COLUMN prep");
+    first.exec("DROP TABLE ingredient");
     first.exec("DROP TABLE setting");
     first.exec("DROP TABLE cook_check");
     first.exec("PRAGMA user_version = 7");
     first.close();
 
     const db = openDb(file);
-    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 11);
+    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 12);
     const r = createRepo(db);
     assert.deepEqual(r.getChecks(plan.id).entries.map((e) => e.checks), [{ ingredients: [], steps: [] }]);
     db.close();

@@ -1243,3 +1243,32 @@ a.btn {
 .shop-items[aria-busy="true"] {
   opacity: 0.6;
 }
+
+/* ingredient catalog */
+.ingredients-hint {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.create-row {
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--green);
+}
+.row.pantry .box {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+}
+.ingredient-actions {
+  display: flex;
+  justify-content: center;
+  padding: 4px 12px 8px;
+}
+.ingredient-actions small {
+  font-size: 13px;
+  color: var(--muted);
+}

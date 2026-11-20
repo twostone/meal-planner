@@ -56,6 +56,7 @@ meal-planner/            das Add-on (Docker-Build-Kontext)
     auth/                   ha-token.ts (HA-Token per WebSocket auth/current_user prüfen), ha-url.ts (externe URL von HA),
                             resource-metadata.ts (RFC 9728); alles wie in garmin-insights
   web/                   Frontend: Svelte 5 + Vite (Runes, TypeScript)
+    src/IngredientsView.svelte  Reiter „Zutaten“ (Zutatenkatalog, Vorrat)
     src/RecipeEditor.svelte, src/recipe-form.ts   Rezept-Editor (nur Felder) und seine Prüfung, genutzt von
                            RecipeSheet und vom Anlegen im DishSheet
     public/favicon.svg     Favicon der App, Vorlage für icon.png
@@ -77,7 +78,7 @@ npm run check                     # svelte-check Frontend
 npm run build                     # Frontend nach dist/ (wird vom Server ausgeliefert)
 DB_PATH=./data/dev.db PORT=8099 npm start
 npm run dev:web                   # Vite-Dev-Server, /api geht per Proxy an :8099
-npm run screenshot [-- list catalog dish dish-new recipe cook shopping toast-error] # nach npm run build: PNGs bei 390 px nach screenshots/
+npm run screenshot [-- list catalog ingredients dish dish-new recipe cook shopping shopping-pantry toast-error] # nach npm run build: PNGs bei 390 px nach screenshots/
 ```
 
 Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (genau das prüft auch die CI). Bei Änderungen an
@@ -87,7 +88,7 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
 
 - **Datenmodell:** `dish` (Katalog, mit `url`, `note`, `image`), `dish_tag` (Kategorien), `plan` (Zeitraum, Start/Ende,
   optional `title`), `plan_entry` (Gericht in Zeitraum, `done`, `note`), `setting` (Schlüssel/Wert, Schlüssel nur aus
-  `SettingKey` in `repo.ts`). Bewusst **keine Tageszuordnung** und keine manuelle
+  `SettingKey` in `repo.ts`), `ingredient` (Zutatenkatalog, siehe dort). Bewusst **keine Tageszuordnung** und keine manuelle
   Reihenfolge per Drag.
 - **Liste bearbeiten:** Name und Zeitraum einer Liste ändert `PATCH /api/plans/:id` (`updatePlan` in `repo.ts`), im UI per
   Stift-Symbol im Zeitraum-Blatt. `title`: höchstens 100 Zeichen, `""`/`null` löscht den Namen, fehlt es, bleibt er. Ohne
@@ -216,6 +217,20 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   Liste gegen HA, sendet nacheinander je ein `todo.add_item` und **bricht beim ersten Fehler ab** (`{added, failed, reason}`);
   höchstens ein Senden gleichzeitig (sonst 429). Es wird nicht gespeichert, was gesendet wurde, und kein HA-Event gefeuert.
   Fehler-Bodies von `add_item` kommen nicht ins Log (Bring wiederholt darin den Artikelnamen).
+  **Vorrat:** Jeder Artikel hat `pantry` (aus dem Zutatenkatalog, über `nameKey(base)`, die Sorte zählt nicht). Das Blatt
+  zeigt diese Artikel eingeklappt unter „Haben wir immer (N)“, nicht angehakt; `on_list` bleibt als Hinweis. `buildShoppingList`
+  bleibt rein, `pantry` setzt die Route.
+- **Zutatenkatalog** (Entscheidungen vom 20.11.2026, Plan in drei gestapelten PRs: Vorrat, Kategorien, Synonyme): Eine
+  Zutat ist ein `nameKey`, die Notiz (Sorte) gehört nicht dazu. Tabelle `ingredient` (`key` = `nameKey`, `name`, `pantry`):
+  eine Zeile nur für Namen, die von Hand angelegt wurden oder eine Angabe haben; Namen, die nur in Rezepten stehen, haben
+  keine. `listIngredients` (`repo.ts`) vereinigt beides (`dishes` = Zahl der Gerichte, 0 = in keinem Rezept), die
+  Katalog-Schreibweise gewinnt. `GET/POST/PATCH /api/ingredients` (Key im Body, Namen haben Leerzeichen und Umlaute),
+  `POST /api/ingredients/reset` (verwendete Zutat: Zeile weg; von Hand angelegte: Angaben aus, Zeile bleibt),
+  `POST /api/ingredients/delete` (nur ohne Rezept, sonst 409 `ingredient in use`; Anlegen eines bekannten Namens 409
+  `ingredient exists`). Von Hand angelegte Namen gehen mit an die KI (`listIngredientNames`, hinter den verwendeten).
+  Im UI ein dritter Reiter „Zutaten“ (`IngredientsView.svelte`): Suche (Enter oder „„X“ als Zutat anlegen“), Filter
+  „Haben wir immer“, Haken je Zeile setzt den Vorrat sofort (bei Fehler zurück), Tippen auf den Namen zeigt „Löschen“ bzw.
+  „Angaben zurücksetzen“ (zweistufig). Markiert wird nur dort, nicht in der Einkaufsliste.
 - Ein Gericht kann pro Zeitraum nur einmal vorkommen. Der Titel ist im Katalog eindeutig (ohne Groß-/Kleinschreibung).
   Ein Eintrag per Titel (API) legt das Gericht an oder verwendet ein vorhandenes wieder.
 - **Neues Gericht anlegen:** In der Hinzufügen-Leiste der Liste öffnen ein neuer Name („„X“ neu anlegen …“, Enter) und ein
@@ -231,7 +246,7 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   verschwindet mit dem Eintrag. Setzen/Löschen per `PATCH /api/entries/:id` (`note`: Text, `""` oder `null` löscht, fehlt =
   unverändert); das Blatt schickt das nur, wenn sich die Notiz geändert hat.
 - **Aufbau der Oberfläche:** Kopfzeile mit Listenname (öffnet das Zeitraum-Blatt) und „Kochen“, darunter eine Fortschrittszeile
-  mit dünnem Balken; „Liste | Katalog“ ist eine Tab-Leiste am unteren Rand (Schwebeknopf und Hinzufügen-Leiste sitzen darüber).
+  mit dünnem Balken; „Liste | Katalog | Zutaten“ ist eine Tab-Leiste am unteren Rand (Schwebeknopf und Hinzufügen-Leiste sitzen darüber).
   Das Bearbeiten-Blatt ist in Gruppen gegliedert (Titel/Link, Rezept-Karte, Notizen, Kategorien), „Speichern“ klebt unten,
   Entfernen/Löschen stehen als leise Textknöpfe darunter. Im Kochmodus klebt „Fertig“ unten.
   **Meldungen** sind ein Toast oben (`Toast.svelte`, `app.toast` mit `showError`/`showInfo`/`clearToast` in
@@ -318,7 +333,7 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   (`homeassistant:` in `config.yaml`: PKCE, Client-ID-Metadaten, Loopback-Weiterleitungen), gilt für das ganze Add-on.
   **Tools** (`mcp.ts`, englisch, `outputSchema` + `structuredContent` + gleicher JSON-Text): lesen `list_plans`, `get_plan`
   (ohne ID aktuelle, sonst nächste Liste), `search_dishes` (Titel, Zutat, Kategorie), `get_recipe` (`source_text` nur mit
-  `include_source`); schreiben `create_plan`, `update_plan`, `add_to_plan`, `update_plan_entry`, `remove_from_plan`,
+  `include_source`), `list_ingredients` (Zutatenkatalog, `pantry_only`; Pflege nur in der App); schreiben `create_plan`, `update_plan`, `add_to_plan`, `update_plan_entry`, `remove_from_plan`,
   `create_dish`, `update_dish`, `set_recipe` (ersetzt alles wie `PUT …/recipe`, Schritte als Liste). Eingaben sind schlicht
   und beschrieben, danach prüfen dieselben zod-Schemas wie die API (`dishBody`, `planPatch`, `recipeBody` … aus `app.ts`), Grenzen
   stehen also nur dort. `NotFoundError`/`ConflictError`/zod-Fehler werden zu `isError` mit Text. Änderungen feuern dieselben
@@ -563,8 +578,8 @@ raten (`async_update_reload_and_abort`, `HassioServiceInfo`, `StaticPathConfig`,
 - **Datenbank nur über Migrationen ändern:** in `src/db.ts` einen Eintrag an `MIGRATIONS` **anhängen**, nie ändern oder
   umsortieren (`PRAGMA user_version` zählt sie). Neue Migrationen mit einem Test gegen eine Datenbank im alten Stand.
   Die Tests, die die Schema-Version prüfen (`dish-image`, `tags`, `entry-note`, `plan-edit`, `recipe`, `recipe-source`, `cook`,
-  `shopping-api`), bei jeder neuen Migration mit anheben. Tests, die eine volle DB auf eine alte Version zurücksetzen
-  (`cook`, `recipe-source`, `shopping-api`), müssen die Tabellen neuerer Migrationen vorher löschen.
+  `shopping-api`, `ingredients`), bei jeder neuen Migration mit anheben. Tests, die eine volle DB auf eine alte Version zurücksetzen
+  (`cook`, `recipe`, `recipe-source`, `shopping-api`, `ingredients`), müssen die Tabellen neuerer Migrationen vorher löschen.
 - **Add-on-Build:** Kein `build.yaml`, kein `BUILD_FROM` (beides gilt seit Supervisor 2026.04 nicht mehr). HA baut nicht
   selbst, es lädt das Image aus `image:`. Das Dockerfile ist zweistufig: Das Frontend wird auf der Architektur des Builders
   gebaut (`--platform=$BUILDPLATFORM`, sonst dauert arm64 unter Emulation sehr lange), die Laufzeit-Stufe je Zielarchitektur.

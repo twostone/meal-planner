@@ -4,6 +4,7 @@ import type {
   Entry,
   PlanDetail,
   AiStatus,
+  CatalogIngredient,
   IngredientChange,
   CheckState,
   CookEntry,
@@ -29,6 +30,8 @@ const MESSAGES: Record<string, string> = {
   "unknown list": "Diese Liste gibt es in Home Assistant nicht mehr. Bitte eine andere wählen.",
   "todo failed": "Home Assistant ist gerade nicht erreichbar.",
   "image too large": "Das Bild ist zu groß.",
+  "ingredient exists": "Diese Zutat gibt es schon.",
+  "ingredient in use": "Die Zutat steht noch in einem Rezept und kann nicht gelöscht werden.",
   "not a supported image": "Dieses Bildformat geht nicht. Bitte ein JPEG, PNG oder WebP wählen.",
 };
 
@@ -59,6 +62,13 @@ export const listDishes = () => request<Dish[]>("GET", "api/dishes");
 export const listDishesWithIngredient = (text: string) =>
   request<Dish[]>("GET", `api/dishes?ingredient=${encodeURIComponent(text)}`);
 export const listIngredientNames = () => request<string[]>("GET", "api/ingredients/names");
+
+// The ingredient catalog. Names are addressed by their key in the body: they hold spaces and umlauts.
+export const listIngredients = () => request<CatalogIngredient[]>("GET", "api/ingredients");
+export const createIngredient = (name: string) => request<CatalogIngredient>("POST", "api/ingredients", { name });
+export const setPantry = (key: string, pantry: boolean) => request<CatalogIngredient>("PATCH", "api/ingredients", { key, pantry });
+export const resetIngredient = (key: string) => request<CatalogIngredient>("POST", "api/ingredients/reset", { key });
+export const deleteIngredient = (key: string) => request<void>("POST", "api/ingredients/delete", { key });
 
 export const createDish = (d: DishInput) => request<Dish>("POST", "api/dishes", d);
 export const updateDish = (id: number, d: DishInput) => request<Dish>("PATCH", `api/dishes/${id}`, d);

@@ -41,6 +41,9 @@ dieselbe Liste.
 - Einkaufsliste: Der Einkaufswagen in der Liste fasst die Zutaten der offenen Gerichte zusammen (gleiche Zutaten werden
   addiert, g/kg und ml/l umgerechnet) und schickt die angehakten Artikel an eine Todo-Liste in Home Assistant, z. B. eine
   Bring-Liste. Was dort schon offen steht, ist abgewählt. Siehe „Einkaufsliste (Bring)“.
+- Zutaten: Der Reiter „Zutaten“ zeigt alle Zutaten aus den Rezepten. Was man immer zu Hause hat (Salz, Pfeffer, Gewürze),
+  markiert man dort als „haben wir immer“: In der Einkaufsliste steht es dann eingeklappt unter „Haben wir immer“ und ist
+  abgewählt, lässt sich aber anhaken, wenn es ausgeht. Zutaten lassen sich auch von Hand anlegen.
 - Bedienung für das Handy ausgelegt, auch in der Home-Assistant-Companion-App.
 - Optional ein **MCP-Server** für KI-Assistenten (z. B. Claude): Listen lesen und bearbeiten, Gerichte und Rezepte pflegen,
   Anmeldung über Home Assistant. Siehe „MCP-Server (für Claude & Co.)“.
@@ -125,6 +128,8 @@ einer Todo-Entität. Die App braucht keine eigenen Zugangsdaten, sie nutzt die I
 - Die Menge landet in Bring als Spezifikation. Listen ohne Beschreibungsfeld (z. B. die eingebaute Einkaufsliste von Home
   Assistant) bekommen sie in Klammern hinter den Namen.
 - Was auf der Liste schon offen steht, ist abgewählt und markiert; vorhandene Einträge werden nie geändert.
+- Zutaten, die im Reiter „Zutaten“ als „haben wir immer“ markiert sind, stehen eingeklappt unter „Haben wir immer“ und
+  sind abgewählt. Das gilt für den Namen, egal welche Sorte („Pfeffer“ deckt auch „Pfeffer (rosa)“).
 
 ## MCP-Server (für Claude & Co.)
 
@@ -151,7 +156,7 @@ App Home Assistant, der Client leitet zur Anmeldung von Home Assistant weiter un
 stellt keine Tokens aus und speichert keine.
 
 **Tools:** lesen `list_plans`, `get_plan` (ohne ID die aktuelle, sonst die nächste Liste), `search_dishes` (Titel, Zutat,
-Kategorie), `get_recipe`; schreiben `create_plan`, `update_plan`, `add_to_plan`, `update_plan_entry` (abhaken, Notiz),
+Kategorie), `get_recipe`, `list_ingredients` (Zutatenkatalog mit „haben wir immer“); schreiben `create_plan`, `update_plan`, `add_to_plan`, `update_plan_entry` (abhaken, Notiz),
 `remove_from_plan`, `create_dish`, `update_dish`, `set_recipe` (ersetzt das ganze Rezept). Es gelten dieselben Regeln wie in
 der App (Grenzen, keine überlappenden Listen, eindeutige Titel), und Änderungen an Listen lösen dieselben Events in Home
 Assistant aus, mit dem angemeldeten Benutzer. Bewusst nicht dabei: Listen oder Gerichte löschen, Bilder, die KI-Funktionen

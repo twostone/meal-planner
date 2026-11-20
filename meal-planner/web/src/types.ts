@@ -93,7 +93,8 @@ export type TodoList = { entity_id: string; name: string; description: boolean }
 export type ShoppingStatus = { lists: TodoList[]; selected: string | null; reason: string | null };
 export type ShoppingEntry = { entry_id: number; title: string; done: boolean; selected: boolean; has_recipe: boolean };
 // key: unique per name and note (two items may share a name, e.g. "Nüsse" for Macadamia and for Walnuss).
-export type ShoppingItem = { key: string; name: string; note: string | null; spec: string | null; sources: string[]; on_list: boolean };
+// pantry: always at home (ingredient catalog), so the sheet starts with it unticked in a section of its own.
+export type ShoppingItem = { key: string; name: string; note: string | null; spec: string | null; sources: string[]; on_list: boolean; pantry: boolean };
 export type ShoppingList = { entries: ShoppingEntry[]; items: ShoppingItem[]; list_error: boolean };
 export type SendResult = { added: number; failed: number; reason: string | null };
 
@@ -104,3 +105,6 @@ export type IngredientChange = {
   to: { name: string; plural: string | null; note: string | null; prep: string | null };
   unit: string | null; // English unit taken out of the note; the server converts amount and unit
 };
+
+// An entry of the ingredient catalog (key = the name in lower case with single spaces, as the server groups names).
+export type CatalogIngredient = { key: string; name: string; dishes: number; pantry: boolean };
