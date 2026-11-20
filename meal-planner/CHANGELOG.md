@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.18.1](https://github.com/twostone/meal-planner/compare/v0.18.0...v0.18.1) (2026-11-20)
+
+
+### Behoben
+
+* **app:** alte index.html aus dem Browser-Cache nach Updates verhindern ([#86](https://github.com/twostone/meal-planner/issues/86)) ([0ecef81](https://github.com/twostone/meal-planner/commit/0ecef81c71cf81682090df368996c17e718d6165))
+
 ## [0.18.0](https://github.com/twostone/meal-planner/compare/v0.17.0...v0.18.0) (2026-11-20)
 
 
