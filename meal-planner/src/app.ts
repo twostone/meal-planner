@@ -43,6 +43,12 @@ const image = z.string().regex(IMAGE_NAME);
 // Free-form categories. Duplicates (any case) are merged by the repo, so only size limits are checked here.
 const tags = z.array(z.string().trim().min(1).max(30)).max(10);
 
+// The ingredient catalog addresses a name by its nameKey, in the body: names hold spaces and umlauts.
+const MAX_INGREDIENT_NAME = 80; // same as dish_ingredient.name in recipeBody
+const ingredientName = z.string().trim().min(1).max(MAX_INGREDIENT_NAME);
+const ingredientKey = z.object({ key: z.string().min(1).max(MAX_INGREDIENT_NAME) });
+const ingredientPatch = ingredientKey.extend({ pantry: z.boolean() });
+
 // The recipe text from a link preview (see POST /api/preview). Stored unchanged, never interpreted.
 const source = { source_text: optional(z.string().max(10000)), source_truncated: z.boolean().optional() };
 
@@ -242,6 +248,21 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
   app.get("/api/dishes", (c) => c.json(repo.listDishes(c.req.query("q"), c.req.query("ingredient"))));
   // Suggestions for the search box of the catalog.
   app.get("/api/ingredients/names", (c) => c.json(repo.listIngredientNames(MAX_KNOWN_NAMES)));
+
+  // The ingredient catalog: what the household knows about an ingredient, e.g. that salt is always at home.
+  app.get("/api/ingredients", (c) => c.json(repo.listIngredients()));
+  app.post("/api/ingredients", zValidator("json", z.object({ name: ingredientName })), (c) =>
+    c.json(repo.createIngredient(c.req.valid("json").name), 201),
+  );
+  app.patch("/api/ingredients", zValidator("json", ingredientPatch), (c) => {
+    const { key, ...input } = c.req.valid("json");
+    return c.json(repo.setIngredient(key, input));
+  });
+  app.post("/api/ingredients/reset", zValidator("json", ingredientKey), (c) => c.json(repo.resetIngredient(c.req.valid("json").key)));
+  app.post("/api/ingredients/delete", zValidator("json", ingredientKey), (c) => {
+    repo.deleteIngredient(c.req.valid("json").key);
+    return c.body(null, 204);
+  });
   app.post("/api/dishes", zValidator("json", newDishBody), async (c) => {
     const { recipe, ...body } = c.req.valid("json");
     if (await imageMissing(body.image)) return c.json({ error: "unknown image" }, 400);
@@ -369,6 +390,7 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
       const ids = chosen === undefined ? null : new Set(chosen.split(",").filter(Boolean).map(Number));
       const entries = repo.getPlanIngredients(c.req.valid("param").id).map((e) => ({ ...e, selected: ids ? ids.has(e.entry_id) : !e.done }));
       const items = buildShoppingList(entries.filter((e) => e.selected));
+      const pantry = repo.pantryKeys();
       let open: OpenTodoItem[] = [];
       let listError = false;
       if (list && items.length) {
@@ -381,7 +403,7 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
       }
       return c.json({
         entries: entries.map((e) => ({ entry_id: e.entry_id, title: e.title, done: e.done, selected: e.selected, has_recipe: e.ingredients.length > 0 })),
-        items: items.map((i) => ({ ...i, on_list: isOnList(i, open) })),
+        items: items.map((i) => ({ ...i, on_list: isOnList(i, open), pantry: pantry.has(nameKey(i.base)) })),
         list_error: listError,
       });
     });

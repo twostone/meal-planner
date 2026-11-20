@@ -90,6 +90,10 @@ const MIGRATIONS = [
   "ALTER TABLE dish_ingredient ADD COLUMN prep TEXT;",
   // v11: the plural of the name ("Zwiebeln" for "Zwiebel"), shown with amounts above one; null = no plural ("Mehl")
   "ALTER TABLE dish_ingredient ADD COLUMN plural TEXT;",
+  // v12: the ingredient catalog: what the household knows about an ingredient name (key = nameKey of the name).
+  // A row exists for names added by hand and names with a setting; names only used in recipes have none.
+  // pantry = always at home, so the shopping list leaves it unticked.
+  "CREATE TABLE ingredient (key TEXT PRIMARY KEY, name TEXT NOT NULL, pantry INTEGER NOT NULL DEFAULT 0) STRICT;",
 ];
 
 function migrate(db: DatabaseSync): void {

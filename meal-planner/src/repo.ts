@@ -98,6 +98,14 @@ export const matchesIngredient = (name: string, needle: string) =>
 // shopping_list_entity: the Home Assistant to-do list the shopping list was last sent to (preselected next time).
 export type SettingKey = "shopping_list_entity";
 
+// An entry of the ingredient catalog: a name used in recipes, added by hand, or both. key = nameKey(name).
+export type CatalogIngredient = {
+  key: string;
+  name: string; // the spelling stored in the catalog, else the first spelling in the recipes
+  dishes: number; // how many dishes use it; 0 = in no recipe (added by hand or no longer used)
+  pantry: boolean; // always at home: the shopping list shows it unticked
+};
+
 export class NotFoundError extends Error {}
 export class ConflictError extends Error {}
 
@@ -122,6 +130,37 @@ export function createRepo(db: DatabaseSync) {
   function withTags(rows: DishRow[]): Dish[] {
     const tags = tagMap();
     return rows.map((d) => ({ ...d, tags: tags.get(d.id) ?? [] }));
+  }
+
+  // Ingredient names used in recipes, grouped by nameKey (the first spelling wins): how many lines and dishes use each.
+  function usedIngredientNames(): Map<string, { name: string; lines: number; dishes: Set<number> }> {
+    const used = new Map<string, { name: string; lines: number; dishes: Set<number> }>();
+    for (const { dish_id, name } of all<{ dish_id: number; name: string }>("SELECT dish_id, name FROM dish_ingredient ORDER BY dish_id, pos")) {
+      const key = nameKey(name);
+      const u = used.get(key);
+      if (u) {
+        u.lines++;
+        u.dishes.add(dish_id);
+      } else used.set(key, { name, lines: 1, dishes: new Set([dish_id]) });
+    }
+    return used;
+  }
+
+  type CatalogRow = { key: string; name: string; pantry: number };
+  const catalogRows = () => new Map(all<CatalogRow>("SELECT key, name, pantry FROM ingredient").map((r) => [r.key, r]));
+
+  // The catalog entry of a key, or null if the name is neither used in a recipe nor in the catalog.
+  function findIngredient(key: string): CatalogIngredient | null {
+    const row = one<CatalogRow>("SELECT key, name, pantry FROM ingredient WHERE key = ?", key);
+    const used = usedIngredientNames().get(key);
+    if (!row && !used) return null;
+    return { key, name: row?.name ?? used!.name, dishes: used?.dishes.size ?? 0, pantry: !!row?.pantry };
+  }
+
+  function getIngredient(key: string): CatalogIngredient {
+    const found = findIngredient(key);
+    if (!found) throw new NotFoundError("ingredient");
+    return found;
   }
 
   function getDish(id: number): Dish {
@@ -269,20 +308,65 @@ export function createRepo(db: DatabaseSync) {
       return withTags(rows);
     },
 
-    // Ingredient names in use, each once (same nameKey = same name, the first spelling wins), most frequent first.
-    // For the recipe prompt (reuse names) and the autocomplete of the search box.
+    // Ingredient names in use, each once (same nameKey = same name), most frequent first, then the names added to the
+    // catalog by hand. The catalog spelling wins. For the recipe prompt (reuse names) and the autocomplete of the search box.
     listIngredientNames(limit: number): string[] {
-      const counts = new Map<string, { name: string; n: number }>();
-      for (const { name } of all<{ name: string }>("SELECT name FROM dish_ingredient ORDER BY dish_id, pos")) {
-        const key = nameKey(name);
-        const c = counts.get(key);
-        if (c) c.n++;
-        else counts.set(key, { name, n: 1 });
-      }
-      return [...counts.values()]
-        .sort((a, b) => b.n - a.n || a.name.localeCompare(b.name, "de"))
-        .slice(0, limit)
-        .map((c) => c.name);
+      const catalog = catalogRows();
+      const used = usedIngredientNames();
+      const fromRecipes = [...used.entries()]
+        .sort(([, a], [, b]) => b.lines - a.lines || a.name.localeCompare(b.name, "de"))
+        .map(([key, u]) => catalog.get(key)?.name ?? u.name);
+      const byHand = [...catalog.values()].filter((r) => !used.has(r.key)).map((r) => r.name).sort((a, b) => a.localeCompare(b, "de"));
+      return [...fromRecipes, ...byHand].slice(0, limit);
+    },
+
+    // The ingredient catalog: every name used in a recipe plus every name stored in the catalog, sorted by name.
+    listIngredients(): CatalogIngredient[] {
+      const catalog = catalogRows();
+      const used = usedIngredientNames();
+      const keys = new Set([...used.keys(), ...catalog.keys()]);
+      return [...keys]
+        .map((key) => {
+          const row = catalog.get(key);
+          const u = used.get(key);
+          return { key, name: row?.name ?? u!.name, dishes: u?.dishes.size ?? 0, pantry: !!row?.pantry };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name, "de"));
+    },
+
+    // Adds a name by hand, e.g. to mark it as pantry before any recipe uses it. A known name (same nameKey) is a conflict.
+    createIngredient(name: string): CatalogIngredient {
+      const key = nameKey(name);
+      if (findIngredient(key)) throw new ConflictError("ingredient exists");
+      db.prepare("INSERT INTO ingredient (key, name) VALUES (?, ?)").run(key, name.replace(/\s+/g, " ").trim());
+      return getIngredient(key);
+    },
+
+    setIngredient(key: string, input: { pantry: boolean }): CatalogIngredient {
+      const current = getIngredient(key);
+      db.prepare("INSERT INTO ingredient (key, name, pantry) VALUES (?, ?, ?) ON CONFLICT (key) DO UPDATE SET pantry = excluded.pantry")
+        .run(key, current.name, input.pantry ? 1 : 0);
+      return getIngredient(key);
+    },
+
+    // Back to the defaults. A name used in recipes loses its catalog row (the recipes keep it in the list); a name
+    // added by hand keeps its row, deleting it is a separate step.
+    resetIngredient(key: string): CatalogIngredient {
+      const current = getIngredient(key);
+      if (current.dishes > 0) db.prepare("DELETE FROM ingredient WHERE key = ?").run(key);
+      else db.prepare("UPDATE ingredient SET pantry = 0 WHERE key = ?").run(key);
+      return getIngredient(key);
+    },
+
+    // Only names in no recipe can be deleted: a used name would come back with the next list.
+    deleteIngredient(key: string): void {
+      if (getIngredient(key).dishes > 0) throw new ConflictError("ingredient in use");
+      db.prepare("DELETE FROM ingredient WHERE key = ?").run(key);
+    },
+
+    // Keys (nameKey) of the ingredients that are always at home.
+    pantryKeys(): Set<string> {
+      return new Set(all<{ key: string }>("SELECT key FROM ingredient WHERE pantry = 1").map((r) => r.key));
     },
 
     // Applies reviewed changes to the lines of one recipe in one transaction and returns the number of changed lines.

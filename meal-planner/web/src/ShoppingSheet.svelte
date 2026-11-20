@@ -4,7 +4,7 @@
   import Icon from "./Icon.svelte";
   import Sheet from "./Sheet.svelte";
   import { app, showError } from "./store.svelte";
-  import type { ShoppingList, TodoList } from "./types";
+  import type { ShoppingItem, ShoppingList, TodoList } from "./types";
 
   const planId = app.plan!.id;
 
@@ -13,7 +13,7 @@
   let data = $state<ShoppingList | null>(null);
   // Entry ids that go into the list; null = the server's default (the open entries).
   let chosen = $state<number[] | null>(null);
-  // Keys of the items that will be sent. Items already on the to-do list start unticked.
+  // Keys of the items that will be sent. Items already on the to-do list and pantry items start unticked.
   let ticked = $state<string[]>([]);
   let loading = $state(true);
   let sending = $state(false);
@@ -24,6 +24,9 @@
   const withRecipe = $derived(data?.entries.filter((e) => e.has_recipe) ?? []);
   const withoutRecipe = $derived(data?.entries.filter((e) => e.selected && !e.has_recipe) ?? []);
   const toSend = $derived(data?.items.filter((i) => ticked.includes(i.key)) ?? []);
+  // Always at home (ingredient catalog): shown apart, folded, so they can still be ticked when one runs out.
+  const toBuy = $derived(data?.items.filter((i) => !i.pantry) ?? []);
+  const pantry = $derived(data?.items.filter((i) => i.pantry) ?? []);
 
   async function start() {
     try {
@@ -45,7 +48,7 @@
       if (seq !== loadSeq) return;
       data = r;
       chosen = r.entries.filter((e) => e.selected).map((e) => e.entry_id);
-      ticked = r.items.filter((i) => !i.on_list).map((i) => i.key);
+      ticked = r.items.filter((i) => !i.on_list && !i.pantry).map((i) => i.key);
     } catch (e) {
       if (seq === loadSeq) showError(e);
     } finally {
@@ -94,6 +97,19 @@
   }
 </script>
 
+{#snippet item(i: ShoppingItem)}
+  {@const on = ticked.includes(i.key)}
+  <li>
+    <button type="button" class="row shop-item" class:off={!on} role="checkbox" aria-checked={on} onclick={() => toggleItem(i.key)}>
+      <span class="check" aria-hidden="true"><span class="box">{#if on}<Icon name="check" size={16} />{/if}</span></span>
+      <span class="shop-text">
+        <span class="shop-name">{i.name}{#if i.spec}<span class="shop-spec">{" · "}{i.spec}</span>{/if}</span>
+        <small>{i.on_list ? "steht schon auf der Liste" : i.sources.join(", ")}</small>
+      </span>
+    </button>
+  </li>
+{/snippet}
+
 <Sheet title="Einkaufsliste">
   {#if lists.length}
     <label>
@@ -124,20 +140,19 @@
     {/if}
 
     {#if data.items.length}
-      <ul class="rows shop-items" aria-busy={loading}>
-        {#each data.items as i (i.key)}
-          {@const on = ticked.includes(i.key)}
-          <li>
-            <button type="button" class="row shop-item" class:off={!on} role="checkbox" aria-checked={on} onclick={() => toggleItem(i.key)}>
-              <span class="check" aria-hidden="true"><span class="box">{#if on}<Icon name="check" size={16} />{/if}</span></span>
-              <span class="shop-text">
-                <span class="shop-name">{i.name}{#if i.spec}<span class="shop-spec">{" · "}{i.spec}</span>{/if}</span>
-                <small>{i.on_list ? "steht schon auf der Liste" : i.sources.join(", ")}</small>
-              </span>
-            </button>
-          </li>
-        {/each}
-      </ul>
+      {#if toBuy.length}
+        <ul class="rows shop-items" aria-busy={loading}>
+          {#each toBuy as i (i.key)}{@render item(i)}{/each}
+        </ul>
+      {/if}
+      {#if pantry.length}
+        <details class="more pantry-items">
+          <summary>Haben wir immer ({pantry.length})</summary>
+          <ul class="rows shop-items" aria-busy={loading}>
+            {#each pantry as i (i.key)}{@render item(i)}{/each}
+          </ul>
+        </details>
+      {/if}
     {:else if !loading}
       <p class="empty">
         {withRecipe.length ? "Keine Gerichte mit Zutaten ausgewählt." : "Die Gerichte dieser Liste haben noch keine Zutaten."}

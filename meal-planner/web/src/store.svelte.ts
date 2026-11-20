@@ -21,7 +21,7 @@ export type Toast = { kind: "error" | "info"; text: string };
 
 export const app = $state({
   ready: false,
-  view: "list" as "list" | "catalog",
+  view: "list" as "list" | "catalog" | "ingredients",
   plans: [] as PlanSummary[],
   plan: null as PlanDetail | null,
   dishes: [] as Dish[],

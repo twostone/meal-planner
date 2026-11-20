@@ -4,6 +4,7 @@
   import { fmtRange } from "./dates";
   import CookView from "./CookView.svelte";
   import DishSheet from "./DishSheet.svelte";
+  import IngredientsView from "./IngredientsView.svelte";
   import Icon from "./Icon.svelte";
   import ListView from "./ListView.svelte";
   import PeriodSheet from "./PeriodSheet.svelte";
@@ -37,6 +38,8 @@
           <button type="button" class="btn primary" onclick={openCook}>Kochen</button>
         {/if}
       </div>
+    {:else if app.view === "ingredients"}
+      <h1>Zutaten</h1>
     {:else}
       <h1>Katalog</h1>
       {#if planLabel}
@@ -49,6 +52,8 @@
     <p class="empty">Lade …</p>
   {:else if app.view === "list"}
     <ListView />
+  {:else if app.view === "ingredients"}
+    <IngredientsView />
   {:else}
     <CatalogView />
   {/if}
@@ -59,6 +64,9 @@
     </button>
     <button type="button" aria-current={app.view === "catalog" ? "page" : undefined} onclick={() => (app.view = "catalog")}>
       Katalog
+    </button>
+    <button type="button" aria-current={app.view === "ingredients" ? "page" : undefined} onclick={() => (app.view = "ingredients")}>
+      Zutaten
     </button>
   </nav>
 

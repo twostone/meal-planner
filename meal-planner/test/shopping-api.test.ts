@@ -83,8 +83,8 @@ test("shopping list: open entries by default, chosen entries on request, entries
     { entry_id: salat.id, title: "Salat", done: false, selected: true, has_recipe: false },
   ]);
   assert.deepEqual(def.items, [
-    { key: "salz\u0000", name: "Salz", base: "Salz", note: null, spec: null, sources: ["Suppe"], on_list: false },
-    { key: "zwiebel\u0000", name: "Zwiebel", base: "Zwiebel", note: null, spec: "2", sources: ["Suppe"], on_list: false },
+    { key: "salz\u0000", name: "Salz", base: "Salz", note: null, spec: null, sources: ["Suppe"], on_list: false, pantry: false },
+    { key: "zwiebel\u0000", name: "Zwiebel", base: "Zwiebel", note: null, spec: "2", sources: ["Suppe"], on_list: false, pantry: false },
   ]);
   const both = (await call("GET", `/api/plans/${p.id}/shopping?entries=${suppe.id},${pasta.id}`)).json;
   assert.deepEqual(
@@ -99,6 +99,19 @@ test("shopping list: open entries by default, chosen entries on request, entries
   assert.equal((await call("GET", `/api/plans/${p.id}/shopping?entries=1;2`)).status, 400);
   assert.equal((await call("GET", `/api/plans/${p.id}/shopping?list=light.x`)).status, 400);
   assert.equal((await call("GET", `/api/plans/999/shopping`)).status, 404);
+});
+
+test("shopping list: pantry items are flagged by name, whatever the note", async () => {
+  const { call, plan: p, suppe } = await plan(fakeTodo());
+  await call("PUT", `/api/dishes/${suppe.dish_id}/recipe`, {
+    servings: null,
+    instructions: null,
+    ingredients: [ing(2, null, "Zwiebel"), ing(null, null, "Salz"), ing(null, null, "Pfeffer", "rosa")],
+  });
+  assert.equal((await call("PATCH", "/api/ingredients", { key: "salz", pantry: true })).status, 200);
+  assert.equal((await call("PATCH", "/api/ingredients", { key: "pfeffer", pantry: true })).status, 200);
+  const r = (await call("GET", `/api/plans/${p.id}/shopping`)).json;
+  assert.deepEqual(r.items.map((i: any) => [i.name, i.pantry]), [["Pfeffer", true], ["Salz", true], ["Zwiebel", false]]);
 });
 
 test("shopping list: items already open on the to-do list are marked (any case); a failed read does not block", async () => {
@@ -165,12 +178,13 @@ test("migration v8 adds the setting table", async () => {
     const plan = createRepo(first).createPlan({ start_date: "2026-10-10", end_date: "2026-10-16" });
     first.exec("ALTER TABLE dish_ingredient DROP COLUMN plural");
     first.exec("ALTER TABLE dish_ingredient DROP COLUMN prep");
+    first.exec("DROP TABLE ingredient");
     first.exec("DROP TABLE setting");
     first.exec("PRAGMA user_version = 8");
     first.close();
 
     const db = openDb(file);
-    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 11);
+    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 12);
     const repo = createRepo(db);
     assert.equal(repo.getPlan(plan.id).id, plan.id);
     assert.equal(repo.getSetting("shopping_list_entity"), null);
