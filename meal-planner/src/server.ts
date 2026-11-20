@@ -1,5 +1,4 @@
 import { serve } from "@hono/node-server";
-import { serveStatic } from "@hono/node-server/serve-static";
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createApp } from "./app.ts";
@@ -19,6 +18,7 @@ import { createMcpListener } from "./mcp-listener.ts";
 import { createPreviewService } from "./preview.ts";
 import { createRepo } from "./repo.ts";
 import { installShutdownHandlers } from "./shutdown.ts";
+import { serveFrontend } from "./static.ts";
 
 // The add-on's options (Supervisor writes /data/options.json); changing one needs a restart of the add-on.
 // `log_level` beats LOG_LEVEL, else info.
@@ -70,7 +70,7 @@ const app = createApp(repo, {
   todo: createHaTodo(supervisorToken),
 });
 // API routes are registered first; anything else is the built frontend (npm run build).
-app.use("/*", serveStatic({ root: "./dist" }));
+app.use("/*", serveFrontend("./dist"));
 const port = Number(process.env.PORT ?? 8099);
 const servers = [serve({ fetch: app.fetch, port }, (i) => log.info("listening", { port: i.port }))];
 
