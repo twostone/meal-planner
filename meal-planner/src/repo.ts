@@ -1,6 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import { transaction } from "./db.ts";
 import type { Change } from "./ingredient-normalize.ts";
+import { splitLines, suggestParts, type Part } from "./ingredient-split.ts";
 import { nameKey } from "./shopping.ts";
 import { convert } from "./units.ts";
 
@@ -239,13 +240,24 @@ export function createRepo(db: DatabaseSync) {
     // The ticks of cook mode point at ingredient/step numbers, which change with the recipe.
     db.prepare("DELETE FROM cook_check WHERE entry_id IN (SELECT id FROM plan_entry WHERE dish_id = ?)").run(dishId);
     db.prepare("UPDATE dish SET servings = ?, instructions = ? WHERE id = ?").run(recipe.servings, recipe.instructions, dishId);
+    writeIngredients(dishId, recipe.ingredients);
+  }
+
+  // Replaces the ingredient lines of a dish; positions follow the order given. No transaction of its own.
+  function writeIngredients(dishId: number, ingredients: RecipeInput["ingredients"]): void {
     db.prepare("DELETE FROM dish_ingredient WHERE dish_id = ?").run(dishId);
     const ins = db.prepare(
       "INSERT INTO dish_ingredient (dish_id, pos, section, amount, amount_max, unit, name, plural, note, prep, raw) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     );
-    recipe.ingredients.forEach((i, pos) =>
+    ingredients.forEach((i, pos) =>
       ins.run(dishId, pos, i.section, i.amount, i.amount_max, i.unit, i.name, i.plural ?? null, i.note, i.prep ?? null, i.raw?.trim() || rawLine(i)),
     );
+  }
+
+  // Dishes whose recipe has a line with this ingredient name (nameKey), by title.
+  function dishesWithIngredient(key: string): { id: number; title: string }[] {
+    const ids = new Set(all<{ dish_id: number; name: string }>("SELECT dish_id, name FROM dish_ingredient").filter((r) => nameKey(r.name) === key).map((r) => r.dish_id));
+    return all<{ id: number; title: string }>("SELECT id, title FROM dish ORDER BY title").filter((d) => ids.has(d.id));
   }
 
   const self = {
@@ -362,6 +374,30 @@ export function createRepo(db: DatabaseSync) {
     deleteIngredient(key: string): void {
       if (getIngredient(key).dishes > 0) throw new ConflictError("ingredient in use");
       db.prepare("DELETE FROM ingredient WHERE key = ?").run(key);
+    },
+
+    // What splitting a collective line would touch, and the suggested parts ("Salz & Pfeffer" -> Salz, Pfeffer).
+    previewSplit(key: string): { name: string; dishes: { id: number; title: string }[]; parts: string[] } {
+      const ingredient = getIngredient(key);
+      return { name: ingredient.name, dishes: dishesWithIngredient(key), parts: suggestParts(ingredient.name) };
+    },
+
+    // Splits the line in every recipe that has it (see splitLines), in one transaction. Positions after it move, so the
+    // ingredient ticks of cook mode for these dishes go; step ticks stay. The collective name leaves the catalog.
+    splitIngredient(key: string, parts: Part[]): number {
+      return transaction(db, () => {
+        getIngredient(key);
+        const dishes = dishesWithIngredient(key);
+        const lines = db.prepare(
+          "SELECT section, amount, amount_max, unit, name, plural, note, prep, raw FROM dish_ingredient WHERE dish_id = ? ORDER BY pos",
+        );
+        for (const { id } of dishes) {
+          db.prepare("DELETE FROM cook_check WHERE kind = 'ingredient' AND entry_id IN (SELECT id FROM plan_entry WHERE dish_id = ?)").run(id);
+          writeIngredients(id, splitLines(lines.all(id) as Ingredient[], key, parts));
+        }
+        db.prepare("DELETE FROM ingredient WHERE key = ?").run(key);
+        return dishes.length;
+      });
     },
 
     // Keys (nameKey) of the ingredients that are always at home.

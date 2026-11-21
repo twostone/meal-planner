@@ -4,6 +4,7 @@
   import { fmtRange } from "./dates";
   import CookView from "./CookView.svelte";
   import DishSheet from "./DishSheet.svelte";
+  import IngredientSplitSheet from "./IngredientSplitSheet.svelte";
   import IngredientsView from "./IngredientsView.svelte";
   import Icon from "./Icon.svelte";
   import ListView from "./ListView.svelte";
@@ -78,6 +79,8 @@
     <CookView />
   {:else if app.sheet.kind === "shopping"}
     <ShoppingSheet />
+  {:else if app.sheet.kind === "split"}
+    <IngredientSplitSheet ingredientKey={app.sheet.ingredientKey} />
   {:else if app.sheet.kind === "periods"}
     <PeriodSheet />
   {/if}

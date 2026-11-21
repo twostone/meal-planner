@@ -49,6 +49,7 @@ meal-planner/            das Add-on (Docker-Build-Kontext)
     recipe-draft.ts         prüft und bereinigt die LLM-Antwort, gleicht sie mit dem Originaltext ab
     units.ts                englische Einheiten (cup, oz, …) in g/ml/EL/TL umrechnen, Dichte je Zutat (rein)
     ingredient-normalize.ts Rezept vereinheitlichen: KI-Antwort prüfen, Einheit aus der Notiz lösen (rein)
+    ingredient-split.ts     Sammelzeile („Salz & Pfeffer“) in einzelne Zutaten aufteilen: Vorschlag und Zeilen (rein)
     text.ts                 clip (Kürzen ohne halbes Zeichen) und toJson (JSON für Home Assistant)
     options.ts              App-Optionen aus /data/options.json lesen (log_level, ai_entity_*)
     log.ts                  Logger: eine logfmt-Zeile pro Ereignis, Stufe aus der App-Option `log_level`
@@ -59,6 +60,7 @@ meal-planner/            das Add-on (Docker-Build-Kontext)
                             resource-metadata.ts (RFC 9728); alles wie in garmin-insights
   web/                   Frontend: Svelte 5 + Vite (Runes, TypeScript)
     src/IngredientsView.svelte  Reiter „Zutaten“ (Zutatenkatalog, Vorrat)
+    src/IngredientSplitSheet.svelte  Blatt „Zutat aufteilen“
     src/RecipeEditor.svelte, src/recipe-form.ts   Rezept-Editor (nur Felder) und seine Prüfung, genutzt von
                            RecipeSheet und vom Anlegen im DishSheet
     public/favicon.svg     Favicon der App, Vorlage für icon.png
@@ -80,7 +82,7 @@ npm run check                     # svelte-check Frontend
 npm run build                     # Frontend nach dist/ (wird vom Server ausgeliefert)
 DB_PATH=./data/dev.db PORT=8099 npm start
 npm run dev:web                   # Vite-Dev-Server, /api geht per Proxy an :8099
-npm run screenshot [-- list catalog ingredients dish dish-new recipe cook shopping shopping-pantry toast-error] # nach npm run build: PNGs bei 390 px nach screenshots/
+npm run screenshot [-- list catalog ingredients ingredient-split dish dish-new recipe cook shopping shopping-pantry toast-error] # nach npm run build: PNGs bei 390 px nach screenshots/
 ```
 
 Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (genau das prüft auch die CI). Bei Änderungen an
@@ -168,7 +170,13 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   `POST /api/dishes/:id/recipe/normalize/apply` (höchstens 60 Änderungen) ändert in einer Transaktion nur Zeilen, die an
   ihrer Position noch die alten Werte haben (`normalizeRecipe` in `repo.ts`), rechnet die Einheit je Zeile ohne eigene
   Einheit um und lässt `pos`, `raw` und die Kochmodus-Haken unberührt (nicht über `setRecipe`); Antwort ist das Rezept.
-  Kein Sammel-Umbau aller Rezepte (am 23.10.2026 verworfen: zu unübersichtlich), kein Rückgängig.
+  Kein Sammel-Umbau aller Rezepte per KI (am 23.10.2026 verworfen: zu unübersichtlich), kein Rückgängig. Bewusst erlaubt
+  ist dagegen das Aufteilen einer Sammelzeile pro Name im Zutatenkatalog (ohne KI, mit Vorschau, siehe dort).
+  **Sammelzeilen:** Bis v0.18.2 verlangte `PROMPT` „Jede Zutatenzeile übernehmen, auch "Salz & Pfeffer"“, so landeten
+  Sammelzeilen als eine Zutat im Katalog. Jetzt gibt das Modell jede Zutat einzeln an, alle mit derselben Originalzeile
+  als `raw` (der Abgleich mit dem Text bleibt dadurch gültig), ohne Menge, außer sie gehört eindeutig zu einer Zutat;
+  „oder“ (Alternativen) wird nicht aufgeteilt. Nur gegen eine Fake-KI getestet. „Zutaten vereinheitlichen“ bleibt
+  1 Zeile -> 1 Zeile.
   **Zutatensuche (Stufe 5):** `GET /api/dishes?ingredient=zucchini` liefert Gerichte, in deren Rezept eine Zutat (`dish_ingredient.name`)
   den Text enthält. Der Vergleich läuft in JS (`toLocaleLowerCase("de")`), weil SQLite-`LIKE` nur ASCII ohne Beachtung der
   Schreibweise vergleicht; `q` und `ingredient` zusammen verlangen beides. Der Katalog fragt ab zwei Zeichen (250 ms Pause) nach und zeigt Gerichte, deren
@@ -233,6 +241,16 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   Im UI ein dritter Reiter „Zutaten“ (`IngredientsView.svelte`): Suche (Enter oder „„X“ als Zutat anlegen“), Filter
   „Haben wir immer“, Haken je Zeile setzt den Vorrat sofort (bei Fehler zurück), Tippen auf den Namen zeigt „Löschen“ bzw.
   „Angaben zurücksetzen“ (zweistufig). Markiert wird nur dort, nicht in der Einkaufsliste.
+  **Aufteilen** (Entscheidungen vom 21.11.2026): Jede verwendete Zutat hat „Aufteilen …“ (Blatt `IngredientSplitSheet`,
+  Sheet-Art `split`, `openSplit`). `POST /api/ingredients/split/preview {key}` liefert Name, betroffene Gerichte und
+  `suggestParts` (`ingredient-split.ts`: getrennt an „,“ „&“ „+“ „und“, nicht an „oder“); im Blatt sind die Teile
+  editierbar, je Teil Name und optionale Sorte. `POST /api/ingredients/split {key, parts}` (2–10 Teile, keiner mit dem
+  Namen der Zeile, sonst 400) ersetzt in **allen** Rezepten mit diesem `nameKey` die Zeile an Ort und Stelle
+  (`splitLines`): Teile ohne Menge, Einheit, Mehrzahl und Zubereitung, `section` und `raw` von der Zeile; ein Teil
+  entfällt, wenn das Rezept schon eine Zeile mit gleichem Namen, gleicher Sorte und gleichem Abschnitt hat. Eine
+  Transaktion (`splitIngredient`, schreibt nur die Zutatenzeilen über `writeIngredients`), löscht die Zutaten-Haken des
+  Kochmodus der betroffenen Gerichte (Positionen verschieben sich, Schritt-Haken bleiben) und die Katalogzeile der
+  Sammelzutat. „Aufteilen“ zweistufig, kein Rückgängig. Danach lädt der Reiter neu (`app.ingredientsRevision`).
 - Ein Gericht kann pro Zeitraum nur einmal vorkommen. Der Titel ist im Katalog eindeutig (ohne Groß-/Kleinschreibung).
   Ein Eintrag per Titel (API) legt das Gericht an oder verwendet ein vorhandenes wieder.
 - **Neues Gericht anlegen:** In der Hinzufügen-Leiste der Liste öffnen ein neuer Name („„X“ neu anlegen …“, Enter) und ein
@@ -609,7 +627,7 @@ raten (`async_update_reload_and_abort`, `HassioServiceInfo`, `StaticPathConfig`,
 - Sheets nutzen das native `<dialog>`. Kein `alert()`/`confirm()` (in der HA-Companion-App unzuverlässig), stattdessen
   zweistufige Bestätigung im UI.
 - **Zurück-Taste:** Ein offenes Blatt belegt einen History-Eintrag (`pushSheetEntry`/`closeSheet` in `store.svelte.ts`), damit
-  „Zurück“ das Blatt schließt statt die App zu verlassen. Blätter nur über `openDishSheet`/`openPeriods`/`openCook` öffnen
+  „Zurück“ das Blatt schließt statt die App zu verlassen. Blätter nur über `openDishSheet`/`openPeriods`/`openCook`/`openSplit` öffnen
   und über `closeSheet` schließen, nie `app.sheet` direkt setzen. Getestet im Browser mit der App in einem iframe, in der
   HA-Companion-App auf dem Handy noch nicht.
 - **APIs und Schnittstellen vor der Nutzung gegen die aktuelle Dokumentation prüfen** (HA-Add-on-Konfiguration, Hono,

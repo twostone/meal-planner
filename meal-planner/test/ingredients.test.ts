@@ -119,3 +119,45 @@ test("migration from v11 adds the ingredient table and keeps recipes", async () 
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("split: preview names the dishes and suggests parts; splitting rewrites every recipe and drops ingredient ticks only", async () => {
+  const { call, repo } = setup();
+  const pasta = repo.createDish({ title: "Pasta" });
+  const suppe = repo.createDish({ title: "Suppe" });
+  repo.setRecipe(pasta.id, { servings: 2, instructions: "Kochen\nWürzen", ingredients: [ing("Nudeln"), ing("Salz & Pfeffer")] });
+  repo.setRecipe(suppe.id, recipe(ing("Salz"), ing("Salz & Pfeffer")));
+  repo.setIngredient("salz & pfeffer", { pantry: true });
+  const plan = repo.createPlan({ start_date: "2026-11-21", end_date: "2026-11-27" });
+  const entry = repo.addEntry(plan.id, { dish_id: pasta.id });
+  repo.setCheck(entry.id, "ingredient", 0, true);
+  repo.setCheck(entry.id, "step", 1, true);
+
+  const preview = await call("POST", "/api/ingredients/split/preview", { key: "salz & pfeffer" });
+  assert.deepEqual(preview.json, { name: "Salz & Pfeffer", dishes: [{ id: pasta.id, title: "Pasta" }, { id: suppe.id, title: "Suppe" }], parts: ["Salz", "Pfeffer"] });
+
+  const split = await call("POST", "/api/ingredients/split", { key: "salz & pfeffer", parts: [{ name: "Salz", note: null }, { name: "Pfeffer", note: "schwarz" }] });
+  assert.deepEqual(split.json, { dishes: 2 });
+  assert.deepEqual(repo.getRecipe(pasta.id).ingredients.map((i) => [i.name, i.note, i.raw]), [
+    ["Nudeln", null, "Nudeln"],
+    ["Salz", null, "Salz & Pfeffer"],
+    ["Pfeffer", "schwarz", "Salz & Pfeffer"],
+  ]);
+  assert.deepEqual(repo.getRecipe(suppe.id).ingredients.map((i) => i.name), ["Salz", "Pfeffer"]);
+  assert.equal(repo.getRecipe(pasta.id).instructions, "Kochen\nWürzen");
+  assert.deepEqual(repo.getChecks(plan.id).entries[0]!.checks, { ingredients: [], steps: [1] });
+  // The collective name and its catalog row are gone; Salz and Pfeffer count their dishes.
+  assert.deepEqual(repo.listIngredients().map((i) => [i.name, i.dishes]), [["Nudeln", 1], ["Pfeffer", 2], ["Salz", 2]]);
+  assert.deepEqual([...repo.pantryKeys()], []);
+});
+
+test("split: refused for unknown names, fewer than two parts, or a part named like the line", async () => {
+  const { call, repo } = setup();
+  repo.setRecipe(repo.createDish({ title: "Suppe" }).id, recipe(ing("Salz & Pfeffer")));
+  const body = (parts: { name: string; note: string | null }[], key = "salz & pfeffer") => ({ key, parts });
+  assert.equal((await call("POST", "/api/ingredients/split", body([{ name: "A", note: null }, { name: "B", note: null }], "safran"))).status, 404);
+  assert.equal((await call("POST", "/api/ingredients/split/preview", { key: "safran" })).status, 404);
+  assert.equal((await call("POST", "/api/ingredients/split", body([{ name: "Salz", note: null }]))).status, 400);
+  assert.equal((await call("POST", "/api/ingredients/split", body([{ name: "Salz", note: null }, { name: "salz &  pfeffer", note: null }]))).status, 400);
+  assert.equal((await call("POST", "/api/ingredients/split", body([{ name: " ", note: null }, { name: "Pfeffer", note: null }]))).status, 400);
+  assert.deepEqual(repo.listIngredients().map((i) => i.name), ["Salz & Pfeffer"]);
+});

@@ -70,6 +70,16 @@ async function seed(base: string): Promise<{ pastaDishId: number }> {
       { section: null, amount: null, amount_max: null, unit: null, name: "Oregano", note: null },
     ],
   });
+  // A collective line as older recognized recipes have it, for splitting in the ingredient catalog.
+  const soupDishId = dishes.find((d) => d.title === "Kürbissuppe mit Ingwer")!.id;
+  await call(base, "PUT", `dishes/${soupDishId}/recipe`, {
+    servings: 4,
+    instructions: "Kürbis würfeln und kochen.\nPürieren und abschmecken.",
+    ingredients: [
+      { section: null, amount: 1, amount_max: null, unit: null, name: "Hokkaido-Kürbis", note: null },
+      { section: null, amount: null, amount_max: null, unit: null, name: "Salz & Pfeffer", note: null, raw: "Salz & Pfeffer" },
+    ],
+  });
   // The ingredient catalog: salt is always at home, sugar was added by hand.
   await call(base, "PATCH", "ingredients", { key: "salz", pantry: true });
   await call(base, "POST", "ingredients", { name: "Zucker" });
@@ -154,6 +164,29 @@ const SHOTS: Shot[] = [
   { name: "list", run: async () => {} },
   { name: "catalog", run: (page) => page.getByRole("button", { name: "Katalog" }).click() },
   { name: "ingredients", run: (page) => page.getByRole("button", { name: "Zutaten", exact: true }).click() },
+  {
+    // Splitting a collective line: the suggested parts, the dishes it touches, a variety for one part.
+    name: "ingredient-split",
+    run: async (page) => {
+      await page.getByRole("button", { name: "Zutaten", exact: true }).click();
+      await page.locator("button.title", { hasText: "Salz & Pfeffer" }).click();
+      await page.getByRole("button", { name: "Aufteilen …" }).click();
+      await page.getByLabel("Sorte von Zutat 2").fill("schwarz");
+    },
+  },
+  {
+    // After splitting: the list without the collective line, Salz in two dishes, the info toast.
+    name: "ingredient-split-done",
+    run: async (page) => {
+      await page.getByRole("button", { name: "Zutaten", exact: true }).click();
+      await page.locator("button.title", { hasText: "Salz & Pfeffer" }).click();
+      await page.getByRole("button", { name: "Aufteilen …" }).click();
+      const sheet = page.locator("dialog");
+      await sheet.getByRole("button", { name: "In 2 Zutaten aufteilen" }).click();
+      await sheet.getByRole("button", { name: /Wirklich aufteilen/ }).click();
+      await page.getByRole("status").waitFor();
+    },
+  },
   {
     // The pantry section of the shopping list unfolded: unticked, but can be ticked when something runs out.
     name: "shopping-pantry",

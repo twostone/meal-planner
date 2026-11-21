@@ -1265,10 +1265,12 @@ a.btn {
 }
 .ingredient-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
-  padding: 4px 12px 8px;
+  gap: 8px;
+  padding: 8px 12px;
 }
-.ingredient-actions small {
-  font-size: 13px;
-  color: var(--muted);
+.split-source {
+  margin: 0 0 12px;
+  font-size: 14px;
 }
