@@ -83,6 +83,10 @@ async function seed(base: string): Promise<{ pastaDishId: number }> {
   // The ingredient catalog: salt is always at home, sugar was added by hand.
   await call(base, "PATCH", "ingredients", { key: "salz", pantry: true });
   await call(base, "POST", "ingredients", { name: "Zucker" });
+  // Categories: pepper and oregano are spices, and all spices are always at home.
+  await call(base, "PATCH", "ingredients", { key: "pfeffer", category: "Gewürz" });
+  await call(base, "PATCH", "ingredients", { key: "oregano", category: "Gewürz" });
+  await call(base, "PATCH", "ingredient-categories", { key: "gewürz", pantry: true });
   return { pastaDishId };
 }
 
@@ -164,6 +168,23 @@ const SHOTS: Shot[] = [
   { name: "list", run: async () => {} },
   { name: "catalog", run: (page) => page.getByRole("button", { name: "Katalog" }).click() },
   { name: "ingredients", run: (page) => page.getByRole("button", { name: "Zutaten", exact: true }).click() },
+  {
+    // Filtered by a category: the switch for the whole category, its ingredients ticked and fixed.
+    name: "ingredient-category",
+    run: async (page) => {
+      await page.getByRole("button", { name: "Zutaten", exact: true }).click();
+      await page.getByRole("button", { name: "Gewürz", exact: true }).click();
+    },
+  },
+  {
+    // The category field of one ingredient, with the categories in use as suggestions.
+    name: "ingredient-category-edit",
+    run: async (page) => {
+      await page.getByRole("button", { name: "Zutaten", exact: true }).click();
+      await page.locator("button.title", { hasText: "Speck" }).click();
+      await page.getByLabel("Kategorie").fill("Fleisch");
+    },
+  },
   {
     // Splitting a collective line: the suggested parts, the dishes it touches, a variety for one part.
     name: "ingredient-split",

@@ -162,13 +162,14 @@ export function registerTools(server: McpServer, deps: McpDeps, user: HaUser | n
     {
       title: "List ingredients",
       description:
-        "The ingredient catalog of the household: every ingredient name used in a recipe or added by hand, sorted by name. pantry = always at home, the shopping list leaves it unticked. Read only: the catalog is edited in the app.",
+        "The ingredient catalog of the household: every ingredient name used in a recipe or added by hand, sorted by name, with its category. pantry = always at home (marked itself or through its category), the shopping list leaves it unticked. Read only: the catalog is edited in the app.",
       inputSchema: z.object({ pantry_only: z.boolean().default(false).describe("only ingredients that are always at home") }),
       outputSchema: z.object({
         ingredients: z.array(
           z.object({
             name: z.string(),
-            pantry: z.boolean().describe("always at home"),
+            pantry: z.boolean().describe("always at home, itself or through its category"),
+            category: z.string().nullable().describe('e.g. "Gewürz"; null = none'),
             dishes: z.number().describe("number of dishes whose recipe uses it; 0 = added by hand or no longer used"),
           }),
         ),
@@ -177,9 +178,8 @@ export function registerTools(server: McpServer, deps: McpDeps, user: HaUser | n
     },
     async ({ pantry_only }) =>
       guarded(() => {
-        const all = repo.listIngredients();
-        const found = pantry_only ? all.filter((i) => i.pantry) : all;
-        return result({ ingredients: found.map(({ name, pantry, dishes }) => ({ name, pantry, dishes })) });
+        const all = repo.listIngredients().map((i) => ({ name: i.name, pantry: i.pantry || i.category_pantry, category: i.category, dishes: i.dishes }));
+        return result({ ingredients: pantry_only ? all.filter((i) => i.pantry) : all });
       }),
   );
 

@@ -145,6 +145,7 @@ test("migration v6 keeps recipes and adds the source columns", async () => {
     createRepo(first).createDish({ title: "Linsensuppe" });
     first.exec("ALTER TABLE dish_ingredient DROP COLUMN plural");
     first.exec("ALTER TABLE dish_ingredient DROP COLUMN prep");
+    first.exec("DROP TABLE ingredient_category");
     first.exec("DROP TABLE ingredient");
     first.exec("DROP TABLE setting");
     first.exec("DROP TABLE cook_check");
@@ -154,7 +155,7 @@ test("migration v6 keeps recipes and adds the source columns", async () => {
     first.close();
 
     const db = openDb(file);
-    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 12);
+    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 13);
     const repo = createRepo(db);
     assert.equal(repo.getRecipe(1).source_text, null);
     repo.setSource(1, "Text", false);

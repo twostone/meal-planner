@@ -47,7 +47,12 @@ const tags = z.array(z.string().trim().min(1).max(30)).max(10);
 const MAX_INGREDIENT_NAME = 80; // same as dish_ingredient.name in recipeBody
 const ingredientName = z.string().trim().min(1).max(MAX_INGREDIENT_NAME);
 const ingredientKey = z.object({ key: z.string().min(1).max(MAX_INGREDIENT_NAME) });
-const ingredientPatch = ingredientKey.extend({ pantry: z.boolean() });
+// A category of ingredients ("Gewürz"): as long as a dish tag. "" or null removes it, missing keeps it.
+const MAX_CATEGORY_LENGTH = 30;
+const ingredientPatch = ingredientKey
+  .extend({ pantry: z.boolean().optional(), category: optional(z.string().trim().min(1).max(MAX_CATEGORY_LENGTH)) })
+  .refine((b) => b.pantry !== undefined || b.category !== undefined, "nothing to change");
+const categoryPatch = z.object({ key: z.string().min(1).max(MAX_CATEGORY_LENGTH), pantry: z.boolean() });
 
 // The recipe text from a link preview (see POST /api/preview). Stored unchanged, never interpreted.
 const source = { source_text: optional(z.string().max(10000)), source_truncated: z.boolean().optional() };
@@ -270,6 +275,12 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
     return c.json(repo.setIngredient(key, input));
   });
   app.post("/api/ingredients/reset", zValidator("json", ingredientKey), (c) => c.json(repo.resetIngredient(c.req.valid("json").key)));
+  // Categories of ingredients; a whole category can be always at home.
+  app.get("/api/ingredient-categories", (c) => c.json(repo.listIngredientCategories()));
+  app.patch("/api/ingredient-categories", zValidator("json", categoryPatch), (c) => {
+    const { key, pantry } = c.req.valid("json");
+    return c.json(repo.setCategoryPantry(key, pantry));
+  });
   app.post("/api/ingredients/split/preview", zValidator("json", ingredientKey), (c) => c.json(repo.previewSplit(c.req.valid("json").key)));
   app.post("/api/ingredients/split", zValidator("json", ingredientSplit), (c) => {
     const { key, parts } = c.req.valid("json");

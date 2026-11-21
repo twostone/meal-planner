@@ -178,13 +178,14 @@ test("migration v8 adds the setting table", async () => {
     const plan = createRepo(first).createPlan({ start_date: "2026-10-10", end_date: "2026-10-16" });
     first.exec("ALTER TABLE dish_ingredient DROP COLUMN plural");
     first.exec("ALTER TABLE dish_ingredient DROP COLUMN prep");
+    first.exec("DROP TABLE ingredient_category");
     first.exec("DROP TABLE ingredient");
     first.exec("DROP TABLE setting");
     first.exec("PRAGMA user_version = 8");
     first.close();
 
     const db = openDb(file);
-    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 12);
+    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 13);
     const repo = createRepo(db);
     assert.equal(repo.getPlan(plan.id).id, plan.id);
     assert.equal(repo.getSetting("shopping_list_entity"), null);
