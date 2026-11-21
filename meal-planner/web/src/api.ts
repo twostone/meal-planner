@@ -69,6 +69,11 @@ export const createIngredient = (name: string) => request<CatalogIngredient>("PO
 export const setPantry = (key: string, pantry: boolean) => request<CatalogIngredient>("PATCH", "api/ingredients", { key, pantry });
 export const resetIngredient = (key: string) => request<CatalogIngredient>("POST", "api/ingredients/reset", { key });
 export const deleteIngredient = (key: string) => request<void>("POST", "api/ingredients/delete", { key });
+// Splitting a collective line ("Salz & Pfeffer") in every recipe: the dishes it touches and the suggested parts first.
+export const previewSplit = (key: string) =>
+  request<{ name: string; dishes: { id: number; title: string }[]; parts: string[] }>("POST", "api/ingredients/split/preview", { key });
+export const splitIngredient = (key: string, parts: { name: string; note: string | null }[]) =>
+  request<{ dishes: number }>("POST", "api/ingredients/split", { key, parts });
 
 export const createDish = (d: DishInput) => request<Dish>("POST", "api/dishes", d);
 export const updateDish = (id: number, d: DishInput) => request<Dish>("PATCH", `api/dishes/${id}`, d);

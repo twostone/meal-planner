@@ -79,6 +79,13 @@ export const planPatch = z
   });
 // Text fields of a recipe: "" or null means "not set".
 const text = (max: number) => z.union([z.literal("").transform(() => null), z.string().trim().max(max), z.null()]);
+
+// Splitting a collective ingredient ("Salz & Pfeffer"): at least two parts, none named like the line itself (it would stay).
+const MIN_SPLIT_PARTS = 2;
+const MAX_SPLIT_PARTS = 10;
+const ingredientSplit = ingredientKey
+  .extend({ parts: z.array(z.object({ name: ingredientName, note: text(200) })).min(MIN_SPLIT_PARTS).max(MAX_SPLIT_PARTS) })
+  .refine((b) => b.parts.every((p) => nameKey(p.name) !== b.key), "a part keeps the name of the line");
 const ingredient = z
   .object({
     section: text(80),
@@ -259,6 +266,13 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
     return c.json(repo.setIngredient(key, input));
   });
   app.post("/api/ingredients/reset", zValidator("json", ingredientKey), (c) => c.json(repo.resetIngredient(c.req.valid("json").key)));
+  app.post("/api/ingredients/split/preview", zValidator("json", ingredientKey), (c) => c.json(repo.previewSplit(c.req.valid("json").key)));
+  app.post("/api/ingredients/split", zValidator("json", ingredientSplit), (c) => {
+    const { key, parts } = c.req.valid("json");
+    const dishes = repo.splitIngredient(key, parts);
+    log.info("ingredient_split", { dishes, parts: parts.length });
+    return c.json({ dishes });
+  });
   app.post("/api/ingredients/delete", zValidator("json", ingredientKey), (c) => {
     repo.deleteIngredient(c.req.valid("json").key);
     return c.body(null, 204);

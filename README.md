@@ -43,7 +43,9 @@ dieselbe Liste.
   Bring-Liste. Was dort schon offen steht, ist abgewählt. Siehe „Einkaufsliste (Bring)“.
 - Zutaten: Der Reiter „Zutaten“ zeigt alle Zutaten aus den Rezepten. Was man immer zu Hause hat (Salz, Pfeffer, Gewürze),
   markiert man dort als „haben wir immer“: In der Einkaufsliste steht es dann eingeklappt unter „Haben wir immer“ und ist
-  abgewählt, lässt sich aber anhaken, wenn es ausgeht. Zutaten lassen sich auch von Hand anlegen.
+  abgewählt, lässt sich aber anhaken, wenn es ausgeht. Zutaten lassen sich auch von Hand anlegen. Sammelzeilen wie „Salz &
+  Pfeffer“ teilt „Aufteilen …“ in allen Rezepten auf einmal in einzelne Zutaten; neu erkannte Rezepte bekommen sie gleich
+  einzeln.
 - Bedienung für das Handy ausgelegt, auch in der Home-Assistant-Companion-App.
 - Optional ein **MCP-Server** für KI-Assistenten (z. B. Claude): Listen lesen und bearbeiten, Gerichte und Rezepte pflegen,
   Anmeldung über Home Assistant. Siehe „MCP-Server (für Claude & Co.)“.

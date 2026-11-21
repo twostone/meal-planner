@@ -1,8 +1,7 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import * as api from "./api";
   import Icon from "./Icon.svelte";
-  import { showError } from "./store.svelte";
+  import { app, openSplit, showError } from "./store.svelte";
   import { groupByInitial } from "./util";
   import type { CatalogIngredient } from "./types";
 
@@ -15,7 +14,13 @@
   let confirming = $state(false);
   let busy = $state(false);
 
-  onMount(async () => {
+  // Loads again after a split rewrote recipes (app.ingredientsRevision), so counts and names are current.
+  $effect(() => {
+    void app.ingredientsRevision;
+    load();
+  });
+
+  async function load() {
     try {
       ingredients = await api.listIngredients();
     } catch (e) {
@@ -23,7 +28,7 @@
     } finally {
       loaded = true;
     }
-  });
+  }
 
   // Same rule as the server's nameKey: single spaces, lower case. A typed name with an existing key is no new ingredient.
   const keyOf = (name: string) => name.replace(/\s+/g, " ").trim().toLocaleLowerCase("de");
@@ -147,12 +152,14 @@
                   <button type="button" class="btn ghost-danger" disabled={busy} onclick={() => removeOrReset(i)}>
                     {confirming ? "Wirklich löschen?" : "Zutat löschen"}
                   </button>
-                {:else if i.pantry}
-                  <button type="button" class="btn ghost-danger" disabled={busy} onclick={() => removeOrReset(i)}>
-                    {confirming ? "Wirklich zurücksetzen?" : "Angaben zurücksetzen"}
-                  </button>
                 {:else}
-                  <small>Steht in Rezepten, deshalb nicht löschbar. Keine weiteren Angaben.</small>
+                  <!-- Splitting is offered for every used name: the suggestion may miss a separator. -->
+                  <button type="button" class="btn outline" onclick={() => openSplit(i.key)}>Aufteilen …</button>
+                  {#if i.pantry}
+                    <button type="button" class="btn ghost-danger" disabled={busy} onclick={() => removeOrReset(i)}>
+                      {confirming ? "Wirklich zurücksetzen?" : "Angaben zurücksetzen"}
+                    </button>
+                  {/if}
                 {/if}
               </div>
             {/if}

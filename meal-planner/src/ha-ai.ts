@@ -67,7 +67,9 @@ Regeln:
   {"section": string|null, "amount": number|null, "amount_max": number|null,
    "unit": string|null, "name": string, "plural": string|null, "note": string|null, "prep": string|null, "raw": string}.
   "raw" ist die Originalzeile unverändert, "section" die Zwischenüberschrift unverändert.
-  Jede Zutatenzeile übernehmen, auch "Salz & Pfeffer".
+  Jede Zutatenzeile übernehmen. Nennt eine Zeile mehrere Zutaten ("Salz & Pfeffer", "Salz, Pfeffer und Oregano"),
+  jede Zutat einzeln angeben, alle mit derselben Originalzeile als raw; amount und unit dann null, außer die Menge
+  gehört eindeutig zu einer Zutat. "oder" nennt Alternativen ("Butter oder Margarine"): nicht aufteilen.
 - instructions: ein Schritt pro Zeile, Wortlaut möglichst erhalten. Lücken nicht füllen.`;
 
 // How many known ingredient names go into the prompt, and how long that list may get at most.
