@@ -104,8 +104,11 @@ export type CatalogIngredient = {
   key: string;
   name: string; // the spelling stored in the catalog, else the first spelling in the recipes
   dishes: number; // how many dishes use it; 0 = in no recipe (added by hand or no longer used)
-  pantry: boolean; // always at home: the shopping list shows it unticked
+  pantry: boolean; // marked as always at home itself
+  category: string | null; // e.g. "Gewürz"; one per ingredient
+  category_pantry: boolean; // its category is always at home, so it is too (no exceptions per ingredient)
 };
+export type IngredientCategory = { key: string; name: string; pantry: boolean; ingredients: number };
 
 export class NotFoundError extends Error {}
 export class ConflictError extends Error {}
@@ -157,15 +160,50 @@ export function createRepo(db: DatabaseSync) {
     return used;
   }
 
-  type CatalogRow = { key: string; name: string; pantry: number };
-  const catalogRows = () => new Map(all<CatalogRow>("SELECT key, name, pantry FROM ingredient").map((r) => [r.key, r]));
+  type CatalogRow = { key: string; name: string; pantry: number; category: string | null };
+  const CATALOG_COLS = "key, name, pantry, category";
+  const catalogRows = () => new Map(all<CatalogRow>(`SELECT ${CATALOG_COLS} FROM ingredient`).map((r) => [r.key, r]));
+  // Keys (nameKey) of the categories marked as always at home.
+  const pantryCategories = () => new Set(all<{ key: string }>("SELECT key FROM ingredient_category WHERE pantry = 1").map((r) => r.key));
+
+  function catalogIngredient(key: string, row: CatalogRow | undefined, dishes: number, usedName: string | undefined, pantryCats: Set<string>): CatalogIngredient {
+    const category = row?.category ?? null;
+    return {
+      key,
+      name: row?.name ?? usedName!,
+      dishes,
+      pantry: !!row?.pantry,
+      category,
+      category_pantry: category !== null && pantryCats.has(nameKey(category)),
+    };
+  }
 
   // The catalog entry of a key, or null if the name is neither used in a recipe nor in the catalog.
   function findIngredient(key: string): CatalogIngredient | null {
-    const row = one<CatalogRow>("SELECT key, name, pantry FROM ingredient WHERE key = ?", key);
+    const row = one<CatalogRow>(`SELECT ${CATALOG_COLS} FROM ingredient WHERE key = ?`, key);
     const used = usedIngredientNames().get(key);
     if (!row && !used) return null;
-    return { key, name: row?.name ?? used!.name, dishes: used?.dishes.size ?? 0, pantry: !!row?.pantry };
+    return catalogIngredient(key, row, used?.dishes.size ?? 0, used?.name, pantryCategories());
+  }
+
+  // Categories in use, by nameKey: the first spelling (alphabetically by ingredient) and how many ingredients have it.
+  function usedCategories(): Map<string, { name: string; ingredients: number }> {
+    const categories = new Map<string, { name: string; ingredients: number }>();
+    for (const { category } of all<{ category: string }>("SELECT category FROM ingredient WHERE category IS NOT NULL ORDER BY key")) {
+      const key = nameKey(category);
+      const c = categories.get(key);
+      if (c) c.ingredients++;
+      else categories.set(key, { name: category, ingredients: 1 });
+    }
+    return categories;
+  }
+
+  // A category disappears with its last ingredient, and with it its pantry mark (like dish tags).
+  function pruneCategories(): void {
+    const used = usedCategories();
+    for (const { key } of all<{ key: string }>("SELECT key FROM ingredient_category")) {
+      if (!used.has(key)) db.prepare("DELETE FROM ingredient_category WHERE key = ?").run(key);
+    }
   }
 
   function getIngredient(key: string): CatalogIngredient {
@@ -355,11 +393,11 @@ export function createRepo(db: DatabaseSync) {
       const catalog = catalogRows();
       const used = usedIngredientNames();
       const keys = new Set([...used.keys(), ...catalog.keys()]);
+      const pantryCats = pantryCategories();
       return [...keys]
         .map((key) => {
-          const row = catalog.get(key);
           const u = used.get(key);
-          return { key, name: row?.name ?? u!.name, dishes: u?.dishes.size ?? 0, pantry: !!row?.pantry };
+          return catalogIngredient(key, catalog.get(key), u?.dishes.size ?? 0, u?.name, pantryCats);
         })
         .sort((a, b) => a.name.localeCompare(b.name, "de"));
     },
@@ -372,11 +410,36 @@ export function createRepo(db: DatabaseSync) {
       return getIngredient(key);
     },
 
-    setIngredient(key: string, input: { pantry: boolean }): CatalogIngredient {
-      const current = getIngredient(key);
-      db.prepare("INSERT INTO ingredient (key, name, pantry) VALUES (?, ?, ?) ON CONFLICT (key) DO UPDATE SET pantry = excluded.pantry")
-        .run(key, current.name, input.pantry ? 1 : 0);
-      return getIngredient(key);
+    // pantry and category: missing = unchanged, category null = none. A category spelled like one in use (any case)
+    // takes that spelling, so "gewürz" joins "Gewürz".
+    setIngredient(key: string, input: { pantry?: boolean; category?: string | null }): CatalogIngredient {
+      return transaction(db, () => {
+        const current = getIngredient(key);
+        const pantry = input.pantry ?? current.pantry;
+        let category = input.category === undefined ? current.category : input.category;
+        if (category !== null) category = usedCategories().get(nameKey(category))?.name ?? category.replace(/\s+/g, " ").trim();
+        db.prepare(
+          "INSERT INTO ingredient (key, name, pantry, category) VALUES (?, ?, ?, ?) ON CONFLICT (key) DO UPDATE SET pantry = excluded.pantry, category = excluded.category",
+        ).run(key, current.name, pantry ? 1 : 0, category);
+        pruneCategories();
+        return getIngredient(key);
+      });
+    },
+
+    // Categories in use, sorted by name, with their pantry mark.
+    listIngredientCategories(): IngredientCategory[] {
+      const pantryCats = pantryCategories();
+      return [...usedCategories()]
+        .map(([key, c]) => ({ key, name: c.name, pantry: pantryCats.has(key), ingredients: c.ingredients }))
+        .sort((a, b) => a.name.localeCompare(b.name, "de"));
+    },
+
+    // Marks a whole category as always at home (or not). Only categories in use.
+    setCategoryPantry(key: string, pantry: boolean): IngredientCategory {
+      if (!usedCategories().has(key)) throw new NotFoundError("category");
+      if (pantry) db.prepare("INSERT INTO ingredient_category (key, pantry) VALUES (?, 1) ON CONFLICT (key) DO UPDATE SET pantry = 1").run(key);
+      else db.prepare("DELETE FROM ingredient_category WHERE key = ?").run(key);
+      return self.listIngredientCategories().find((c) => c.key === key)!;
     },
 
     // Back to the defaults. A name used in recipes loses its catalog row (the recipes keep it in the list); a name
@@ -384,7 +447,8 @@ export function createRepo(db: DatabaseSync) {
     resetIngredient(key: string): CatalogIngredient {
       const current = getIngredient(key);
       if (current.dishes > 0) db.prepare("DELETE FROM ingredient WHERE key = ?").run(key);
-      else db.prepare("UPDATE ingredient SET pantry = 0 WHERE key = ?").run(key);
+      else db.prepare("UPDATE ingredient SET pantry = 0, category = NULL WHERE key = ?").run(key);
+      pruneCategories();
       return getIngredient(key);
     },
 
@@ -392,6 +456,7 @@ export function createRepo(db: DatabaseSync) {
     deleteIngredient(key: string): void {
       if (getIngredient(key).dishes > 0) throw new ConflictError("ingredient in use");
       db.prepare("DELETE FROM ingredient WHERE key = ?").run(key);
+      pruneCategories();
     },
 
     // What splitting a collective line would touch, and the suggested parts ("Salz & Pfeffer" -> Salz, Pfeffer).
@@ -414,6 +479,7 @@ export function createRepo(db: DatabaseSync) {
           writeIngredients(id, splitLines(lines.all(id) as Ingredient[], key, parts));
         }
         db.prepare("DELETE FROM ingredient WHERE key = ?").run(key);
+        pruneCategories();
         return dishes.length;
       });
     },
@@ -446,15 +512,22 @@ export function createRepo(db: DatabaseSync) {
         const sourceIds = new Set(linesNamed(key).map((l) => l.id));
         for (const line of lines) update.run(input.name, input.plural, sourceIds.has(line.id) ? input.note : null, line.id);
         db.prepare("DELETE FROM ingredient WHERE key = ?").run(key);
-        db.prepare("INSERT INTO ingredient (key, name, pantry) VALUES (?, ?, ?) ON CONFLICT (key) DO UPDATE SET name = excluded.name, pantry = excluded.pantry")
-          .run(targetKey, input.name, input.pantry ? 1 : 0);
+        // The category goes along unless the target already has one.
+        db.prepare(
+          `INSERT INTO ingredient (key, name, pantry, category) VALUES (?, ?, ?, ?)
+           ON CONFLICT (key) DO UPDATE SET name = excluded.name, pantry = excluded.pantry, category = COALESCE(ingredient.category, excluded.category)`,
+        ).run(targetKey, input.name, input.pantry ? 1 : 0, source.category);
+        pruneCategories();
         return new Set(lines.map((l) => l.dish_id)).size;
       });
     },
 
-    // Keys (nameKey) of the ingredients that are always at home.
+    // Keys (nameKey) of the ingredients that are always at home: marked themselves or through their category.
     pantryKeys(): Set<string> {
-      return new Set(all<{ key: string }>("SELECT key FROM ingredient WHERE pantry = 1").map((r) => r.key));
+      const pantryCats = pantryCategories();
+      return new Set(
+        [...catalogRows().values()].filter((r) => r.pantry || (r.category !== null && pantryCats.has(nameKey(r.category)))).map((r) => r.key),
+      );
     },
 
     // Applies reviewed changes to the lines of one recipe in one transaction and returns the number of changed lines.

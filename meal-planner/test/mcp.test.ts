@@ -236,14 +236,15 @@ test("list_ingredients: the catalog with pantry flag and dish count, optionally 
   const dish = repo.createDish({ title: "Suppe" });
   repo.setRecipe(dish.id, { servings: null, instructions: null, ingredients: [{ section: null, amount: null, amount_max: null, unit: null, name: "Salz", note: null }] });
   repo.createIngredient("Zucker");
-  repo.setIngredient("salz", { pantry: true });
+  repo.setIngredient("salz", { category: "Gewürz" });
+  repo.setCategoryPantry("gewürz", true);
   const c = await connect(deps);
   const all = await call(c, "list_ingredients");
   assert.deepEqual(all.structuredContent, {
     ingredients: [
-      { name: "Salz", pantry: true, dishes: 1 },
-      { name: "Zucker", pantry: false, dishes: 0 },
+      { name: "Salz", pantry: true, category: "Gewürz", dishes: 1 },
+      { name: "Zucker", pantry: false, category: null, dishes: 0 },
     ],
   });
-  assert.deepEqual((await call(c, "list_ingredients", { pantry_only: true })).structuredContent, { ingredients: [{ name: "Salz", pantry: true, dishes: 1 }] });
+  assert.deepEqual((await call(c, "list_ingredients", { pantry_only: true })).structuredContent, { ingredients: [{ name: "Salz", pantry: true, category: "Gewürz", dishes: 1 }] });
 });

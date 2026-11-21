@@ -82,7 +82,7 @@ npm run check                     # svelte-check Frontend
 npm run build                     # Frontend nach dist/ (wird vom Server ausgeliefert)
 DB_PATH=./data/dev.db PORT=8099 npm start
 npm run dev:web                   # Vite-Dev-Server, /api geht per Proxy an :8099
-npm run screenshot [-- list catalog ingredients ingredient-split ingredient-rename dish dish-new recipe cook shopping shopping-pantry toast-error] # nach npm run build: PNGs bei 390 px nach screenshots/
+npm run screenshot [-- list catalog ingredients ingredient-category ingredient-split ingredient-rename dish dish-new recipe cook shopping shopping-pantry toast-error] # nach npm run build: PNGs bei 390 px nach screenshots/
 ```
 
 Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (genau das prüft auch die CI). Bei Änderungen an
@@ -92,7 +92,7 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
 
 - **Datenmodell:** `dish` (Katalog, mit `url`, `note`, `image`), `dish_tag` (Kategorien), `plan` (Zeitraum, Start/Ende,
   optional `title`), `plan_entry` (Gericht in Zeitraum, `done`, `note`), `setting` (Schlüssel/Wert, Schlüssel nur aus
-  `SettingKey` in `repo.ts`), `ingredient` (Zutatenkatalog, siehe dort). Bewusst **keine Tageszuordnung** und keine manuelle
+  `SettingKey` in `repo.ts`), `ingredient` und `ingredient_category` (Zutatenkatalog, siehe dort). Bewusst **keine Tageszuordnung** und keine manuelle
   Reihenfolge per Drag.
 - **Liste bearbeiten:** Name und Zeitraum einer Liste ändert `PATCH /api/plans/:id` (`updatePlan` in `repo.ts`), im UI per
   Stift-Symbol im Zeitraum-Blatt. `title`: höchstens 100 Zeichen, `""`/`null` löscht den Namen, fehlt es, bleibt er. Ohne
@@ -230,7 +230,7 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   **Vorrat:** Jeder Artikel hat `pantry` (aus dem Zutatenkatalog, über `nameKey(base)`, die Sorte zählt nicht). Das Blatt
   zeigt diese Artikel eingeklappt unter „Haben wir immer (N)“, nicht angehakt; `on_list` bleibt als Hinweis. `buildShoppingList`
   bleibt rein, `pantry` setzt die Route.
-- **Zutatenkatalog** (Entscheidungen vom 20./21.11.2026: Vorrat, Aufteilen, Umbenennen gebaut; Kategorien geplant;
+- **Zutatenkatalog** (Entscheidungen vom 20./21.11.2026: Vorrat, Kategorien, Aufteilen, Umbenennen gebaut;
   Synonyme verworfen, Umbenennen/Zusammenführen ersetzt sie): Eine
   Zutat ist ein `nameKey`, die Notiz (Sorte) gehört nicht dazu. Tabelle `ingredient` (`key` = `nameKey`, `name`, `pantry`):
   eine Zeile nur für Namen, die von Hand angelegt wurden oder eine Angabe haben; Namen, die nur in Rezepten stehen, haben
@@ -242,6 +242,19 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   Im UI ein dritter Reiter „Zutaten“ (`IngredientsView.svelte`): Suche (Enter oder „„X“ als Zutat anlegen“), Filter
   „Haben wir immer“, Haken je Zeile setzt den Vorrat sofort (bei Fehler zurück), Tippen auf den Namen zeigt „Löschen“ bzw.
   „Angaben zurücksetzen“ (zweistufig). Markiert wird nur dort, nicht in der Einkaufsliste.
+  **Kategorien** (Migration v13): `ingredient.category`, eine je Zutat, frei getippt (höchstens 30 Zeichen wie die
+  Kategorien der Gerichte); eine andere Schreibweise einer verwendeten Kategorie übernimmt deren Schreibweise
+  („gewürz“ -> „Gewürz“). Die Kategorienliste ist die Menge der verwendeten Werte (`listIngredientCategories`,
+  `GET /api/ingredient-categories`). Eine ganze Kategorie kann Vorrat sein: Tabelle `ingredient_category` (`key` =
+  `nameKey` der Kategorie, `pantry`), `PATCH /api/ingredient-categories {key, pantry}` (nur verwendete, sonst 404).
+  **Vorrat gilt, wenn die Zutat selbst oder ihre Kategorie markiert ist** (`pantryKeys`, damit auch in der Einkaufsliste);
+  einzelne Zutaten lassen sich bewusst nicht aus einer Vorrat-Kategorie herausnehmen (`category_pantry`, im UI ist der
+  Haken dann fest). Verschwindet die letzte Zutat einer Kategorie, verschwindet auch ihre Vorrat-Markierung
+  (`pruneCategories` nach jeder Änderung). `PATCH /api/ingredients {key, pantry?, category?}`: fehlt = unverändert,
+  `""`/`null` entfernt die Kategorie, beides fehlt -> 400. Zurücksetzen löscht auch die Kategorie; Umbenennen nimmt sie
+  mit, wenn das Ziel keine hat; Aufteilen lässt die Teile ohne Kategorie. Im Reiter: Kategorie-Chips hinter „Haben wir
+  immer“ filtern, bei gewählter Kategorie ein Schalter „Alles aus „X“ haben wir immer“; das Kategoriefeld (mit
+  `<datalist>`) steht im aufgeklappten Bereich jeder Zutat und speichert bei `change`.
   **Aufteilen** (Entscheidungen vom 21.11.2026): Jede verwendete Zutat hat „Aufteilen …“ (Blatt `IngredientSplitSheet`,
   Sheet-Art `split`, `openSplit`). `POST /api/ingredients/split/preview {key}` liefert Name, betroffene Gerichte und
   `suggestParts` (`ingredient-split.ts`: getrennt an „,“ „&“ „+“ „und“, nicht an „oder“); im Blatt sind die Teile
@@ -367,7 +380,8 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   (`homeassistant:` in `config.yaml`: PKCE, Client-ID-Metadaten, Loopback-Weiterleitungen), gilt für das ganze Add-on.
   **Tools** (`mcp.ts`, englisch, `outputSchema` + `structuredContent` + gleicher JSON-Text): lesen `list_plans`, `get_plan`
   (ohne ID aktuelle, sonst nächste Liste), `search_dishes` (Titel, Zutat, Kategorie), `get_recipe` (`source_text` nur mit
-  `include_source`), `list_ingredients` (Zutatenkatalog, `pantry_only`; Pflege nur in der App); schreiben `create_plan`, `update_plan`, `add_to_plan`, `update_plan_entry`, `remove_from_plan`,
+  `include_source`), `list_ingredients` (Zutatenkatalog mit Kategorie, `pantry` inklusive Kategorie, `pantry_only`;
+  Pflege nur in der App); schreiben `create_plan`, `update_plan`, `add_to_plan`, `update_plan_entry`, `remove_from_plan`,
   `create_dish`, `update_dish`, `set_recipe` (ersetzt alles wie `PUT …/recipe`, Schritte als Liste). Eingaben sind schlicht
   und beschrieben, danach prüfen dieselben zod-Schemas wie die API (`dishBody`, `planPatch`, `recipeBody` … aus `app.ts`), Grenzen
   stehen also nur dort. `NotFoundError`/`ConflictError`/zod-Fehler werden zu `isError` mit Text. Änderungen feuern dieselben

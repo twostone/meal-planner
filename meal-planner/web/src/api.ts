@@ -5,6 +5,7 @@ import type {
   PlanDetail,
   AiStatus,
   CatalogIngredient,
+  IngredientCategory,
   RenamePreview,
   IngredientChange,
   CheckState,
@@ -68,6 +69,12 @@ export const listIngredientNames = () => request<string[]>("GET", "api/ingredien
 export const listIngredients = () => request<CatalogIngredient[]>("GET", "api/ingredients");
 export const createIngredient = (name: string) => request<CatalogIngredient>("POST", "api/ingredients", { name });
 export const setPantry = (key: string, pantry: boolean) => request<CatalogIngredient>("PATCH", "api/ingredients", { key, pantry });
+// null removes the category; a spelling of one in use joins it ("gewürz" -> "Gewürz").
+export const setIngredientCategory = (key: string, category: string | null) =>
+  request<CatalogIngredient>("PATCH", "api/ingredients", { key, category });
+export const listIngredientCategories = () => request<IngredientCategory[]>("GET", "api/ingredient-categories");
+export const setCategoryPantry = (key: string, pantry: boolean) =>
+  request<IngredientCategory>("PATCH", "api/ingredient-categories", { key, pantry });
 export const resetIngredient = (key: string) => request<CatalogIngredient>("POST", "api/ingredients/reset", { key });
 export const deleteIngredient = (key: string) => request<void>("POST", "api/ingredients/delete", { key });
 // Splitting a collective line ("Salz & Pfeffer") in every recipe: the dishes it touches and the suggested parts first.
