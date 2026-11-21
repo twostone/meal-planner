@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.0](https://github.com/twostone/meal-planner/compare/v0.18.2...v0.19.0) (2026-11-21)
+
+
+### Neu
+
+* **zutaten:** Sammelzeilen im Zutatenkatalog aufteilen ([#90](https://github.com/twostone/meal-planner/issues/90)) ([d1fc799](https://github.com/twostone/meal-planner/commit/d1fc79926a65216ee613b7014b63e90497d0d811))
+
 ## [0.18.2](https://github.com/twostone/meal-planner/compare/v0.18.1...v0.18.2) (2026-11-20)
 
 
