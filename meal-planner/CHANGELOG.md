@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.18.2](https://github.com/twostone/meal-planner/compare/v0.18.1...v0.18.2) (2026-11-20)
+
+
+### Behoben
+
+* **ui:** Zutaten und Katalog mit Umlaut am Anfang wieder anzeigen ([#88](https://github.com/twostone/meal-planner/issues/88)) ([260787d](https://github.com/twostone/meal-planner/commit/260787d6e2c3d9f801a2c55f59610b4684573960))
+
 ## [0.18.1](https://github.com/twostone/meal-planner/compare/v0.18.0...v0.18.1) (2026-11-20)
 
 
