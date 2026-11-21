@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.20.0](https://github.com/twostone/meal-planner/compare/v0.19.0...v0.20.0) (2026-11-21)
+
+
+### Neu
+
+* **zutaten:** Kategorien für Zutaten, Vorrat je Kategorie ([#94](https://github.com/twostone/meal-planner/issues/94)) ([88df543](https://github.com/twostone/meal-planner/commit/88df5439e0a5680110eae89dcced6e34b451ef79))
+* **zutaten:** Zutaten umbenennen und zusammenführen ([#92](https://github.com/twostone/meal-planner/issues/92)) ([b1b1c1d](https://github.com/twostone/meal-planner/commit/b1b1c1d7e79c331562cd745ba969d84d9f6cbb1f))
+
 ## [0.19.0](https://github.com/twostone/meal-planner/compare/v0.18.2...v0.19.0) (2026-11-21)
 
 
