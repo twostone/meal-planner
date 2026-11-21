@@ -274,6 +274,8 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
     const { key, ...input } = c.req.valid("json");
     return c.json(repo.setIngredient(key, input));
   });
+  // Jump from an ingredient to the recipes that use it.
+  app.post("/api/ingredients/dishes", zValidator("json", ingredientKey), (c) => c.json(repo.ingredientDishes(c.req.valid("json").key)));
   app.post("/api/ingredients/reset", zValidator("json", ingredientKey), (c) => c.json(repo.resetIngredient(c.req.valid("json").key)));
   // Categories of ingredients; a whole category can be always at home.
   app.get("/api/ingredient-categories", (c) => c.json(repo.listIngredientCategories()));

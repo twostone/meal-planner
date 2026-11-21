@@ -1,9 +1,9 @@
 <script lang="ts">
   import * as api from "./api";
   import Icon from "./Icon.svelte";
-  import { app, openRename, openSplit, showError } from "./store.svelte";
+  import { app, openRecipe, openRename, openSplit, showError } from "./store.svelte";
   import { groupByInitial } from "./util";
-  import type { CatalogIngredient, IngredientCategory } from "./types";
+  import type { CatalogIngredient, IngredientCategory, IngredientDish } from "./types";
 
   const MAX_CATEGORY_LENGTH = 30; // like the server (MAX_CATEGORY_LENGTH in app.ts)
   const ALL = "all";
@@ -18,6 +18,8 @@
   // Key of the row whose actions are shown, and whether its delete/reset waits for the second tap.
   let openKey = $state<string | null>(null);
   let confirming = $state(false);
+  // The dishes of the open row, loaded when it opens (null = loading or none to load).
+  let openDishes = $state<IngredientDish[] | null>(null);
   let busy = $state(false);
 
   // Loads again after a split or rename rewrote recipes (app.ingredientsRevision), so counts and names are current.
@@ -114,9 +116,20 @@
     }
   }
 
-  function toggleOpen(key: string) {
-    openKey = openKey === key ? null : key;
+  function toggleOpen(i: CatalogIngredient) {
+    openKey = openKey === i.key ? null : i.key;
     confirming = false;
+    openDishes = null;
+    if (openKey && i.dishes > 0) loadDishes(i.key);
+  }
+
+  async function loadDishes(key: string) {
+    try {
+      const dishes = await api.listIngredientDishes(key);
+      if (openKey === key) openDishes = dishes; // another row may have opened meanwhile
+    } catch (e) {
+      showError(e);
+    }
   }
 
   // In no recipe: delete removes it. Used in a recipe: reset clears the settings, the name stays (the recipes hold it).
@@ -209,12 +222,27 @@
               >
                 <span class="box">{#if on}<Icon name="check" size={16} />{/if}</span>
               </button>
-              <button type="button" class="title" aria-expanded={openKey === i.key} onclick={() => toggleOpen(i.key)}>
+              <button type="button" class="title" aria-expanded={openKey === i.key} onclick={() => toggleOpen(i)}>
                 <span>{i.name}</span>
                 <small class="tags-line">{subline(i)}</small>
               </button>
             </div>
             {#if openKey === i.key}
+              {#if i.dishes > 0}
+                <section class="ingredient-dishes" aria-label="Gerichte mit {i.name}">
+                  <h3>Verwendet in</h3>
+                  {#if openDishes}
+                    {#each openDishes as d (d.id)}
+                      <button type="button" class="row-card" onclick={() => openRecipe(d.id)}>
+                        <span>{d.title}</span>
+                        <small>{d.lines.join(" · ")}</small>
+                      </button>
+                    {/each}
+                  {:else}
+                    <p class="field-hint">Lade …</p>
+                  {/if}
+                </section>
+              {/if}
               <div class="ingredient-actions">
                 <label class="category-field">
                   Kategorie

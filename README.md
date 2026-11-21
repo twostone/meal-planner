@@ -45,7 +45,7 @@ dieselbe Liste.
   markiert man dort als „haben wir immer“: In der Einkaufsliste steht es dann eingeklappt unter „Haben wir immer“ und ist
   abgewählt, lässt sich aber anhaken, wenn es ausgeht. Zutaten lassen sich auch von Hand anlegen. Sammelzeilen wie „Salz &
   Pfeffer“ teilt „Aufteilen …“ in allen Rezepten auf einmal in einzelne Zutaten; neu erkannte Rezepte bekommen sie gleich
-  einzeln. Zutaten bekommen bei Bedarf eine Kategorie (z. B. „Gewürz“); eine ganze Kategorie lässt sich als „haben wir
+  einzeln. Eine aufgeklappte Zutat zeigt die Gerichte, die sie verwenden; ein Tipp öffnet das Rezept. Zutaten bekommen bei Bedarf eine Kategorie (z. B. „Gewürz“); eine ganze Kategorie lässt sich als „haben wir
   immer“ markieren. „Umbenennen …“ ändert eine Zutat in allen Rezepten; heißt sie danach wie eine vorhandene („Knoblauchzehe“ ->
   „Knoblauch“), werden beide zusammengeführt.
 - Bedienung für das Handy ausgelegt, auch in der Home-Assistant-Companion-App.

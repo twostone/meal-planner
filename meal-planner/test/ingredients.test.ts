@@ -304,3 +304,21 @@ test("migration from v12 adds the category column and table, keeping pantry mark
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("dishes of an ingredient: exact name in any spelling, with the lines as written, sorted by title", async () => {
+  const { call, repo } = setup();
+  const suppe = repo.createDish({ title: "Suppe" });
+  const auflauf = repo.createDish({ title: "Auflauf" });
+  repo.createDish({ title: "Brot" });
+  repo.setRecipe(suppe.id, recipe(ing("Salz"), ing("Pfeffer"), { ...ing("salz", "grob"), raw: "1 Prise grobes Salz" }));
+  repo.setRecipe(auflauf.id, recipe(ing("Meersalz"), { ...ing("Salz"), raw: "etwas Salz" }));
+  await call("POST", "/api/ingredients", { name: "Zucker" });
+
+  const res = await call("POST", "/api/ingredients/dishes", { key: "salz" });
+  assert.deepEqual(res.json, [
+    { id: auflauf.id, title: "Auflauf", lines: ["etwas Salz"] },
+    { id: suppe.id, title: "Suppe", lines: ["Salz", "1 Prise grobes Salz"] },
+  ]);
+  assert.deepEqual((await call("POST", "/api/ingredients/dishes", { key: "zucker" })).json, []);
+  assert.equal((await call("POST", "/api/ingredients/dishes", { key: "safran" })).status, 404);
+});

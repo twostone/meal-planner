@@ -82,7 +82,7 @@ npm run check                     # svelte-check Frontend
 npm run build                     # Frontend nach dist/ (wird vom Server ausgeliefert)
 DB_PATH=./data/dev.db PORT=8099 npm start
 npm run dev:web                   # Vite-Dev-Server, /api geht per Proxy an :8099
-npm run screenshot [-- list catalog ingredients ingredient-category ingredient-split ingredient-rename dish dish-new recipe cook shopping shopping-pantry toast-error] # nach npm run build: PNGs bei 390 px nach screenshots/
+npm run screenshot [-- list catalog ingredients ingredient-dishes ingredient-category ingredient-split ingredient-rename dish dish-new recipe cook shopping shopping-pantry toast-error] # nach npm run build: PNGs bei 390 px nach screenshots/
 ```
 
 Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (genau das prüft auch die CI). Bei Änderungen an
@@ -242,6 +242,11 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   Im UI ein dritter Reiter „Zutaten“ (`IngredientsView.svelte`): Suche (Enter oder „„X“ als Zutat anlegen“), Filter
   „Haben wir immer“, Haken je Zeile setzt den Vorrat sofort (bei Fehler zurück), Tippen auf den Namen zeigt „Löschen“ bzw.
   „Angaben zurücksetzen“ (zweistufig). Markiert wird nur dort, nicht in der Einkaufsliste.
+  **Gerichte einer Zutat** (21.11.2026): Beim Aufklappen einer verwendeten Zutat lädt der Reiter
+  `POST /api/ingredients/dishes {key}` (`ingredientDishes`: Gerichte mit genau diesem `nameKey`, nach Titel, je Gericht
+  die passenden Zeilen als `raw`) und zeigt sie unter „Verwendet in“ als Karten wie die Rezept-Karte (`.row-card`);
+  ein Tipp öffnet das Rezept-Blatt (`openRecipe`). Bewusst nicht die Katalog-Textsuche (die findet bei „Salz“ auch
+  „Meersalz“). Neu geladen wird beim nächsten Aufklappen, nicht nach dem Schließen des Rezepts.
   **Kategorien** (Migration v13): `ingredient.category`, eine je Zutat, frei getippt (höchstens 30 Zeichen wie die
   Kategorien der Gerichte); eine andere Schreibweise einer verwendeten Kategorie übernimmt deren Schreibweise
   („gewürz“ -> „Gewürz“). Die Kategorienliste ist die Menge der verwendeten Werte (`listIngredientCategories`,

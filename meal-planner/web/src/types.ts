@@ -109,6 +109,8 @@ export type IngredientChange = {
 // An entry of the ingredient catalog (key = the name in lower case with single spaces, as the server groups names).
 // pantry = marked itself; category_pantry = its category is always at home (then it is too, without exception).
 export type CatalogIngredient = { key: string; name: string; dishes: number; pantry: boolean; category: string | null; category_pantry: boolean };
+// A dish that uses an ingredient, with the matching recipe lines as written ("2 EL Olivenöl").
+export type IngredientDish = { id: number; title: string; lines: string[] };
 export type IngredientCategory = { key: string; name: string; pantry: boolean; ingredients: number };
 // What renaming an ingredient touches; target is set when the new name is a known ingredient (then they are merged).
 export type RenamePreview = {
