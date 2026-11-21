@@ -188,6 +188,31 @@ const SHOTS: Shot[] = [
     },
   },
   {
+    // Merging "Öl" into the known "Olivenöl": the sheet says so and asks for plural, variety and pantry.
+    name: "ingredient-rename",
+    run: async (page) => {
+      await page.getByRole("button", { name: "Zutaten", exact: true }).click();
+      await page.locator("button.title", { hasText: /^Öl/ }).click();
+      await page.getByRole("button", { name: "Umbenennen …" }).click();
+      await page.getByLabel("Neuer Name").fill("Olivenöl");
+      await page.getByText("Wird mit „Olivenöl“ zusammengeführt").waitFor();
+    },
+  },
+  {
+    name: "ingredient-rename-done",
+    run: async (page) => {
+      await page.getByRole("button", { name: "Zutaten", exact: true }).click();
+      await page.locator("button.title", { hasText: /^Öl/ }).click();
+      await page.getByRole("button", { name: "Umbenennen …" }).click();
+      await page.getByLabel("Neuer Name").fill("Olivenöl");
+      const sheet = page.locator("dialog");
+      await sheet.getByText("Wird mit „Olivenöl“ zusammengeführt").waitFor();
+      await sheet.getByRole("button", { name: "Zusammenführen" }).click();
+      await sheet.getByRole("button", { name: /Wirklich ändern/ }).click();
+      await page.getByRole("status").waitFor();
+    },
+  },
+  {
     // The pantry section of the shopping list unfolded: unticked, but can be ticked when something runs out.
     name: "shopping-pantry",
     run: async (page) => {

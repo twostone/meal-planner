@@ -60,7 +60,7 @@ meal-planner/            das Add-on (Docker-Build-Kontext)
                             resource-metadata.ts (RFC 9728); alles wie in garmin-insights
   web/                   Frontend: Svelte 5 + Vite (Runes, TypeScript)
     src/IngredientsView.svelte  Reiter „Zutaten“ (Zutatenkatalog, Vorrat)
-    src/IngredientSplitSheet.svelte  Blatt „Zutat aufteilen“
+    src/IngredientSplitSheet.svelte, src/IngredientRenameSheet.svelte  Blätter „Zutat aufteilen“ und „Zutat umbenennen“
     src/RecipeEditor.svelte, src/recipe-form.ts   Rezept-Editor (nur Felder) und seine Prüfung, genutzt von
                            RecipeSheet und vom Anlegen im DishSheet
     public/favicon.svg     Favicon der App, Vorlage für icon.png
@@ -82,7 +82,7 @@ npm run check                     # svelte-check Frontend
 npm run build                     # Frontend nach dist/ (wird vom Server ausgeliefert)
 DB_PATH=./data/dev.db PORT=8099 npm start
 npm run dev:web                   # Vite-Dev-Server, /api geht per Proxy an :8099
-npm run screenshot [-- list catalog ingredients ingredient-split dish dish-new recipe cook shopping shopping-pantry toast-error] # nach npm run build: PNGs bei 390 px nach screenshots/
+npm run screenshot [-- list catalog ingredients ingredient-split ingredient-rename dish dish-new recipe cook shopping shopping-pantry toast-error] # nach npm run build: PNGs bei 390 px nach screenshots/
 ```
 
 Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (genau das prüft auch die CI). Bei Änderungen an
@@ -230,7 +230,8 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   **Vorrat:** Jeder Artikel hat `pantry` (aus dem Zutatenkatalog, über `nameKey(base)`, die Sorte zählt nicht). Das Blatt
   zeigt diese Artikel eingeklappt unter „Haben wir immer (N)“, nicht angehakt; `on_list` bleibt als Hinweis. `buildShoppingList`
   bleibt rein, `pantry` setzt die Route.
-- **Zutatenkatalog** (Entscheidungen vom 20.11.2026, Plan in drei gestapelten PRs: Vorrat, Kategorien, Synonyme): Eine
+- **Zutatenkatalog** (Entscheidungen vom 20./21.11.2026: Vorrat, Aufteilen, Umbenennen gebaut; Kategorien geplant;
+  Synonyme verworfen, Umbenennen/Zusammenführen ersetzt sie): Eine
   Zutat ist ein `nameKey`, die Notiz (Sorte) gehört nicht dazu. Tabelle `ingredient` (`key` = `nameKey`, `name`, `pantry`):
   eine Zeile nur für Namen, die von Hand angelegt wurden oder eine Angabe haben; Namen, die nur in Rezepten stehen, haben
   keine. `listIngredients` (`repo.ts`) vereinigt beides (`dishes` = Zahl der Gerichte, 0 = in keinem Rezept), die
@@ -251,6 +252,16 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   Transaktion (`splitIngredient`, schreibt nur die Zutatenzeilen über `writeIngredients`), löscht die Zutaten-Haken des
   Kochmodus der betroffenen Gerichte (Positionen verschieben sich, Schritt-Haken bleiben) und die Katalogzeile der
   Sammelzutat. „Aufteilen“ zweistufig, kein Rückgängig. Danach lädt der Reiter neu (`app.ingredientsRevision`).
+  **Umbenennen/Zusammenführen** (21.11.2026): „Umbenennen …“ (Blatt `IngredientRenameSheet`, Sheet-Art `rename`,
+  `openRename`). `POST /api/ingredients/rename/preview {key, name}` liefert Quelle (Name, erste Mehrzahl, Vorrat), Ziel
+  (eine bekannte Zutat mit dem `nameKey` des neuen Namens, sonst `null` = reines Umbenennen), betroffene Gerichte und die
+  vorhandenen Sorten; das Blatt fragt sie nach jeder Tipppause neu ab und füllt Mehrzahl und Vorrat nur vor, wenn sich das
+  Ziel ändert (Vorrat: Ziel oder Quelle markiert), Unterschiede stehen als Hinweis dabei. `POST /api/ingredients/rename
+  {key, name, plural, note, pantry}` ändert in einer Transaktion (`renameIngredient`) alle Zeilen der Quelle **und** des
+  Ziels: Name und Mehrzahl; die Sorte nur in Quellzeilen ohne Sorte (`COALESCE`); Position, Menge, Zubereitung und `raw`
+  bleiben, Kochmodus-Haken auch. Katalog: Quellzeile weg, Zielzeile mit Schreibweise und Vorrat gesetzt. Gleiche
+  Schreibweise -> 400 `name unchanged` (`InvalidInputError`), andere Schreibweise desselben Namens ist erlaubt. Doppelte
+  Zeilen nach dem Zusammenführen (Knoblauchzehe und Knoblauch im selben Rezept) bleiben: Mengen könnten verschieden sein.
 - Ein Gericht kann pro Zeitraum nur einmal vorkommen. Der Titel ist im Katalog eindeutig (ohne Groß-/Kleinschreibung).
   Ein Eintrag per Titel (API) legt das Gericht an oder verwendet ein vorhandenes wieder.
 - **Neues Gericht anlegen:** In der Hinzufügen-Leiste der Liste öffnen ein neuer Name („„X“ neu anlegen …“, Enter) und ein
@@ -627,7 +638,7 @@ raten (`async_update_reload_and_abort`, `HassioServiceInfo`, `StaticPathConfig`,
 - Sheets nutzen das native `<dialog>`. Kein `alert()`/`confirm()` (in der HA-Companion-App unzuverlässig), stattdessen
   zweistufige Bestätigung im UI.
 - **Zurück-Taste:** Ein offenes Blatt belegt einen History-Eintrag (`pushSheetEntry`/`closeSheet` in `store.svelte.ts`), damit
-  „Zurück“ das Blatt schließt statt die App zu verlassen. Blätter nur über `openDishSheet`/`openPeriods`/`openCook`/`openSplit` öffnen
+  „Zurück“ das Blatt schließt statt die App zu verlassen. Blätter nur über `openDishSheet`/`openPeriods`/`openCook`/`openSplit`/`openRename` öffnen
   und über `closeSheet` schließen, nie `app.sheet` direkt setzen. Getestet im Browser mit der App in einem iframe, in der
   HA-Companion-App auf dem Handy noch nicht.
 - **APIs und Schnittstellen vor der Nutzung gegen die aktuelle Dokumentation prüfen** (HA-Add-on-Konfiguration, Hono,

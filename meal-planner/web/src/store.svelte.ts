@@ -15,6 +15,7 @@ export type SheetState =
   | { kind: "cook" }
   | { kind: "shopping" }
   | { kind: "split"; ingredientKey: string }
+  | { kind: "rename"; ingredientKey: string }
   | { kind: "periods" };
 
 // A message at the top of the screen: errors stay until dismissed, infos go away on their own.
@@ -30,7 +31,7 @@ export const app = $state({
   sheet: { kind: "none" } as SheetState,
   // Home Assistant has a to-do list to send the shopping list to (checked once at start; decides the header button).
   shopping: false,
-  // Raised after a change that rewrites recipes (splitting an ingredient): the ingredient list loads again.
+  // Raised after a change that rewrites recipes (splitting or renaming an ingredient): the ingredient list loads again.
   ingredientsRevision: 0,
 });
 
@@ -162,6 +163,12 @@ export function openSplit(ingredientKey: string) {
   clearToast();
   pushSheetEntry();
   app.sheet = { kind: "split", ingredientKey };
+}
+
+export function openRename(ingredientKey: string) {
+  clearToast();
+  pushSheetEntry();
+  app.sheet = { kind: "rename", ingredientKey };
 }
 
 export function openPeriods() {
