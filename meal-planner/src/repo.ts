@@ -522,6 +522,23 @@ export function createRepo(db: DatabaseSync) {
       });
     },
 
+    // The dishes whose recipe uses this ingredient, sorted by title, each with its matching lines as written ("2 EL
+    // Olivenöl"), in recipe order. For jumping from the catalog to the recipes.
+    ingredientDishes(key: string): { id: number; title: string; lines: string[] }[] {
+      getIngredient(key);
+      const lines = new Map<number, string[]>();
+      for (const l of all<{ dish_id: number; name: string; raw: string }>("SELECT dish_id, name, raw FROM dish_ingredient ORDER BY dish_id, pos")) {
+        if (nameKey(l.name) !== key) continue;
+        const list = lines.get(l.dish_id);
+        if (list) list.push(l.raw);
+        else lines.set(l.dish_id, [l.raw]);
+      }
+      return all<{ id: number; title: string }>("SELECT id, title FROM dish")
+        .filter((d) => lines.has(d.id))
+        .map((d) => ({ id: d.id, title: d.title, lines: lines.get(d.id)! }))
+        .sort((a, b) => a.title.localeCompare(b.title, "de"));
+    },
+
     // Keys (nameKey) of the ingredients that are always at home: marked themselves or through their category.
     pantryKeys(): Set<string> {
       const pantryCats = pantryCategories();

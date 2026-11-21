@@ -6,6 +6,7 @@ import type {
   AiStatus,
   CatalogIngredient,
   IngredientCategory,
+  IngredientDish,
   RenamePreview,
   IngredientChange,
   CheckState,
@@ -72,6 +73,7 @@ export const setPantry = (key: string, pantry: boolean) => request<CatalogIngred
 // null removes the category; a spelling of one in use joins it ("gewürz" -> "Gewürz").
 export const setIngredientCategory = (key: string, category: string | null) =>
   request<CatalogIngredient>("PATCH", "api/ingredients", { key, category });
+export const listIngredientDishes = (key: string) => request<IngredientDish[]>("POST", "api/ingredients/dishes", { key });
 export const listIngredientCategories = () => request<IngredientCategory[]>("GET", "api/ingredient-categories");
 export const setCategoryPantry = (key: string, pantry: boolean) =>
   request<IngredientCategory>("PATCH", "api/ingredient-categories", { key, pantry });

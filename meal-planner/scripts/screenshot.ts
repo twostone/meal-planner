@@ -186,6 +186,25 @@ const SHOTS: Shot[] = [
     },
   },
   {
+    // An opened ingredient lists the dishes that use it as cards, with the lines as written.
+    name: "ingredient-dishes",
+    run: async (page) => {
+      await page.getByRole("button", { name: "Zutaten", exact: true }).click();
+      await page.locator("button.title", { hasText: /^Pfeffer/ }).click();
+      await page.getByRole("button", { name: /Spaghetti Carbonara/ }).waitFor();
+    },
+  },
+  {
+    // A tap on such a card opens the recipe of the dish.
+    name: "ingredient-dish-recipe",
+    run: async (page) => {
+      await page.getByRole("button", { name: "Zutaten", exact: true }).click();
+      await page.locator("button.title", { hasText: /^Pfeffer/ }).click();
+      await page.getByRole("button", { name: /Spaghetti Carbonara/ }).click();
+      await page.locator("dialog").getByText("Zubereitung").first().waitFor();
+    },
+  },
+  {
     // Splitting a collective line: the suggested parts, the dishes it touches, a variety for one part.
     name: "ingredient-split",
     run: async (page) => {
