@@ -12,7 +12,7 @@ import type { PreviewResult } from "./preview.ts";
 import { buildDraft, DraftError, MAX_INGREDIENTS } from "./recipe-draft.ts";
 import { aiItems, buildChanges } from "./ingredient-normalize.ts";
 import { FOREIGN_UNITS } from "./units.ts";
-import { ConflictError, NotFoundError, UNITS, type Entry, type Repo } from "./repo.ts";
+import { ConflictError, InvalidInputError, NotFoundError, UNITS, type Entry, type Repo } from "./repo.ts";
 import { buildShoppingList, MAX_SPEC_LENGTH, nameKey, type ShoppingItem } from "./shopping.ts";
 import { cleanAiTitles } from "./title-suggest.ts";
 
@@ -86,6 +86,9 @@ const MAX_SPLIT_PARTS = 10;
 const ingredientSplit = ingredientKey
   .extend({ parts: z.array(z.object({ name: ingredientName, note: text(200) })).min(MIN_SPLIT_PARTS).max(MAX_SPLIT_PARTS) })
   .refine((b) => b.parts.every((p) => nameKey(p.name) !== b.key), "a part keeps the name of the line");
+// Renaming or merging an ingredient: the new name and what all its lines get (plural, a variety where none is set).
+const ingredientRenamePreview = ingredientKey.extend({ name: ingredientName });
+const ingredientRename = ingredientRenamePreview.extend({ plural: text(80), note: text(200), pantry: z.boolean() });
 const ingredient = z
   .object({
     section: text(80),
@@ -233,6 +236,7 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
   app.onError((err, c) => {
     if (err instanceof NotFoundError) return c.json({ error: `${err.message} not found` }, 404);
     if (err instanceof ConflictError) return c.json({ error: err.message }, 409);
+    if (err instanceof InvalidInputError) return c.json({ error: err.message }, 400);
     log.error("unhandled", { method: c.req.method, path: c.req.path, err, stack: err instanceof Error ? err.stack : undefined });
     return c.json({ error: "internal error" }, 500);
   });
@@ -271,6 +275,16 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
     const { key, parts } = c.req.valid("json");
     const dishes = repo.splitIngredient(key, parts);
     log.info("ingredient_split", { dishes, parts: parts.length });
+    return c.json({ dishes });
+  });
+  app.post("/api/ingredients/rename/preview", zValidator("json", ingredientRenamePreview), (c) => {
+    const { key, name } = c.req.valid("json");
+    return c.json(repo.previewRename(key, name));
+  });
+  app.post("/api/ingredients/rename", zValidator("json", ingredientRename), (c) => {
+    const { key, ...input } = c.req.valid("json");
+    const dishes = repo.renameIngredient(key, input);
+    log.info("ingredient_renamed", { dishes });
     return c.json({ dishes });
   });
   app.post("/api/ingredients/delete", zValidator("json", ingredientKey), (c) => {

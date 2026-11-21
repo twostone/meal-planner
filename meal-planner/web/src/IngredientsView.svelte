@@ -1,7 +1,7 @@
 <script lang="ts">
   import * as api from "./api";
   import Icon from "./Icon.svelte";
-  import { app, openSplit, showError } from "./store.svelte";
+  import { app, openRename, openSplit, showError } from "./store.svelte";
   import { groupByInitial } from "./util";
   import type { CatalogIngredient } from "./types";
 
@@ -14,7 +14,7 @@
   let confirming = $state(false);
   let busy = $state(false);
 
-  // Loads again after a split rewrote recipes (app.ingredientsRevision), so counts and names are current.
+  // Loads again after a split or rename rewrote recipes (app.ingredientsRevision), so counts and names are current.
   $effect(() => {
     void app.ingredientsRevision;
     load();
@@ -153,7 +153,8 @@
                     {confirming ? "Wirklich löschen?" : "Zutat löschen"}
                   </button>
                 {:else}
-                  <!-- Splitting is offered for every used name: the suggestion may miss a separator. -->
+                  <!-- Offered for every used name: the split suggestion may miss a separator. -->
+                  <button type="button" class="btn outline" onclick={() => openRename(i.key)}>Umbenennen …</button>
                   <button type="button" class="btn outline" onclick={() => openSplit(i.key)}>Aufteilen …</button>
                   {#if i.pantry}
                     <button type="button" class="btn ghost-danger" disabled={busy} onclick={() => removeOrReset(i)}>

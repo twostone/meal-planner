@@ -5,6 +5,7 @@ import type {
   PlanDetail,
   AiStatus,
   CatalogIngredient,
+  RenamePreview,
   IngredientChange,
   CheckState,
   CookEntry,
@@ -72,6 +73,10 @@ export const deleteIngredient = (key: string) => request<void>("POST", "api/ingr
 // Splitting a collective line ("Salz & Pfeffer") in every recipe: the dishes it touches and the suggested parts first.
 export const previewSplit = (key: string) =>
   request<{ name: string; dishes: { id: number; title: string }[]; parts: string[] }>("POST", "api/ingredients/split/preview", { key });
+// Renaming (or merging into a known name) rewrites every recipe that has the ingredient.
+export const previewRename = (key: string, name: string) => request<RenamePreview>("POST", "api/ingredients/rename/preview", { key, name });
+export const renameIngredient = (key: string, input: { name: string; plural: string | null; note: string | null; pantry: boolean }) =>
+  request<{ dishes: number }>("POST", "api/ingredients/rename", { key, ...input });
 export const splitIngredient = (key: string, parts: { name: string; note: string | null }[]) =>
   request<{ dishes: number }>("POST", "api/ingredients/split", { key, parts });
 

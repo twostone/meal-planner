@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { createApp } from "../src/app.ts";
 import { openDb } from "../src/db.ts";
-import { createRepo } from "../src/repo.ts";
+import { createRepo, type RecipeInput } from "../src/repo.ts";
 
 function setup() {
   const db = openDb(":memory:");
@@ -23,7 +23,7 @@ function setup() {
   return { call, repo };
 }
 const ing = (name: string, note: string | null = null) => ({ section: null, amount: null, amount_max: null, unit: null, name, note });
-const recipe = (...ingredients: ReturnType<typeof ing>[]) => ({ servings: null, instructions: null, ingredients });
+const recipe = (...ingredients: RecipeInput["ingredients"]) => ({ servings: null, instructions: null, ingredients });
 
 // Suppe uses Salz twice (two spellings), Pasta uses salz and Pfeffer.
 async function withRecipes() {
@@ -160,4 +160,67 @@ test("split: refused for unknown names, fewer than two parts, or a part named li
   assert.equal((await call("POST", "/api/ingredients/split", body([{ name: "Salz", note: null }, { name: "salz &  pfeffer", note: null }]))).status, 400);
   assert.equal((await call("POST", "/api/ingredients/split", body([{ name: " ", note: null }, { name: "Pfeffer", note: null }]))).status, 400);
   assert.deepEqual(repo.listIngredients().map((i) => i.name), ["Salz & Pfeffer"]);
+});
+
+// Knoblauchzehe (2 dishes, one with a variety) is to become Knoblauch (1 dish, pantry, plural none).
+async function withGarlic() {
+  const s = setup();
+  const pasta = s.repo.createDish({ title: "Pasta" });
+  const suppe = s.repo.createDish({ title: "Suppe" });
+  const curry = s.repo.createDish({ title: "Curry" });
+  const zehe = (note: string | null = null) => ({ ...ing("Knoblauchzehe", note), amount: 2, plural: "Knoblauchzehen" });
+  s.repo.setRecipe(pasta.id, recipe(ing("Nudeln"), zehe()));
+  s.repo.setRecipe(suppe.id, recipe(zehe("frisch")));
+  s.repo.setRecipe(curry.id, recipe(ing("Knoblauch")));
+  s.repo.setIngredient("knoblauch", { pantry: true });
+  const plan = s.repo.createPlan({ start_date: "2026-11-21", end_date: "2026-11-27" });
+  const entry = s.repo.addEntry(plan.id, { dish_id: pasta.id });
+  s.repo.setCheck(entry.id, "ingredient", 1, true);
+  return { ...s, pasta, suppe, curry, plan };
+}
+
+test("rename preview: dishes, source and target values, varieties in use", async () => {
+  const { call, pasta, suppe } = await withGarlic();
+  const merge = await call("POST", "/api/ingredients/rename/preview", { key: "knoblauchzehe", name: "knoblauch" });
+  assert.deepEqual(merge.json, {
+    source: { name: "Knoblauchzehe", plural: "Knoblauchzehen", pantry: false },
+    target: { name: "Knoblauch", plural: null, pantry: true, dishes: 1 },
+    dishes: [{ id: pasta.id, title: "Pasta" }, { id: suppe.id, title: "Suppe" }],
+    notes: ["frisch"],
+  });
+  const rename = await call("POST", "/api/ingredients/rename/preview", { key: "knoblauchzehe", name: "Zehe Knoblauch" });
+  assert.equal(rename.json.target, null);
+  assert.equal((await call("POST", "/api/ingredients/rename/preview", { key: "safran", name: "x" })).status, 404);
+});
+
+test("merge: every line gets the target name and the chosen plural, a variety only where there was none; ticks stay", async () => {
+  const { call, repo, pasta, suppe, curry, plan } = await withGarlic();
+  const res = await call("POST", "/api/ingredients/rename", { key: "knoblauchzehe", name: "Knoblauch", plural: null, note: "Zehe", pantry: true });
+  assert.deepEqual(res.json, { dishes: 3 });
+  const lines = (id: number) => repo.getRecipe(id).ingredients.map((i) => [i.name, i.plural, i.note, i.amount, i.raw]);
+  assert.deepEqual(lines(pasta.id), [["Nudeln", null, null, null, "Nudeln"], ["Knoblauch", null, "Zehe", 2, "2 Knoblauchzehe"]]);
+  assert.deepEqual(lines(suppe.id), [["Knoblauch", null, "frisch", 2, "2 Knoblauchzehe"]]);
+  assert.deepEqual(lines(curry.id), [["Knoblauch", null, null, null, "Knoblauch"]]);
+  assert.deepEqual(repo.getChecks(plan.id).entries[0]!.checks.ingredients, [1]);
+  assert.deepEqual(repo.listIngredients().map((i) => [i.name, i.dishes, i.pantry]), [["Knoblauch", 3, true], ["Nudeln", 1, false]]);
+});
+
+test("rename to a new name moves the catalog settings; a new spelling of the same name is allowed", async () => {
+  const { call, repo } = await withGarlic();
+  await call("PATCH", "/api/ingredients", { key: "knoblauchzehe", pantry: true });
+  await call("POST", "/api/ingredients/rename", { key: "knoblauchzehe", name: "Knoblauch-Zehe", plural: "Knoblauch-Zehen", note: null, pantry: true });
+  const renamed = repo.listIngredients().find((i) => i.key === "knoblauch-zehe");
+  assert.deepEqual(renamed, { key: "knoblauch-zehe", name: "Knoblauch-Zehe", dishes: 2, pantry: true });
+  assert.equal(repo.listIngredients().some((i) => i.key === "knoblauchzehe"), false);
+
+  await call("POST", "/api/ingredients/rename", { key: "knoblauch-zehe", name: "KNOBLAUCH-ZEHE", plural: null, note: null, pantry: false });
+  assert.deepEqual(repo.listIngredients().find((i) => i.key === "knoblauch-zehe"), { key: "knoblauch-zehe", name: "KNOBLAUCH-ZEHE", dishes: 2, pantry: false });
+});
+
+test("rename: refused for unknown names, an unchanged name or an empty one", async () => {
+  const { call } = await withGarlic();
+  const body = (key: string, name: string) => ({ key, name, plural: null, note: null, pantry: false });
+  assert.equal((await call("POST", "/api/ingredients/rename", body("safran", "Safranfäden"))).status, 404);
+  assert.equal((await call("POST", "/api/ingredients/rename", body("knoblauchzehe", "Knoblauchzehe"))).status, 400);
+  assert.equal((await call("POST", "/api/ingredients/rename", body("knoblauchzehe", " "))).status, 400);
 });

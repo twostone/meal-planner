@@ -109,6 +109,16 @@ export type CatalogIngredient = {
 
 export class NotFoundError extends Error {}
 export class ConflictError extends Error {}
+// A request the data model cannot carry out as asked (answered with 400), e.g. renaming to the same name.
+export class InvalidInputError extends Error {}
+
+export type RenameInput = { name: string; plural: string | null; note: string | null; pantry: boolean };
+export type RenamePreview = {
+  source: { name: string; plural: string | null; pantry: boolean };
+  target: { name: string; plural: string | null; pantry: boolean; dishes: number } | null; // null = plain rename
+  dishes: { id: number; title: string }[];
+  notes: string[]; // varieties the lines already have (they keep them)
+};
 
 export function createRepo(db: DatabaseSync) {
   const one = <T>(sql: string, ...p: any[]) => db.prepare(sql).get(...p) as T | undefined;
@@ -254,6 +264,14 @@ export function createRepo(db: DatabaseSync) {
     );
   }
 
+  // Ids and values of all ingredient lines named `key` (nameKey is computed in JS: SQLite folds case for ASCII only).
+  function linesNamed(key: string): { id: number; dish_id: number; plural: string | null; note: string | null }[] {
+    return all<{ id: number; dish_id: number; name: string; plural: string | null; note: string | null }>(
+      "SELECT id, dish_id, name, plural, note FROM dish_ingredient ORDER BY dish_id, pos",
+    ).filter((l) => nameKey(l.name) === key);
+  }
+  const firstPlural = (lines: { plural: string | null }[]) => lines.find((l) => l.plural)?.plural ?? null;
+
   // Dishes whose recipe has a line with this ingredient name (nameKey), by title.
   function dishesWithIngredient(key: string): { id: number; title: string }[] {
     const ids = new Set(all<{ dish_id: number; name: string }>("SELECT dish_id, name FROM dish_ingredient").filter((r) => nameKey(r.name) === key).map((r) => r.dish_id));
@@ -397,6 +415,40 @@ export function createRepo(db: DatabaseSync) {
         }
         db.prepare("DELETE FROM ingredient WHERE key = ?").run(key);
         return dishes.length;
+      });
+    },
+
+    // What renaming `key` to `name` would touch. With a known target the two are merged; the sheet asks about plural and
+    // pantry when they differ.
+    previewRename(key: string, name: string): RenamePreview {
+      const source = getIngredient(key);
+      const targetKey = nameKey(name);
+      const target = targetKey === key ? null : findIngredient(targetKey);
+      const sourceLines = linesNamed(key);
+      return {
+        source: { name: source.name, plural: firstPlural(sourceLines), pantry: source.pantry },
+        target: target && { name: target.name, plural: firstPlural(linesNamed(targetKey)), pantry: target.pantry, dishes: target.dishes },
+        dishes: dishesWithIngredient(key),
+        notes: [...new Set(sourceLines.map((l) => l.note).filter((n): n is string => !!n))].sort((a, b) => a.localeCompare(b, "de")),
+      };
+    },
+
+    // Renames an ingredient in every recipe, merging it into an existing one of that name, in one transaction. Lines keep
+    // their position, amount and preparation (cook ticks stay valid); a variety is only set where a line has none. The
+    // lines of the target get the chosen plural too, so the merged ingredient reads the same everywhere.
+    renameIngredient(key: string, input: RenameInput): number {
+      return transaction(db, () => {
+        const source = getIngredient(key);
+        if (input.name === source.name) throw new InvalidInputError("name unchanged");
+        const targetKey = nameKey(input.name);
+        const lines = targetKey === key ? linesNamed(key) : [...linesNamed(key), ...linesNamed(targetKey)];
+        const update = db.prepare("UPDATE dish_ingredient SET name = ?, plural = ?, note = COALESCE(note, ?) WHERE id = ?");
+        const sourceIds = new Set(linesNamed(key).map((l) => l.id));
+        for (const line of lines) update.run(input.name, input.plural, sourceIds.has(line.id) ? input.note : null, line.id);
+        db.prepare("DELETE FROM ingredient WHERE key = ?").run(key);
+        db.prepare("INSERT INTO ingredient (key, name, pantry) VALUES (?, ?, ?) ON CONFLICT (key) DO UPDATE SET name = excluded.name, pantry = excluded.pantry")
+          .run(targetKey, input.name, input.pantry ? 1 : 0);
+        return new Set(lines.map((l) => l.dish_id)).size;
       });
     },
 
