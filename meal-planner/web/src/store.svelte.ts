@@ -11,8 +11,8 @@ export type SheetState =
       addToPlan: boolean; // create mode: start value of the switch that also puts the new dish into the current plan
       prefill: { title: string; url: string; tags: string[] };
     }
-  | { kind: "recipe"; dishId: number }
-  | { kind: "cook" }
+  | { kind: "recipe"; dishId: number; entryId: number | null } // entryId: opened from that list entry (its note)
+  | { kind: "cook"; entryId: number | null } // entryId: the dish cook mode starts at
   | { kind: "shopping" }
   | { kind: "split"; ingredientKey: string }
   | { kind: "rename"; ingredientKey: string }
@@ -137,19 +137,19 @@ export function openDishSheet(opts: {
   };
 }
 
-// From the dish sheet: the history entry of the open sheet is reused.
-export function openRecipe(dishId: number) {
+// The read view of a dish (picture, recipe, actions). From another sheet the history entry of that sheet is reused.
+export function openRecipe(dishId: number, entryId: number | null = null) {
   clearToast();
   pushSheetEntry();
-  app.sheet = { kind: "recipe", dishId };
+  app.sheet = { kind: "recipe", dishId, entryId };
 }
 
 // Cook mode is a full-screen view, not a dialog, but it owns a history entry like a sheet ("back" leaves it).
-export function openCook() {
+export function openCook(entryId: number | null = null) {
   if (!app.plan) return;
   clearToast();
   pushSheetEntry();
-  app.sheet = { kind: "cook" };
+  app.sheet = { kind: "cook", entryId };
 }
 
 export function openShopping() {

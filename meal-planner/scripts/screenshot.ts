@@ -263,13 +263,20 @@ const SHOTS: Shot[] = [
       await page.locator(".pantry-items li").last().scrollIntoViewIfNeeded();
     },
   },
-  { name: "dish", run: (page) => pastaTitle(page).click() },
+  {
+    name: "dish",
+    run: async (page) => {
+      await pastaTitle(page).click();
+      await page.getByRole("button", { name: "Gericht bearbeiten" }).click();
+    },
+  },
   {
     // With an AI task that can generate images, the sheet offers "Bild erzeugen" next to "Foto wählen".
     name: "dish-ai",
     run: async (page) => {
       await page.route("**/api/recipe/status", (r) => r.fulfill({ json: { ai: true, reason: null, image: true } }));
       await pastaTitle(page).click();
+      await page.getByRole("button", { name: "Gericht bearbeiten" }).click();
       await page.getByRole("button", { name: /Bild erzeugen/ }).waitFor();
     },
   },
@@ -277,15 +284,14 @@ const SHOTS: Shot[] = [
     name: "recipe",
     run: async (page) => {
       await pastaTitle(page).click();
-      await page.getByRole("button", { name: "Rezept Zutaten und Zubereitung" }).click();
+      await page.getByRole("heading", { name: "Zutaten" }).waitFor();
     },
   },
   {
     name: "recipe-edit",
     run: async (page) => {
       await pastaTitle(page).click();
-      await page.getByRole("button", { name: "Rezept Zutaten und Zubereitung" }).click();
-      await page.getByRole("button", { name: "Bearbeiten" }).click();
+      await page.getByRole("button", { name: "Rezept bearbeiten" }).click();
     },
   },
   { name: "cook", run: (page) => page.getByRole("button", { name: "Kochen", exact: true }).click() },
@@ -294,7 +300,7 @@ const SHOTS: Shot[] = [
     run: async (page) => {
       await fakeNormalize(page);
       await pastaTitle(page).click();
-      await page.getByRole("button", { name: "Rezept Zutaten und Zubereitung" }).click();
+      await page.getByRole("button", { name: "Rezept bearbeiten" }).click();
       await page.getByRole("button", { name: "Zutaten vereinheitlichen" }).click();
       await page.getByText("übernehmen").waitFor();
     },

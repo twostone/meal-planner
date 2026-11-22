@@ -337,7 +337,7 @@
         <RecipeEditor bind:form={recipeForm} {sourceText} />
       </details>
     {:else}
-      <button type="button" class="row-card" onclick={() => openRecipe(start.dishId!)}>
+      <button type="button" class="row-card" onclick={() => openRecipe(start.dishId!, start.entryId)}>
         <span>Rezept</span>
         <small>Zutaten und Zubereitung</small>
       </button>

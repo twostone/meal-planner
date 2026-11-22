@@ -37,7 +37,7 @@
               <Icon name="cart" />
             </button>
           {/if}
-          <button type="button" class="btn primary" onclick={openCook}>Kochen</button>
+          <button type="button" class="btn primary" onclick={() => openCook()}>Kochen</button>
         {/if}
       </div>
     {:else if app.view === "ingredients"}
@@ -75,9 +75,9 @@
   {#if app.sheet.kind === "dish"}
     <DishSheet sheet={app.sheet} />
   {:else if app.sheet.kind === "recipe"}
-    <RecipeSheet dishId={app.sheet.dishId} />
+    <RecipeSheet dishId={app.sheet.dishId} entryId={app.sheet.entryId} />
   {:else if app.sheet.kind === "cook"}
-    <CookView />
+    <CookView startEntryId={app.sheet.entryId} />
   {:else if app.sheet.kind === "shopping"}
     <ShoppingSheet />
   {:else if app.sheet.kind === "split"}
