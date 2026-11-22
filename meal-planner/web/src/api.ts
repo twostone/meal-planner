@@ -17,6 +17,8 @@ import type {
   ShoppingStatus,
 } from "./types";
 
+type MoveResult = { moved: number; merged: number };
+
 // All URLs are resolved against the document URL (never "/api/..."), so the app
 // keeps working under the HA ingress prefix.
 const MESSAGES: Record<string, string> = {
@@ -24,6 +26,9 @@ const MESSAGES: Record<string, string> = {
   "dish already in plan": "Steht schon in der Liste.",
   "dish is used in a plan": "Das Gericht steht noch in einer Liste und kann nicht gelöscht werden.",
   "plan overlaps": "Der Zeitraum überschneidet sich mit einer anderen Liste.",
+  "plan is over": "Diese Liste ist schon vorbei. Bitte eine aktuelle oder künftige wählen.",
+  "same plan": "Das Gericht steht schon in dieser Liste.",
+  "entry is done": "Das Gericht ist schon gekocht und bleibt in seiner Liste.",
   "ai failed": "Die Zutaten konnten nicht erkannt werden. Bitte von Hand eintragen.",
   busy: "Gerade beschäftigt. Bitte gleich noch einmal versuchen.",
   "unknown list": "Diese Liste gibt es in Home Assistant nicht mehr. Bitte eine andere wählen.",
@@ -115,6 +120,11 @@ export const addEntry = (planId: number, e: { dish_id: number } | { title: strin
 export const setDone = (id: number, done: boolean) => request<Entry>("PATCH", `api/entries/${id}`, { done });
 // null clears the note. It belongs to this list entry only (the dish note is separate).
 export const setEntryNote = (id: number, note: string | null) => request<Entry>("PATCH", `api/entries/${id}`, { note });
+// Moves a dish that was not cooked to another plan (merged there if it is already in it), or all open ones of a plan.
+export const moveEntry = (id: number, planId: number) =>
+  request<MoveResult>("POST", `api/entries/${id}/move`, { plan_id: planId });
+export const moveOpenEntries = (fromPlanId: number, toPlanId: number) =>
+  request<MoveResult>("POST", `api/plans/${fromPlanId}/move-open`, { plan_id: toPlanId });
 export const deleteEntry = (id: number) => request<void>("DELETE", `api/entries/${id}`);
 
 // The server fetches the page (never the browser: CORS, and the link must not be opened from the phone).

@@ -584,6 +584,31 @@ export function createRepo(db: DatabaseSync) {
       });
     },
 
+    // Moves entries to the end of another plan, in one transaction. The cook mode ticks stay behind: they belong to
+    // cooking in the old plan. A dish the target already has is merged: the old entry goes, its note only fills an
+    // empty one. Returns the entries as they were before (for the events) and whether each was merged.
+    moveEntries(entryIds: number[], targetPlanId: number): { before: Entry; merged: boolean }[] {
+      return transaction(db, () =>
+        entryIds.map((id) => {
+          const before = getEntry(id);
+          db.prepare("DELETE FROM cook_check WHERE entry_id = ?").run(id);
+          const existing = one<{ id: number; note: string | null }>(
+            "SELECT id, note FROM plan_entry WHERE plan_id = ? AND dish_id = ?",
+            targetPlanId,
+            before.dish_id,
+          );
+          if (existing) {
+            if (existing.note === null) db.prepare("UPDATE plan_entry SET note = ? WHERE id = ?").run(before.note, existing.id);
+            db.prepare("DELETE FROM plan_entry WHERE id = ?").run(id);
+            return { before, merged: true };
+          }
+          const pos = one<{ m: number }>("SELECT COALESCE(MAX(position), -1) + 1 AS m FROM plan_entry WHERE plan_id = ?", targetPlanId)!.m;
+          db.prepare("UPDATE plan_entry SET plan_id = ?, position = ? WHERE id = ?").run(targetPlanId, pos, id);
+          return { before, merged: false };
+        }),
+      );
+    },
+
     deleteEntry(id: number): void {
       if (db.prepare("DELETE FROM plan_entry WHERE id = ?").run(id).changes === 0) throw new NotFoundError("entry");
     },

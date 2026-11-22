@@ -7,6 +7,7 @@ import { AiError, MAX_KNOWN_NAMES, type RecipeAi } from "./ha-ai.ts";
 import { TodoError, type HaTodo, type OpenTodoItem } from "./ha-todo.ts";
 import { entryEvent as entryEventInput, planUpdatedEvent, type EntryEventType, type HaEventInput, type HaUser } from "./ha-notify.ts";
 import { detectImageType, IMAGE_NAME, MAX_IMAGE_BYTES, type ImageStore } from "./images.ts";
+import { localToday } from "./ha-state.ts";
 import { logger } from "./log.ts";
 import type { PreviewResult } from "./preview.ts";
 import { buildDraft, DraftError, MAX_INGREDIENTS } from "./recipe-draft.ts";
@@ -116,6 +117,8 @@ const titleSuggestBody = z
   .refine((v) => !!(v.title || v.text?.trim()), { message: "title or text needed" });
 // The title as typed in the sheet; with dish_id the saved recipe's ingredient names go into the prompt too.
 const imageGenerateBody = z.object({ title, dish_id: id.optional() });
+// The plan to move entries to; it must not be over yet (checked against today in the route).
+const moveBody = z.object({ plan_id: id });
 const checkBody = z.object({ kind: z.enum(["ingredient", "step"]), idx: z.number().int().min(0).max(1000), checked: z.boolean() });
 // A Home Assistant to-do entity id ("todo.essen"). Whether it exists is checked against Home Assistant before sending.
 const todoEntity = z.string().regex(/^todo\.[a-z0-9_]+$/);
@@ -153,6 +156,8 @@ export type AppOptions = {
   ai?: RecipeAi;
   // Sends the shopping list to a to-do list in Home Assistant, e.g. Bring (see ha-todo.ts). Optional like `ai`.
   todo?: HaTodo;
+  // Tests fix the date; otherwise today in the container's timezone (decides which plans are still a move target).
+  today?: () => string;
 };
 
 const log = logger("app");
@@ -186,6 +191,7 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
   const imageMissing = async (name: string | null | undefined) =>
     !!name && !(await opts.images?.exists(name));
   // Fire and forget, like sweep(): a failed/slow event to HA must never delay or fail the request.
+  const today = () => (opts.today ?? localToday)();
   const notifyHa = (event: HaEventInput) => {
     if (opts.notify) void opts.notify(event).catch(() => {});
   };
@@ -555,6 +561,31 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
       if (e instanceof RangeError) return c.json({ error: "no such ingredient or step" }, 400);
       throw e;
     }
+  });
+  // Moving dishes that were not cooked to another plan: one entry from the dish sheet, or all open entries of a plan
+  // from the period sheet. HA sees a move as removed from the old plan and added to the new one.
+  const moveTo = (c: Context, entryIds: number[], sourcePlanId: number, targetPlanId: number) => {
+    const target = repo.getPlan(targetPlanId);
+    if (target.id === sourcePlanId) return c.json({ error: "same plan" }, 400);
+    if (target.end_date < today()) return c.json({ error: "plan is over" }, 400);
+    const results = repo.moveEntries(entryIds, target.id);
+    const user = haUser(c);
+    for (const { before, merged } of results) {
+      entryEvent("entry_removed", before, user);
+      if (!merged) entryEvent("entry_added", repo.getEntry(before.id), user);
+    }
+    const merged = results.filter((r) => r.merged).length;
+    return c.json({ moved: results.length - merged, merged });
+  };
+  app.post("/api/entries/:id/move", zValidator("param", z.object({ id })), zValidator("json", moveBody), (c) => {
+    const entry = repo.getEntry(c.req.valid("param").id);
+    if (entry.done) return c.json({ error: "entry is done" }, 409);
+    return moveTo(c, [entry.id], entry.plan_id, c.req.valid("json").plan_id);
+  });
+  app.post("/api/plans/:id/move-open", zValidator("param", z.object({ id })), zValidator("json", moveBody), (c) => {
+    const source = repo.getPlan(c.req.valid("param").id);
+    const open = source.entries.filter((e) => !e.done).map((e) => e.id);
+    return moveTo(c, open, source.id, c.req.valid("json").plan_id);
   });
   app.delete("/api/entries/:id", zValidator("param", z.object({ id })), (c) => {
     const before = repo.getEntry(c.req.valid("param").id);
