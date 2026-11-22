@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.0](https://github.com/twostone/meal-planner/compare/v0.20.0...v0.21.0) (2026-11-21)
+
+
+### Neu
+
+* **zutaten:** Gerichte einer Zutat zeigen und Rezept öffnen ([#95](https://github.com/twostone/meal-planner/issues/95)) ([5c0f07b](https://github.com/twostone/meal-planner/commit/5c0f07bcabc2710dadbfe53d8d4cb303bb1626ba))
+
 ## [0.20.0](https://github.com/twostone/meal-planner/compare/v0.19.0...v0.20.0) (2026-11-21)
 
 
