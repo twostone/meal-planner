@@ -150,7 +150,7 @@ test("migration v5 keeps dishes and adds the recipe tables", async () => {
     old.close();
 
     const db = openDb(file);
-    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 11);
+    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 13);
     const repo = createRepo(db);
     assert.deepEqual(repo.listDishes().map((d) => d.title), ["Linsensuppe"]);
     assert.deepEqual(repo.getRecipe(1), { servings: null, instructions: null, ingredients: [], source_text: null, source_truncated: false });
@@ -189,13 +189,15 @@ test("migration v9 -> v11 adds prep and plural and keeps the ingredients", async
     const repo = createRepo(first);
     const d = repo.createDish({ title: "Suppe" });
     repo.setRecipe(d.id, { servings: null, instructions: null, ingredients: [{ section: null, amount: 1, amount_max: null, unit: null, name: "Zwiebel", note: "rot" }] });
+    first.exec("DROP TABLE ingredient_category");
+    first.exec("DROP TABLE ingredient");
     first.exec("ALTER TABLE dish_ingredient DROP COLUMN plural");
     first.exec("ALTER TABLE dish_ingredient DROP COLUMN prep");
     first.exec("PRAGMA user_version = 9");
     first.close();
 
     const db = openDb(file);
-    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 11);
+    assert.equal((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 13);
     assert.deepEqual(createRepo(db).getRecipe(d.id).ingredients.map((i) => [i.name, i.plural, i.note, i.prep, i.raw]), [["Zwiebel", null, "rot", null, "1 Zwiebel"]]);
     db.close();
   } finally {

@@ -3,8 +3,7 @@
   import { imageSrc, listDishesWithIngredient, listIngredientNames } from "./api";
   import Icon from "./Icon.svelte";
   import { addDishToPlan, app, openDishSheet } from "./store.svelte";
-  import type { Dish } from "./types";
-  import { sameTag } from "./util";
+  import { groupByInitial, sameTag } from "./util";
 
   let s = $state("");
   let filter = $state<string | null>(null); // active category chip
@@ -57,17 +56,8 @@
     const needle = s.trim().toLowerCase();
     const shown = app.dishes
       .filter((d) => !needle || d.title.toLowerCase().includes(needle) || byIngredient.has(d.id))
-      .filter((d) => !activeFilter || d.tags.some((t) => sameTag(t, activeFilter)))
-      .sort((a, b) => a.title.localeCompare(b.title, "de"));
-    const out: { letter: string; dishes: Dish[] }[] = [];
-    for (const d of shown) {
-      const first = d.title.trim().charAt(0).toLocaleUpperCase("de");
-      const letter = /\p{L}/u.test(first) ? first : "#";
-      const last = out[out.length - 1];
-      if (last?.letter === letter) last.dishes.push(d);
-      else out.push({ letter, dishes: [d] });
-    }
-    return out;
+      .filter((d) => !activeFilter || d.tags.some((t) => sameTag(t, activeFilter)));
+    return groupByInitial(shown, (d) => d.title);
   });
 </script>
 
@@ -106,7 +96,7 @@
     <section class="group">
       <h2 class="letter">{g.letter}</h2>
       <ul class="rows">
-        {#each g.dishes as d (d.id)}
+        {#each g.items as d (d.id)}
           <li class="row">
             {#if d.image}
               <img class="thumb" src={imageSrc(d.image)} alt="" loading="lazy" decoding="async" />

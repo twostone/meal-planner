@@ -13,7 +13,7 @@ import type { PreviewResult } from "./preview.ts";
 import { buildDraft, DraftError, MAX_INGREDIENTS } from "./recipe-draft.ts";
 import { aiItems, buildChanges } from "./ingredient-normalize.ts";
 import { FOREIGN_UNITS } from "./units.ts";
-import { ConflictError, NotFoundError, UNITS, type Entry, type Repo } from "./repo.ts";
+import { ConflictError, InvalidInputError, NotFoundError, UNITS, type Entry, type Repo } from "./repo.ts";
 import { buildShoppingList, MAX_SPEC_LENGTH, nameKey, type ShoppingItem } from "./shopping.ts";
 import { cleanAiTitles } from "./title-suggest.ts";
 
@@ -43,6 +43,17 @@ const image = z.string().regex(IMAGE_NAME);
 
 // Free-form categories. Duplicates (any case) are merged by the repo, so only size limits are checked here.
 const tags = z.array(z.string().trim().min(1).max(30)).max(10);
+
+// The ingredient catalog addresses a name by its nameKey, in the body: names hold spaces and umlauts.
+const MAX_INGREDIENT_NAME = 80; // same as dish_ingredient.name in recipeBody
+const ingredientName = z.string().trim().min(1).max(MAX_INGREDIENT_NAME);
+const ingredientKey = z.object({ key: z.string().min(1).max(MAX_INGREDIENT_NAME) });
+// A category of ingredients ("Gewürz"): as long as a dish tag. "" or null removes it, missing keeps it.
+const MAX_CATEGORY_LENGTH = 30;
+const ingredientPatch = ingredientKey
+  .extend({ pantry: z.boolean().optional(), category: optional(z.string().trim().min(1).max(MAX_CATEGORY_LENGTH)) })
+  .refine((b) => b.pantry !== undefined || b.category !== undefined, "nothing to change");
+const categoryPatch = z.object({ key: z.string().min(1).max(MAX_CATEGORY_LENGTH), pantry: z.boolean() });
 
 // The recipe text from a link preview (see POST /api/preview). Stored unchanged, never interpreted.
 const source = { source_text: optional(z.string().max(10000)), source_truncated: z.boolean().optional() };
@@ -74,6 +85,16 @@ export const planPatch = z
   });
 // Text fields of a recipe: "" or null means "not set".
 const text = (max: number) => z.union([z.literal("").transform(() => null), z.string().trim().max(max), z.null()]);
+
+// Splitting a collective ingredient ("Salz & Pfeffer"): at least two parts, none named like the line itself (it would stay).
+const MIN_SPLIT_PARTS = 2;
+const MAX_SPLIT_PARTS = 10;
+const ingredientSplit = ingredientKey
+  .extend({ parts: z.array(z.object({ name: ingredientName, note: text(200) })).min(MIN_SPLIT_PARTS).max(MAX_SPLIT_PARTS) })
+  .refine((b) => b.parts.every((p) => nameKey(p.name) !== b.key), "a part keeps the name of the line");
+// Renaming or merging an ingredient: the new name and what all its lines get (plural, a variety where none is set).
+const ingredientRenamePreview = ingredientKey.extend({ name: ingredientName });
+const ingredientRename = ingredientRenamePreview.extend({ plural: text(80), note: text(200), pantry: z.boolean() });
 const ingredient = z
   .object({
     section: text(80),
@@ -226,6 +247,7 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
   app.onError((err, c) => {
     if (err instanceof NotFoundError) return c.json({ error: `${err.message} not found` }, 404);
     if (err instanceof ConflictError) return c.json({ error: err.message }, 409);
+    if (err instanceof InvalidInputError) return c.json({ error: err.message }, 400);
     log.error("unhandled", { method: c.req.method, path: c.req.path, err, stack: err instanceof Error ? err.stack : undefined });
     return c.json({ error: "internal error" }, 500);
   });
@@ -248,6 +270,46 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
   app.get("/api/dishes", (c) => c.json(repo.listDishes(c.req.query("q"), c.req.query("ingredient"))));
   // Suggestions for the search box of the catalog.
   app.get("/api/ingredients/names", (c) => c.json(repo.listIngredientNames(MAX_KNOWN_NAMES)));
+
+  // The ingredient catalog: what the household knows about an ingredient, e.g. that salt is always at home.
+  app.get("/api/ingredients", (c) => c.json(repo.listIngredients()));
+  app.post("/api/ingredients", zValidator("json", z.object({ name: ingredientName })), (c) =>
+    c.json(repo.createIngredient(c.req.valid("json").name), 201),
+  );
+  app.patch("/api/ingredients", zValidator("json", ingredientPatch), (c) => {
+    const { key, ...input } = c.req.valid("json");
+    return c.json(repo.setIngredient(key, input));
+  });
+  // Jump from an ingredient to the recipes that use it.
+  app.post("/api/ingredients/dishes", zValidator("json", ingredientKey), (c) => c.json(repo.ingredientDishes(c.req.valid("json").key)));
+  app.post("/api/ingredients/reset", zValidator("json", ingredientKey), (c) => c.json(repo.resetIngredient(c.req.valid("json").key)));
+  // Categories of ingredients; a whole category can be always at home.
+  app.get("/api/ingredient-categories", (c) => c.json(repo.listIngredientCategories()));
+  app.patch("/api/ingredient-categories", zValidator("json", categoryPatch), (c) => {
+    const { key, pantry } = c.req.valid("json");
+    return c.json(repo.setCategoryPantry(key, pantry));
+  });
+  app.post("/api/ingredients/split/preview", zValidator("json", ingredientKey), (c) => c.json(repo.previewSplit(c.req.valid("json").key)));
+  app.post("/api/ingredients/split", zValidator("json", ingredientSplit), (c) => {
+    const { key, parts } = c.req.valid("json");
+    const dishes = repo.splitIngredient(key, parts);
+    log.info("ingredient_split", { dishes, parts: parts.length });
+    return c.json({ dishes });
+  });
+  app.post("/api/ingredients/rename/preview", zValidator("json", ingredientRenamePreview), (c) => {
+    const { key, name } = c.req.valid("json");
+    return c.json(repo.previewRename(key, name));
+  });
+  app.post("/api/ingredients/rename", zValidator("json", ingredientRename), (c) => {
+    const { key, ...input } = c.req.valid("json");
+    const dishes = repo.renameIngredient(key, input);
+    log.info("ingredient_renamed", { dishes });
+    return c.json({ dishes });
+  });
+  app.post("/api/ingredients/delete", zValidator("json", ingredientKey), (c) => {
+    repo.deleteIngredient(c.req.valid("json").key);
+    return c.body(null, 204);
+  });
   app.post("/api/dishes", zValidator("json", newDishBody), async (c) => {
     const { recipe, ...body } = c.req.valid("json");
     if (await imageMissing(body.image)) return c.json({ error: "unknown image" }, 400);
@@ -375,6 +437,7 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
       const ids = chosen === undefined ? null : new Set(chosen.split(",").filter(Boolean).map(Number));
       const entries = repo.getPlanIngredients(c.req.valid("param").id).map((e) => ({ ...e, selected: ids ? ids.has(e.entry_id) : !e.done }));
       const items = buildShoppingList(entries.filter((e) => e.selected));
+      const pantry = repo.pantryKeys();
       let open: OpenTodoItem[] = [];
       let listError = false;
       if (list && items.length) {
@@ -387,7 +450,7 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
       }
       return c.json({
         entries: entries.map((e) => ({ entry_id: e.entry_id, title: e.title, done: e.done, selected: e.selected, has_recipe: e.ingredients.length > 0 })),
-        items: items.map((i) => ({ ...i, on_list: isOnList(i, open) })),
+        items: items.map((i) => ({ ...i, on_list: isOnList(i, open), pantry: pantry.has(nameKey(i.base)) })),
         list_error: listError,
       });
     });

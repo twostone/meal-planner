@@ -142,3 +142,20 @@ test("plural: taken when it differs from the name, otherwise none", () => {
   );
   assert.deepEqual(d.ingredients.map((i) => [i.name, i.plural]), [["Zwiebel", "Zwiebeln"], ["Mehl", null], ["Salz", null]]);
 });
+
+// The prompt asks for one ingredient per name: "Salz & Pfeffer" comes back as two, both with the same original line.
+test("a collective line split into single ingredients: every part keeps the original line and is verified", () => {
+  const d = buildDraft(
+    raw({
+      ingredients: JSON.stringify([
+        ing({ amount: null, unit: null, name: "Salz", raw: "Salz & Pfeffer" }),
+        ing({ amount: null, unit: null, name: "Pfeffer", raw: "Salz & Pfeffer" }),
+      ]),
+    }),
+    SOURCE,
+  );
+  assert.deepEqual(d.ingredients.map((i) => [i.name, i.raw, i.verified]), [
+    ["Salz", "Salz & Pfeffer", true],
+    ["Pfeffer", "Salz & Pfeffer", true],
+  ]);
+});

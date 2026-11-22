@@ -4,6 +4,10 @@ import type {
   Entry,
   PlanDetail,
   AiStatus,
+  CatalogIngredient,
+  IngredientCategory,
+  IngredientDish,
+  RenamePreview,
   IngredientChange,
   CheckState,
   CookEntry,
@@ -34,6 +38,8 @@ const MESSAGES: Record<string, string> = {
   "unknown list": "Diese Liste gibt es in Home Assistant nicht mehr. Bitte eine andere wählen.",
   "todo failed": "Home Assistant ist gerade nicht erreichbar.",
   "image too large": "Das Bild ist zu groß.",
+  "ingredient exists": "Diese Zutat gibt es schon.",
+  "ingredient in use": "Die Zutat steht noch in einem Rezept und kann nicht gelöscht werden.",
   "not a supported image": "Dieses Bildformat geht nicht. Bitte ein JPEG, PNG oder WebP wählen.",
 };
 
@@ -64,6 +70,29 @@ export const listDishes = () => request<Dish[]>("GET", "api/dishes");
 export const listDishesWithIngredient = (text: string) =>
   request<Dish[]>("GET", `api/dishes?ingredient=${encodeURIComponent(text)}`);
 export const listIngredientNames = () => request<string[]>("GET", "api/ingredients/names");
+
+// The ingredient catalog. Names are addressed by their key in the body: they hold spaces and umlauts.
+export const listIngredients = () => request<CatalogIngredient[]>("GET", "api/ingredients");
+export const createIngredient = (name: string) => request<CatalogIngredient>("POST", "api/ingredients", { name });
+export const setPantry = (key: string, pantry: boolean) => request<CatalogIngredient>("PATCH", "api/ingredients", { key, pantry });
+// null removes the category; a spelling of one in use joins it ("gewürz" -> "Gewürz").
+export const setIngredientCategory = (key: string, category: string | null) =>
+  request<CatalogIngredient>("PATCH", "api/ingredients", { key, category });
+export const listIngredientDishes = (key: string) => request<IngredientDish[]>("POST", "api/ingredients/dishes", { key });
+export const listIngredientCategories = () => request<IngredientCategory[]>("GET", "api/ingredient-categories");
+export const setCategoryPantry = (key: string, pantry: boolean) =>
+  request<IngredientCategory>("PATCH", "api/ingredient-categories", { key, pantry });
+export const resetIngredient = (key: string) => request<CatalogIngredient>("POST", "api/ingredients/reset", { key });
+export const deleteIngredient = (key: string) => request<void>("POST", "api/ingredients/delete", { key });
+// Splitting a collective line ("Salz & Pfeffer") in every recipe: the dishes it touches and the suggested parts first.
+export const previewSplit = (key: string) =>
+  request<{ name: string; dishes: { id: number; title: string }[]; parts: string[] }>("POST", "api/ingredients/split/preview", { key });
+// Renaming (or merging into a known name) rewrites every recipe that has the ingredient.
+export const previewRename = (key: string, name: string) => request<RenamePreview>("POST", "api/ingredients/rename/preview", { key, name });
+export const renameIngredient = (key: string, input: { name: string; plural: string | null; note: string | null; pantry: boolean }) =>
+  request<{ dishes: number }>("POST", "api/ingredients/rename", { key, ...input });
+export const splitIngredient = (key: string, parts: { name: string; note: string | null }[]) =>
+  request<{ dishes: number }>("POST", "api/ingredients/split", { key, parts });
 
 export const createDish = (d: DishInput) => request<Dish>("POST", "api/dishes", d);
 export const updateDish = (id: number, d: DishInput) => request<Dish>("PATCH", `api/dishes/${id}`, d);

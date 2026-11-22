@@ -1,6 +1,6 @@
 // Dev tool: starts the server on a throw-away database with sample data and saves phone-sized screenshots of the
 // built app to screenshots/<name>.png, so a change can be looked at (by a person or by a coding agent).
-// Usage (from meal-planner/, after `npm run build`):  npm run screenshot [-- list catalog dish recipe cook shopping]
+// Usage (from meal-planner/, after `npm run build`):  npm run screenshot [-- list catalog ingredients dish recipe cook shopping]
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdirSync, mkdtempSync, existsSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
@@ -65,8 +65,31 @@ async function seed(base: string): Promise<{ pastaDishId: number }> {
       { section: null, amount: 400, amount_max: null, unit: "g", name: "Spaghetti", note: null },
       { section: null, amount: 150, amount_max: null, unit: "g", name: "Speck", note: "durchwachsen", prep: "gewürfelt" },
       { section: null, amount: 3, amount_max: null, unit: null, name: "Ei", plural: "Eier", note: null, prep: "zimmerwarm" },
+      { section: null, amount: null, amount_max: null, unit: null, name: "Salz", note: null },
+      { section: null, amount: null, amount_max: null, unit: null, name: "Pfeffer", note: "schwarz" },
+      // An umlaut sorts between the base letters (Olivenöl, Öl, Oregano): the list must still show one group O.
+      { section: null, amount: 1, amount_max: null, unit: "EL", name: "Olivenöl", note: null },
+      { section: null, amount: 1, amount_max: null, unit: "EL", name: "Öl", note: null },
+      { section: null, amount: null, amount_max: null, unit: null, name: "Oregano", note: null },
     ],
   });
+  // A collective line as older recognized recipes have it, for splitting in the ingredient catalog.
+  const soupDishId = dishes.find((d) => d.title === "Kürbissuppe mit Ingwer")!.id;
+  await call(base, "PUT", `dishes/${soupDishId}/recipe`, {
+    servings: 4,
+    instructions: "Kürbis würfeln und kochen.\nPürieren und abschmecken.",
+    ingredients: [
+      { section: null, amount: 1, amount_max: null, unit: null, name: "Hokkaido-Kürbis", note: null },
+      { section: null, amount: null, amount_max: null, unit: null, name: "Salz & Pfeffer", note: null, raw: "Salz & Pfeffer" },
+    ],
+  });
+  // The ingredient catalog: salt is always at home, sugar was added by hand.
+  await call(base, "PATCH", "ingredients", { key: "salz", pantry: true });
+  await call(base, "POST", "ingredients", { name: "Zucker" });
+  // Categories: pepper and oregano are spices, and all spices are always at home.
+  await call(base, "PATCH", "ingredients", { key: "pfeffer", category: "Gewürz" });
+  await call(base, "PATCH", "ingredients", { key: "oregano", category: "Gewürz" });
+  await call(base, "PATCH", "ingredient-categories", { key: "gewürz", pantry: true });
   return { pastaDishId };
 }
 
@@ -90,11 +113,13 @@ async function fakeShopping(page: Page): Promise<void> {
           { entry_id: 3, title: "Linsen-Dal", done: false, selected: true, has_recipe: false },
         ],
         items: [
-          { key: "eier\0", name: "Eier", note: null, spec: "3", sources: ["Spaghetti Carbonara"], on_list: true },
-          { key: "nüsse\0macadamia", name: "Nüsse", note: "Macadamia", spec: "Macadamia, 50 g", sources: ["Linsen-Dal"], on_list: false },
-          { key: "nüsse\0walnuss", name: "Nüsse", note: "Walnuss", spec: "Walnuss, 50 g", sources: ["Linsen-Dal"], on_list: false },
-          { key: "parmesan\0", name: "Parmesan", note: null, spec: "80 g", sources: ["Spaghetti Carbonara"], on_list: false },
-          { key: "spaghetti\0", name: "Spaghetti", note: null, spec: "400 g", sources: ["Spaghetti Carbonara"], on_list: false },
+          { key: "eier\0", name: "Eier", note: null, spec: "3", sources: ["Spaghetti Carbonara"], on_list: true, pantry: false },
+          { key: "nüsse\0macadamia", name: "Nüsse", note: "Macadamia", spec: "Macadamia, 50 g", sources: ["Linsen-Dal"], on_list: false, pantry: false },
+          { key: "nüsse\0walnuss", name: "Nüsse", note: "Walnuss", spec: "Walnuss, 50 g", sources: ["Linsen-Dal"], on_list: false, pantry: false },
+          { key: "parmesan\0", name: "Parmesan", note: null, spec: "80 g", sources: ["Spaghetti Carbonara"], on_list: false, pantry: false },
+          { key: "spaghetti\0", name: "Spaghetti", note: null, spec: "400 g", sources: ["Spaghetti Carbonara"], on_list: false, pantry: false },
+          { key: "pfeffer\0schwarz", name: "Pfeffer", note: "schwarz", spec: "schwarz", sources: ["Spaghetti Carbonara"], on_list: false, pantry: true },
+          { key: "salz\0", name: "Salz", note: null, spec: null, sources: ["Spaghetti Carbonara"], on_list: true, pantry: true },
         ],
         list_error: false,
       },
@@ -145,6 +170,100 @@ type Shot = { name: string; run: (page: Page) => Promise<void> };
 const SHOTS: Shot[] = [
   { name: "list", run: async () => {} },
   { name: "catalog", run: (page) => page.getByRole("button", { name: "Katalog" }).click() },
+  { name: "ingredients", run: (page) => page.getByRole("button", { name: "Zutaten", exact: true }).click() },
+  {
+    // Filtered by a category: the switch for the whole category, its ingredients ticked and fixed.
+    name: "ingredient-category",
+    run: async (page) => {
+      await page.getByRole("button", { name: "Zutaten", exact: true }).click();
+      await page.getByRole("button", { name: "Gewürz", exact: true }).click();
+    },
+  },
+  {
+    // The category field of one ingredient, with the categories in use as suggestions.
+    name: "ingredient-category-edit",
+    run: async (page) => {
+      await page.getByRole("button", { name: "Zutaten", exact: true }).click();
+      await page.locator("button.title", { hasText: "Speck" }).click();
+      await page.getByLabel("Kategorie").fill("Fleisch");
+    },
+  },
+  {
+    // An opened ingredient lists the dishes that use it as cards, with the lines as written.
+    name: "ingredient-dishes",
+    run: async (page) => {
+      await page.getByRole("button", { name: "Zutaten", exact: true }).click();
+      await page.locator("button.title", { hasText: /^Pfeffer/ }).click();
+      await page.getByRole("button", { name: /Spaghetti Carbonara/ }).waitFor();
+    },
+  },
+  {
+    // A tap on such a card opens the recipe of the dish.
+    name: "ingredient-dish-recipe",
+    run: async (page) => {
+      await page.getByRole("button", { name: "Zutaten", exact: true }).click();
+      await page.locator("button.title", { hasText: /^Pfeffer/ }).click();
+      await page.getByRole("button", { name: /Spaghetti Carbonara/ }).click();
+      await page.locator("dialog").getByText("Zubereitung").first().waitFor();
+    },
+  },
+  {
+    // Splitting a collective line: the suggested parts, the dishes it touches, a variety for one part.
+    name: "ingredient-split",
+    run: async (page) => {
+      await page.getByRole("button", { name: "Zutaten", exact: true }).click();
+      await page.locator("button.title", { hasText: "Salz & Pfeffer" }).click();
+      await page.getByRole("button", { name: "Aufteilen …" }).click();
+      await page.getByLabel("Sorte von Zutat 2").fill("schwarz");
+    },
+  },
+  {
+    // After splitting: the list without the collective line, Salz in two dishes, the info toast.
+    name: "ingredient-split-done",
+    run: async (page) => {
+      await page.getByRole("button", { name: "Zutaten", exact: true }).click();
+      await page.locator("button.title", { hasText: "Salz & Pfeffer" }).click();
+      await page.getByRole("button", { name: "Aufteilen …" }).click();
+      const sheet = page.locator("dialog");
+      await sheet.getByRole("button", { name: "In 2 Zutaten aufteilen" }).click();
+      await sheet.getByRole("button", { name: /Wirklich aufteilen/ }).click();
+      await page.getByRole("status").waitFor();
+    },
+  },
+  {
+    // Merging "Öl" into the known "Olivenöl": the sheet says so and asks for plural, variety and pantry.
+    name: "ingredient-rename",
+    run: async (page) => {
+      await page.getByRole("button", { name: "Zutaten", exact: true }).click();
+      await page.locator("button.title", { hasText: /^Öl/ }).click();
+      await page.getByRole("button", { name: "Umbenennen …" }).click();
+      await page.getByLabel("Neuer Name").fill("Olivenöl");
+      await page.getByText("Wird mit „Olivenöl“ zusammengeführt").waitFor();
+    },
+  },
+  {
+    name: "ingredient-rename-done",
+    run: async (page) => {
+      await page.getByRole("button", { name: "Zutaten", exact: true }).click();
+      await page.locator("button.title", { hasText: /^Öl/ }).click();
+      await page.getByRole("button", { name: "Umbenennen …" }).click();
+      await page.getByLabel("Neuer Name").fill("Olivenöl");
+      const sheet = page.locator("dialog");
+      await sheet.getByText("Wird mit „Olivenöl“ zusammengeführt").waitFor();
+      await sheet.getByRole("button", { name: "Zusammenführen" }).click();
+      await sheet.getByRole("button", { name: /Wirklich ändern/ }).click();
+      await page.getByRole("status").waitFor();
+    },
+  },
+  {
+    // The pantry section of the shopping list unfolded: unticked, but can be ticked when something runs out.
+    name: "shopping-pantry",
+    run: async (page) => {
+      await page.getByRole("button", { name: "Einkaufen", exact: true }).click();
+      await page.getByText("Haben wir immer (2)").click();
+      await page.locator(".pantry-items li").last().scrollIntoViewIfNeeded();
+    },
+  },
   { name: "dish", run: (page) => pastaTitle(page).click() },
   {
     // With an AI task that can generate images, the sheet offers "Bild erzeugen" next to "Foto wählen".

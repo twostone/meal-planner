@@ -1,5 +1,50 @@
 # Changelog
 
+## [0.21.0](https://github.com/twostone/meal-planner/compare/v0.20.0...v0.21.0) (2026-11-21)
+
+
+### Neu
+
+* **zutaten:** Gerichte einer Zutat zeigen und Rezept öffnen ([#95](https://github.com/twostone/meal-planner/issues/95)) ([5c0f07b](https://github.com/twostone/meal-planner/commit/5c0f07bcabc2710dadbfe53d8d4cb303bb1626ba))
+
+## [0.20.0](https://github.com/twostone/meal-planner/compare/v0.19.0...v0.20.0) (2026-11-21)
+
+
+### Neu
+
+* **zutaten:** Kategorien für Zutaten, Vorrat je Kategorie ([#94](https://github.com/twostone/meal-planner/issues/94)) ([88df543](https://github.com/twostone/meal-planner/commit/88df5439e0a5680110eae89dcced6e34b451ef79))
+* **zutaten:** Zutaten umbenennen und zusammenführen ([#92](https://github.com/twostone/meal-planner/issues/92)) ([b1b1c1d](https://github.com/twostone/meal-planner/commit/b1b1c1d7e79c331562cd745ba969d84d9f6cbb1f))
+
+## [0.19.0](https://github.com/twostone/meal-planner/compare/v0.18.2...v0.19.0) (2026-11-21)
+
+
+### Neu
+
+* **zutaten:** Sammelzeilen im Zutatenkatalog aufteilen ([#90](https://github.com/twostone/meal-planner/issues/90)) ([d1fc799](https://github.com/twostone/meal-planner/commit/d1fc79926a65216ee613b7014b63e90497d0d811))
+
+## [0.18.2](https://github.com/twostone/meal-planner/compare/v0.18.1...v0.18.2) (2026-11-20)
+
+
+### Behoben
+
+* **ui:** Zutaten und Katalog mit Umlaut am Anfang wieder anzeigen ([#88](https://github.com/twostone/meal-planner/issues/88)) ([260787d](https://github.com/twostone/meal-planner/commit/260787d6e2c3d9f801a2c55f59610b4684573960))
+
+## [0.18.1](https://github.com/twostone/meal-planner/compare/v0.18.0...v0.18.1) (2026-11-20)
+
+
+### Behoben
+
+* **app:** alte index.html aus dem Browser-Cache nach Updates verhindern ([#86](https://github.com/twostone/meal-planner/issues/86)) ([0ecef81](https://github.com/twostone/meal-planner/commit/0ecef81c71cf81682090df368996c17e718d6165))
+
+## [0.18.0](https://github.com/twostone/meal-planner/compare/v0.17.0...v0.18.0) (2026-11-20)
+
+
+### Neu
+
+* **rezept:** Gericht samt Rezept anlegen, Listeneintrag wählbar ([#79](https://github.com/twostone/meal-planner/issues/79)) ([7e03307](https://github.com/twostone/meal-planner/commit/7e03307733e4341edc8ffd1a17d03195e7c2aa2e))
+* **ui:** Meldungen als Toast ([#78](https://github.com/twostone/meal-planner/issues/78)) ([88141b7](https://github.com/twostone/meal-planner/commit/88141b7d64948b8195bc5414ed0aa56f4317fd20))
+* **zutaten:** Zutatenkatalog mit Vorrat für die Einkaufsliste ([#83](https://github.com/twostone/meal-planner/issues/83)) ([4288ae1](https://github.com/twostone/meal-planner/commit/4288ae185f3c65084d0039bbee0505b04e152553))
+
 ## [0.17.0](https://github.com/twostone/meal-planner/compare/v0.16.1...v0.17.0) (2026-11-08)
 
 
