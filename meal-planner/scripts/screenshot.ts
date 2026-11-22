@@ -1,6 +1,7 @@
 // Dev tool: starts the server on a throw-away database with sample data and saves phone-sized screenshots of the
 // built app to screenshots/<name>.png, so a change can be looked at (by a person or by a coding agent).
-// Usage (from meal-planner/, after `npm run build`):  npm run screenshot [-- list catalog ingredients dish recipe cook shopping]
+// Usage (from meal-planner/, after `npm run build`):  npm run screenshot [-- [--dark] list catalog ingredients dish recipe cook shopping]
+// --dark renders in dark mode and saves <name>-dark.png. CHROME_PATH points to a Chromium when Google Chrome is not installed.
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdirSync, mkdtempSync, existsSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
@@ -166,6 +167,7 @@ type Shot = { name: string; run: (page: Page) => Promise<void> };
 
 const SHOTS: Shot[] = [
   { name: "list", run: async () => {} },
+  { name: "periods", run: (page) => page.locator("button.period").click() },
   { name: "catalog", run: (page) => page.getByRole("button", { name: "Katalog" }).click() },
   { name: "ingredients", run: (page) => page.getByRole("button", { name: "Zutaten", exact: true }).click() },
   {
@@ -349,7 +351,9 @@ const SHOTS: Shot[] = [
 
 async function main(): Promise<void> {
   if (!existsSync("dist/index.html")) throw new Error("dist/ fehlt: zuerst `npm run build`");
-  const wanted = process.argv.slice(2);
+  const args = process.argv.slice(2);
+  const dark = args.includes("--dark");
+  const wanted = args.filter((a) => a !== "--dark");
   const unknown = wanted.filter((w) => !SHOTS.some((s) => s.name === w));
   if (unknown.length) throw new Error(`unknown screenshot(s): ${unknown.join(", ")} (available: ${SHOTS.map((s) => s.name).join(", ")})`);
   const shots = wanted.length ? SHOTS.filter((s) => wanted.includes(s.name)) : SHOTS;
@@ -366,17 +370,17 @@ async function main(): Promise<void> {
     await waitForServer(base);
     await seed(base);
     mkdirSync(OUT_DIR, { recursive: true });
-    const browser = await chromium.launch({ channel: "chrome" });
+    const browser = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: "chrome" });
     try {
       for (const shot of shots) {
         // A fresh context per shot: each one starts from the list, no state carries over.
-        const page = await (await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 2 })).newPage();
+        const page = await (await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 2, colorScheme: dark ? "dark" : "light" })).newPage();
         await fakeShopping(page);
         await page.goto(base);
         await pastaTitle(page).waitFor();
         await shot.run(page);
         await page.waitForTimeout(400); // sheet/transition animations
-        const file = join(OUT_DIR, `${shot.name}.png`);
+        const file = join(OUT_DIR, `${shot.name}${dark ? "-dark" : ""}.png`);
         await page.screenshot({ path: file });
         console.log(file);
       }

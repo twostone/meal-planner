@@ -3,6 +3,7 @@
   import { addDays, fmtRange, nextSaturday } from "./dates";
   import Sheet from "./Sheet.svelte";
   import { app, createPlan, deletePlan, selectPlan, updatePlan } from "./store.svelte";
+  import { loadTheme, saveTheme, type Theme } from "./theme";
   import type { PlanSummary } from "./types";
 
   // New periods default to the coming Saturday through Friday, both editable.
@@ -16,6 +17,18 @@
   let editTitle = $state("");
   let editStart = $state("");
   let editEnd = $state("");
+
+  const THEMES: { value: Theme; label: string }[] = [
+    { value: "auto", label: "Automatisch" },
+    { value: "light", label: "Hell" },
+    { value: "dark", label: "Dunkel" },
+  ];
+  let theme = $state(loadTheme());
+
+  function pickTheme(t: Theme) {
+    theme = t;
+    saveTheme(t);
+  }
 
   const valid = $derived(!!start && !!end && end >= start);
   const editValid = $derived(!!editStart && !!editEnd && editEnd >= editStart);
@@ -116,4 +129,14 @@
       <Icon name="plus" />Neuer Zeitraum
     </button>
   {/if}
+
+  <fieldset class="theme-pick">
+    <legend>Darstellung</legend>
+    <div class="segmented">
+      {#each THEMES as t (t.value)}
+        <button type="button" aria-pressed={theme === t.value} onclick={() => pickTheme(t.value)}>{t.label}</button>
+      {/each}
+    </div>
+    <small class="field-hint">Gilt nur auf diesem Gerät. „Automatisch“ folgt dem Gerät, nicht dem Home-Assistant-Design.</small>
+  </fieldset>
 </Sheet>
