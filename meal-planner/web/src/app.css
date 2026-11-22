@@ -437,6 +437,17 @@ label {
   color: var(--danger);
   background: transparent;
 }
+.btn.ghost {
+  color: var(--green);
+  background: transparent;
+}
+/* choosing the plan to move dishes to (MovePanel) */
+.move {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
 .btn.square {
   width: 44px;
   padding: 0;

@@ -82,7 +82,7 @@ npm run check                     # svelte-check Frontend
 npm run build                     # Frontend nach dist/ (wird vom Server ausgeliefert)
 DB_PATH=./data/dev.db PORT=8099 npm start
 npm run dev:web                   # Vite-Dev-Server, /api geht per Proxy an :8099
-npm run screenshot [-- list catalog ingredients ingredient-dishes ingredient-category ingredient-split ingredient-rename dish dish-new recipe cook shopping shopping-pantry toast-error] # nach npm run build: PNGs bei 390 px nach screenshots/
+npm run screenshot [-- list catalog ingredients ingredient-dishes ingredient-category ingredient-split ingredient-rename dish dish-new dish-move periods-move recipe cook shopping shopping-pantry toast-error] # nach npm run build: PNGs bei 390 px nach screenshots/
 ```
 
 Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (genau das prüft auch die CI). Bei Änderungen an
@@ -102,6 +102,19 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   `POST /api/plans` prüft dieselbe Regel (`overlapsOther` in `repo.ts`): Überschneidung -> 409 `plan overlaps`, es wird
   nichts angelegt und kein Event gesendet. Berühren ohne gemeinsamen Tag ist erlaubt. Bereits überlappende Altdaten
   bleiben unverändert bestehen.
+- **Verschieben** (Entscheidungen vom 22.11.2026): Nicht gekochte (offene) Gerichte wandern in eine andere Liste, einzeln
+  per `POST /api/entries/:id/move {plan_id}` (abgehakt -> 409 `entry is done`) oder alle offenen einer Liste per
+  `POST /api/plans/:id/move-open {plan_id}`; Antwort `{moved, merged}`. Ziel muss eine andere Liste sein (sonst 400
+  `same plan`), die heute noch nicht vorbei ist (`end_date >= heute`, lokales Datum, sonst 400 `plan is over`).
+  `moveEntries` in `repo.ts` arbeitet in einer Transaktion: der Eintrag behält seine ID und kommt ans Ende der Zielliste,
+  die Listen-Notiz geht mit, die Kochmodus-Haken (`cook_check`) werden gelöscht. Steht das Gericht schon in der Zielliste,
+  wird **zusammengeführt**: der alte Eintrag fällt weg, seine Notiz füllt nur eine leere. Verschieben heißt **entfernen**,
+  die alte Liste zeigt danach nur noch, was gekocht wurde. HA sieht es als `entry_removed` (alte Liste) plus `entry_added`
+  (neue, nicht beim Zusammenführen); kein eigenes Event, kein MCP-Tool (dort gehen `remove_from_plan` + `add_to_plan`).
+  UI: `MovePanel.svelte` (Zielliste als `<select>`, die früheste ist vorgewählt; ohne Ziel der Hinweis, erst eine Liste
+  anzulegen), im Bearbeiten-Blatt „In andere Liste verschieben“ (nur offene Einträge aus der Liste) und im Zeitraum-Blatt
+  „Offene Gerichte verschieben (n)“ für die angezeigte Liste, mit den Titeln vor dem Bestätigen. Bewusst nicht:
+  automatisches Verschieben, einzelne Gerichte beim Sammelverschieben abwählen, neue Liste beim Verschieben anlegen.
 - **Rezept** (Plan: `docs/plan-rezepte.md`, Stufe 1 bis 3, 5 und 7 gebaut): gehört zum Gericht, nicht zum Listeneintrag. `dish.servings`
   (1–50) und `dish.instructions` (ein Schritt pro Zeile, höchstens 10 000 Zeichen) plus `dish_ingredient` (Reihenfolge `pos`,
   `section`, `amount`/`amount_max`, `unit`, `name`, `plural`, `note`, `prep`, `raw`). `name` ist die Grundform (Singular),

@@ -2,7 +2,8 @@
   import Icon from "./Icon.svelte";
   import { addDays, fmtRange, nextSaturday } from "./dates";
   import Sheet from "./Sheet.svelte";
-  import { app, createPlan, deletePlan, selectPlan, updatePlan } from "./store.svelte";
+  import MovePanel from "./MovePanel.svelte";
+  import { app, createPlan, deletePlan, moveOpenEntries, selectPlan, updatePlan } from "./store.svelte";
   import type { PlanSummary } from "./types";
 
   // New periods default to the coming Saturday through Friday, both editable.
@@ -18,6 +19,8 @@
   let editEnd = $state("");
 
   const valid = $derived(!!start && !!end && end >= start);
+  // The dishes of the shown plan that were not cooked; they can move on together (e.g. at the end of the week).
+  const openTitles = $derived(app.plan?.entries.filter((e) => !e.done).map((e) => e.dish.title) ?? []);
   const editValid = $derived(!!editStart && !!editEnd && editEnd >= editStart);
 
   function onStart() {
@@ -88,6 +91,16 @@
         {/if}
       {/each}
     </ul>
+  {/if}
+
+  {#if app.plan && openTitles.length}
+    {@const fromPlanId = app.plan.id}
+    <MovePanel
+      {fromPlanId}
+      label="Offene Gerichte verschieben ({openTitles.length})"
+      detail={`Aus ${app.plan.title ?? fmtRange(app.plan.start_date, app.plan.end_date)}: ${openTitles.join(", ")}`}
+      onmove={(planId, planLabel) => moveOpenEntries(fromPlanId, planId, planLabel)}
+    />
   {/if}
 
   {#if creating}
