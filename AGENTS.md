@@ -64,7 +64,7 @@ meal-planner/            das Add-on (Docker-Build-Kontext)
     src/RecipeEditor.svelte, src/recipe-form.ts   Rezept-Editor (nur Felder) und seine Prüfung, genutzt von
                            RecipeSheet und vom Anlegen im DishSheet
     public/favicon.svg     Favicon der App, Vorlage für icon.png
-  scripts/screenshot.ts  Screenshot-Werkzeug (playwright-core + installiertes Google Chrome, Beispieldaten, Wegwerf-DB)
+  scripts/screenshot.ts  Screenshot-Werkzeug (playwright-core + installiertes Google Chrome oder `CHROME_PATH`, Beispieldaten, Wegwerf-DB)
   test/                  Tests (node:test)
 ```
 
@@ -82,7 +82,7 @@ npm run check                     # svelte-check Frontend
 npm run build                     # Frontend nach dist/ (wird vom Server ausgeliefert)
 DB_PATH=./data/dev.db PORT=8099 npm start
 npm run dev:web                   # Vite-Dev-Server, /api geht per Proxy an :8099
-npm run screenshot [-- list catalog ingredients ingredient-dishes ingredient-category ingredient-split ingredient-rename dish dish-new dish-move periods-move recipe cook shopping shopping-pantry toast-error] # nach npm run build: PNGs bei 390 px nach screenshots/
+npm run screenshot [-- [--dark] list periods catalog ingredients ingredient-dishes ingredient-category ingredient-split ingredient-rename dish dish-new dish-move periods-move recipe cook shopping shopping-pantry toast-error] # nach npm run build: PNGs bei 390 px nach screenshots/
 ```
 
 Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (genau das prüft auch die CI). Bei Änderungen an
@@ -693,6 +693,11 @@ raten (`async_update_reload_and_abort`, `HassioServiceInfo`, `StaticPathConfig`,
   Middleware in `app.ts` nur bei Status ab 400 oder ab 2 s (der Kochmodus fragt alle 4 s ab). Tests fangen Zeilen mit
   `setLogSink` ab. **Nie ins Log:** vollständige Links (nur der Host), Tokens, Rezept- oder Caption-Text, Query-Strings,
   Namen aus den `X-Remote-User-*`-Headern; Antworten von HA nur gekürzt (`clip`).
+- **Farben nur über die Variablen** in `web/src/app.css` (`:root`), nie feste Farbwerte in Regeln oder Komponenten. Jede
+  Variable braucht einen Wert im hellen Satz und in **beiden** dunklen Blöcken (`@media (prefers-color-scheme: dark)` und
+  `:root[data-theme="dark"]`, inhaltsgleich). Die Wahl Automatisch/Hell/Dunkel steht unten im Zeitraum-Blatt, gilt pro Gerät
+  (`localStorage`, `theme.ts`) und setzt `data-theme` auf `<html>`; `theme.ts` zieht auch `theme-color` nach. UI-Änderungen
+  hell und dunkel prüfen: `npm run screenshot` und `npm run screenshot -- --dark`.
 - UI-Texte deutsch, Code und Kommentare englisch. Bedienelemente mindestens 44 px, echte `<button>`/`<a>`.
 
 ## Bewusst nicht gebaut (nur auf ausdrücklichen Wunsch)
@@ -740,7 +745,7 @@ Rezept-Text einfügen und per KI zerlegen sowie Portionen umrechnen (beides am 1
 - Die Einkaufsliste ist nur gegen eine Fake-Core-API getestet, **nicht gegen Bring in HA**: offen sind die Antwortform von
   `todo.get_items` über die REST-API, ob Bring die `description` als Spezifikation zeigt, `supported_features` der
   Bring-Entitäten und wie lange 20 bis 30 `add_item` nacheinander dauern (Bring aktualisiert nach jedem Artikel).
-- Kein Dunkelmodus (HA-Theme dunkel, App bleibt hell).
+- Der Dunkelmodus folgt bei „Automatisch“ dem Gerät bzw. Browser, nicht dem HA-Theme (im Ingress-iframe nicht lesbar); dafür gibt es den Schalter. In der Companion-App nicht geprüft.
 - Der MCP-Server ist nur gegen Tests (Fake-Verifier, nachgebauter HA-WebSocket, SDK-Client) geprüft, **nicht am echten
   System**: offen sind der OAuth-Ablauf von claude.ai und Claude Code gegen Home Assistant, ob `ws://homeassistant:8123` aus
   dem Container erreichbar ist (wie beim KI-Bild: nicht bei eigenem SSL-Zertifikat auf 8123), die Erreichbarkeit von Port

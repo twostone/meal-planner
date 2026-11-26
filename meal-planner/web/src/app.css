@@ -1,18 +1,76 @@
+/* Colors: every rule uses these tokens. Dark values follow the device unless the viewer picked a theme in the
+   Zeitraum sheet (theme.ts sets data-theme on <html>); the dark set is repeated because CSS cannot share it between
+   the media query and the attribute selector. */
 :root {
   --bg: #f3f6ef;
   --surface: #ffffff;
+  --hover: #eef3ea;
   --ink: #1e2a22;
   --muted: #4a5a50;
   --line: #dce4d7;
   --field: #c9d4c4;
   --green: #2f6b4f;
+  --on-green: #ffffff;
   --green-soft: #e6ede1;
   --gold: #f2c14e;
   --box: #7c8d82;
   --danger: #b3261e;
+  --on-danger: #ffffff;
+  --error-bg: #fce8e6;
+  --error-ink: #7a1a14;
+  --warn-bg: #fff3d6;
+  --shadow: var(--shadow);
+  --shadow-soft: var(--shadow-soft);
+  --backdrop: var(--backdrop);
   --display: "Bricolage Grotesque Variable", system-ui, sans-serif;
   font-family: "Figtree Variable", system-ui, sans-serif;
   color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101512;
+    --surface: #19201c;
+    --hover: #222a25;
+    --ink: #e8eee9;
+    --muted: #9daaa2;
+    --line: #2b342f;
+    --field: #3d4842;
+    --green: #7cc49a;
+    --on-green: #0d1a12;
+    --green-soft: #1e3127;
+    --box: #75847b;
+    --danger: #f2a49d;
+    --on-danger: #3b0d09;
+    --error-bg: #3d1d1a;
+    --error-ink: #f6c7c2;
+    --warn-bg: #3a3016;
+    --shadow: rgba(0, 0, 0, 0.5);
+    --shadow-soft: rgba(0, 0, 0, 0.4);
+    --backdrop: rgba(0, 0, 0, 0.6);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101512;
+  --surface: #19201c;
+  --hover: #222a25;
+  --ink: #e8eee9;
+  --muted: #9daaa2;
+  --line: #2b342f;
+  --field: #3d4842;
+  --green: #7cc49a;
+  --on-green: #0d1a12;
+  --green-soft: #1e3127;
+  --box: #75847b;
+  --danger: #f2a49d;
+  --on-danger: #3b0d09;
+  --error-bg: #3d1d1a;
+  --error-ink: #f6c7c2;
+  --warn-bg: #3a3016;
+  --shadow: rgba(0, 0, 0, 0.5);
+  --shadow-soft: rgba(0, 0, 0, 0.4);
+  --backdrop: rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
 }
 
 * {
@@ -147,10 +205,10 @@ main {
   max-width: 448px;
   margin: 0 auto;
   padding: 4px 4px 4px 12px;
-  background: #fce8e6;
-  color: #7a1a14;
+  background: var(--error-bg);
+  color: var(--error-ink);
   border-radius: 12px;
-  box-shadow: 0 6px 18px rgba(30, 42, 34, 0.22);
+  box-shadow: 0 6px 18px var(--shadow);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -256,7 +314,7 @@ main {
 .row.done .box {
   background: var(--green);
   border-color: var(--green);
-  color: #fff;
+  color: var(--on-green);
 }
 .title {
   flex: 1;
@@ -343,7 +401,7 @@ textarea:focus {
   border: 1px solid var(--field);
   border-radius: 16px;
   padding: 6px;
-  box-shadow: 0 8px 24px rgba(30, 42, 34, 0.14);
+  box-shadow: 0 8px 24px var(--shadow-soft);
 }
 .opt {
   width: 100%;
@@ -359,7 +417,7 @@ textarea:focus {
   text-align: left;
 }
 .opt:hover {
-  background: #eef3ea;
+  background: var(--hover);
 }
 .opt.new {
   color: var(--green);
@@ -422,7 +480,7 @@ label {
 }
 .btn.primary {
   background: var(--green);
-  color: #fff;
+  color: var(--on-green);
 }
 .btn.outline {
   border-color: var(--green);
@@ -431,7 +489,7 @@ label {
 }
 .btn.danger {
   background: var(--danger);
-  color: #fff;
+  color: var(--on-danger);
 }
 .btn.ghost-danger {
   color: var(--danger);
@@ -524,13 +582,13 @@ label {
   border: none;
   border-radius: 28px;
   background: var(--green);
-  color: #fff;
+  color: var(--on-green);
   display: inline-flex;
   align-items: center;
   gap: 8px;
   font-size: 15px;
   font-weight: 600;
-  box-shadow: 0 6px 18px rgba(30, 42, 34, 0.22);
+  box-shadow: 0 6px 18px var(--shadow);
 }
 
 /* sheets */
@@ -547,7 +605,7 @@ dialog {
   color: inherit;
 }
 dialog::backdrop {
-  background: rgba(30, 42, 34, 0.45);
+  background: var(--backdrop);
 }
 .sheet {
   background: var(--bg);
@@ -820,7 +878,7 @@ details.more[open] {
 .tagchip[aria-pressed="true"] {
   background: var(--green);
   border-color: var(--green);
-  color: #fff;
+  color: var(--on-green);
   font-weight: 600;
 }
 fieldset.tags {
@@ -885,7 +943,7 @@ fieldset.suggestions legend {
 .suggestion[aria-pressed="true"] {
   background: var(--green);
   border-color: var(--green);
-  color: #fff;
+  color: var(--on-green);
   font-weight: 600;
 }
 /* AI suggestions carry a small "KI" tag; until they are in, two dashed placeholders hold their place */
@@ -910,8 +968,8 @@ fieldset.suggestions legend {
   letter-spacing: 0.04em;
 }
 .suggestion.ai[aria-pressed="true"] .ai-tag {
-  background: rgb(255 255 255 / 0.2);
-  color: #fff;
+  background: color-mix(in srgb, var(--on-green) 20%, transparent);
+  color: var(--on-green);
 }
 .suggestion.placeholder {
   border-style: dashed;
@@ -1039,12 +1097,12 @@ details.source summary {
   margin: 0;
   padding: 10px 12px;
   border-radius: 14px;
-  background: #fff3d6;
+  background: var(--warn-bg);
   font-size: 14px;
   font-weight: 500;
 }
 .ing-row.suspicious {
-  background: #fde8e6;
+  background: var(--error-bg);
   box-shadow: 0 0 0 1.5px var(--danger);
 }
 .ing-warn {
@@ -1110,10 +1168,11 @@ details.source summary {
 .cook-tab[aria-current="true"] {
   background: var(--green);
   border-color: var(--green);
-  color: #fff;
+  color: var(--on-green);
 }
 .cook-tab[aria-current="true"] small {
-  color: #e4f0e8;
+  color: var(--on-green);
+  opacity: 0.85;
 }
 .cook-tab.done:not([aria-current="true"]) {
   color: var(--muted);
@@ -1194,7 +1253,7 @@ details.source summary {
 .tick[aria-pressed="true"] .box {
   background: var(--green);
   border-color: var(--green);
-  color: #fff;
+  color: var(--on-green);
 }
 .tick[aria-pressed="true"] .tick-text {
   text-decoration: line-through;
@@ -1223,7 +1282,7 @@ a.btn {
 .shop-item[aria-checked="true"] .box {
   background: var(--green);
   border-color: var(--green);
-  color: #fff;
+  color: var(--on-green);
 }
 .shop-item.off {
   background: transparent;
@@ -1272,7 +1331,7 @@ a.btn {
 .row.pantry .box {
   background: var(--green);
   border-color: var(--green);
-  color: #fff;
+  color: var(--on-green);
 }
 .ingredient-actions {
   display: flex;
@@ -1318,4 +1377,44 @@ a.btn {
 }
 .ingredient-dishes .row-card {
   width: 100%;
+}
+
+/* theme switch in the Zeitraum sheet */
+.theme-pick {
+  margin: 16px 0 0;
+  padding: 0;
+  border: none;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.theme-pick legend {
+  padding: 0;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.segmented {
+  display: flex;
+  padding: 3px;
+  border-radius: 14px;
+  background: var(--green-soft);
+}
+.segmented button {
+  flex: 1;
+  min-height: 44px;
+  border: none;
+  border-radius: 11px;
+  background: transparent;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.segmented button[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 700;
+  box-shadow: 0 1px 3px var(--shadow-soft);
 }
