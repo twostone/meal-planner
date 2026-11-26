@@ -46,9 +46,12 @@ async function call<T>(base: string, method: string, path: string, body?: unknow
 
 type Created = { id: number };
 
-// A list around today with three dishes (one done, one with a recipe), so every view has something to show.
+// A list around today with three dishes (one done, one with a recipe), so every view has something to show,
+// and an empty list for next week to move dishes to.
 async function seed(base: string): Promise<{ pastaDishId: number }> {
   const plan = await call<Created>(base, "POST", "plans", { start_date: addDays(today(), -1), end_date: addDays(today(), 5) });
+  const next = await call<Created>(base, "POST", "plans", { start_date: addDays(today(), 6), end_date: addDays(today(), 12) });
+  await call(base, "PATCH", `plans/${next.id}`, { title: "Nächste Woche" });
   const pasta = await call<Created>(base, "POST", `plans/${plan.id}/entries`, { title: "Spaghetti Carbonara", tags: ["Pasta"] });
   const soup = await call<Created>(base, "POST", `plans/${plan.id}/entries`, { title: "Kürbissuppe mit Ingwer", tags: ["Suppe", "Vegetarisch"] });
   await call(base, "POST", `plans/${plan.id}/entries`, { title: "Linsen-Dal", tags: ["Vegetarisch"] });
@@ -297,6 +300,22 @@ const SHOTS: Shot[] = [
       await page.getByRole("button", { name: "Rezept Zutaten und Zubereitung" }).click();
       await page.getByRole("button", { name: "Zutaten vereinheitlichen" }).click();
       await page.getByText("übernehmen").waitFor();
+    },
+  },
+  {
+    // One dish that was not cooked moves on: the target list is chosen in the dish sheet.
+    name: "dish-move",
+    run: async (page) => {
+      await pastaTitle(page).click();
+      await page.getByRole("button", { name: "In andere Liste verschieben" }).click();
+    },
+  },
+  {
+    // All open dishes of the list move on together from the period sheet.
+    name: "periods-move",
+    run: async (page) => {
+      await page.locator("button.period").click();
+      await page.getByRole("button", { name: /Offene Gerichte verschieben/ }).click();
     },
   },
   { name: "shopping", run: (page) => page.getByRole("button", { name: "Einkaufen", exact: true }).click() },

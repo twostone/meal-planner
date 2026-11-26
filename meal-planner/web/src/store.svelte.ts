@@ -240,6 +240,24 @@ export const removeEntry = (id: number) =>
     closeSheet();
   });
 
+// planLabel: the name of the target, only for the message (the list itself shows nothing of the target plan).
+export const moveEntry = (entryId: number, title: string, planId: number, planLabel: string) =>
+  guard(async () => {
+    await api.moveEntry(entryId, planId);
+    await reload();
+    closeSheet();
+    showInfo(`„${title}“ nach ${planLabel} verschoben`);
+  });
+
+// "Offene Gerichte verschieben" in the period sheet: the sheet stays open, its counts follow.
+export const moveOpenEntries = (fromPlanId: number, toPlanId: number, planLabel: string) =>
+  guard(async () => {
+    const r = await api.moveOpenEntries(fromPlanId, toPlanId);
+    await reload();
+    const count = r.moved + r.merged;
+    showInfo(`${count} ${count === 1 ? "Gericht" : "Gerichte"} nach ${planLabel} verschoben`);
+  });
+
 // entry: the list note, when the sheet was opened from a list entry and the note changed.
 export const saveDish = (
   dishId: number | null,

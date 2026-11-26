@@ -13,6 +13,9 @@ dieselbe Liste.
 ## Funktionen
 
 - Eine gemeinsame Liste pro Zeitraum (frei wählbar, z. B. Samstag bis Freitag). Gerichte lassen sich abhaken.
+- Nicht gekochte Gerichte wandern weiter: einzeln über „In andere Liste verschieben“ beim Gericht oder alle offenen auf
+  einmal über „Offene Gerichte verschieben“ im Zeitraum-Blatt. Ziel ist eine aktuelle oder künftige Liste; steht das
+  Gericht dort schon, bleibt es einmal drin. Die Notiz für die Liste geht mit.
 - Ein Katalog aller bisherigen Gerichte mit Rezept-Link. Beim Eintragen schlägt die App passende Gerichte vor. Ein neues
   Gericht (Name oder Link) öffnet einen Dialog, in dem man gleich Zutaten und Zubereitung eintragen kann; ein Schalter
   entscheidet, ob es auch in die aktuelle Liste kommt oder nur in den Katalog.
@@ -86,6 +89,7 @@ benutzerdefiniertes Repository (Kategorie „Integration“) hinzufügen, siehe 
 in diesem Repository unter `custom_components/meal_planner/` (`ha-meal-planner` ist nur ein automatisch befülltes Mirror für HACS). Die Integration wird von der App per Discovery gefunden; die App bietet dafür einen zweiten, nur lesenden
 Port (8100, Token, nur im Supervisor-Netz erreichbar). Wer das Token erneuern will, löscht `/data/ha-token` und startet die
 App neu. In Automationen die Details aus den Eventdaten lesen, nicht aus den Sensoren: sie ziehen einen Moment nach.
+Ein verschobenes Gericht meldet die App als aus der alten Liste entfernt und zur neuen hinzugefügt.
 
 ## KI-Funktionen
 

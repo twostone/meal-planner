@@ -6,7 +6,8 @@
   import { collectRecipe, formFrom, hasInput, isEmptyInput } from "./recipe-form";
   import RecipeEditor from "./RecipeEditor.svelte";
   import Sheet from "./Sheet.svelte";
-  import { app, clearToast, deleteDish, openRecipe, removeEntry, saveDish, showError, type SheetState } from "./store.svelte";
+  import MovePanel from "./MovePanel.svelte";
+  import { app, clearToast, deleteDish, moveEntry, openRecipe, removeEntry, saveDish, showError, type SheetState } from "./store.svelte";
   import { shrinkImage } from "./image-resize";
   import type { Preview } from "./types";
   import { isUrl, sameTag } from "./util";
@@ -27,6 +28,8 @@
       image: d?.image ?? null,
       tags: d?.tags ?? sheet.prefill.tags,
       entryNote: e?.note ?? "", // the note of the list entry (only when opened from a list)
+      entryOpen: !!e && !e.done, // only a dish that was not cooked yet can move to another list
+      planId: e?.plan_id ?? null,
     };
   });
 
@@ -409,6 +412,13 @@
 
     {#if start.entryId !== null || start.dishId !== null}
       <div class="danger-zone">
+        {#if start.entryOpen && start.planId !== null}
+          <MovePanel
+            fromPlanId={start.planId}
+            label="In andere Liste verschieben"
+            onmove={(planId, planLabel) => moveEntry(start.entryId!, start.title, planId, planLabel)}
+          />
+        {/if}
         {#if start.entryId !== null}
           <button type="button" class="btn ghost-danger" onclick={() => removeEntry(start.entryId!)}>Aus Liste entfernen</button>
         {/if}
