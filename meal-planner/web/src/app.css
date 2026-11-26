@@ -19,9 +19,9 @@
   --error-bg: #fce8e6;
   --error-ink: #7a1a14;
   --warn-bg: #fff3d6;
-  --shadow: var(--shadow);
-  --shadow-soft: var(--shadow-soft);
-  --backdrop: var(--backdrop);
+  --shadow: rgba(30, 42, 34, 0.22);
+  --shadow-soft: rgba(30, 42, 34, 0.14);
+  --backdrop: rgba(30, 42, 34, 0.45);
   --display: "Bricolage Grotesque Variable", system-ui, sans-serif;
   font-family: "Figtree Variable", system-ui, sans-serif;
   color-scheme: light;
