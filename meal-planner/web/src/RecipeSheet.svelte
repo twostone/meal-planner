@@ -155,7 +155,7 @@
 </script>
 
 <Sheet title={dish?.title ?? "Rezept"}>
-  {#if dish?.image}
+  {#if dish?.image && !editing}
     <img class="dish-hero" src={api.imageSrc(dish.image)} alt="" />
   {/if}
   {#if dish && !editing}
@@ -192,6 +192,9 @@
         <p class="status">Noch kein Rezept.{hasLink ? " Du kannst es aus dem Link holen oder von Hand eintragen." : ""}</p>
         {#if hasLink}{@render fetchButton()}{/if}
         {#if sourceHint}<p class="status" aria-live="polite">{sourceHint}</p>{/if}
+      {:else if isEmpty(recipe) && ai.ai}
+        <!-- Only the text from the link so far: recognizing it is the obvious next step, so it is not hidden in the editor. -->
+        {@render recognizeButton()}
       {/if}
       {#if recipe.ingredients.length}
         <h3>Zutaten</h3>
@@ -229,6 +232,13 @@
     </div>
   {/if}
 </Sheet>
+
+{#snippet recognizeButton()}
+  <button type="button" class="btn primary wide" disabled={drafting} onclick={recognize}>
+    {drafting ? "Erkenne Zutaten …" : "Zutaten erkennen"}
+  </button>
+  <small class="field-hint">Der Text wird an den KI-Dienst von Home Assistant geschickt. Du prüfst das Ergebnis, bevor es gespeichert wird.</small>
+{/snippet}
 
 {#snippet fetchButton()}
   <button type="button" class="btn outline wide" disabled={fetching} onclick={getSource}>
@@ -276,10 +286,7 @@
       {/if}
       {#if recipe.source_text}
         {#if ai.ai}
-          <button type="button" class="btn primary wide" disabled={drafting} onclick={recognize}>
-            {drafting ? "Erkenne Zutaten …" : "Zutaten erkennen"}
-          </button>
-          <small class="field-hint">Der Text wird an den KI-Dienst von Home Assistant geschickt. Du prüfst das Ergebnis, bevor es gespeichert wird.</small>
+          {@render recognizeButton()}
         {:else if ai.reason === "no_entity"}
           <small class="field-hint">Zum automatischen Erkennen braucht Home Assistant eine „AI Task“-Entität (Einstellungen, System, KI-Aufgaben).</small>
         {/if}

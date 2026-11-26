@@ -1432,6 +1432,7 @@ a.btn {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  align-items: center; /* the link pill is a 44 px tap target; the others keep their height */
 }
 .pill {
   display: inline-flex;
