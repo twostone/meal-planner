@@ -5,6 +5,7 @@
     addDishToPlan,
     app,
     openDishSheet,
+    openRecipe,
     openPeriods,
     toggleDone,
   } from "./store.svelte";
@@ -86,7 +87,7 @@
         <button
           type="button"
           class="title"
-          onclick={() => openDishSheet({ dishId: e.dish_id, entryId: e.id })}
+          onclick={() => openRecipe(e.dish_id, e.id)}
         >
           <span>{e.dish.title}</span>
           {#if e.note}<small class="entry-note">{e.note}</small>{/if}

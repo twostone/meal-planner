@@ -1418,3 +1418,57 @@ a.btn {
   font-weight: 700;
   box-shadow: 0 1px 3px var(--shadow-soft);
 }
+
+/* read view of a dish (RecipeSheet) */
+.dish-hero {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-radius: 18px;
+  background: var(--green-soft);
+}
+.dish-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center; /* the link pill is a 44 px tap target; the others keep their height */
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--green-soft);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+a.pill.link {
+  min-height: 44px; /* a tap target, unlike the other pills */
+  color: var(--green);
+  text-decoration: none;
+}
+.list-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--warn-bg);
+  font-size: 15px;
+}
+.list-note small {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.dish-note {
+  margin: 0;
+  color: var(--muted);
+}
+.dish-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

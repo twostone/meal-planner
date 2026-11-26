@@ -124,8 +124,12 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   Transaktion (wie `setTags`), ein leeres Rezept löscht es. Höchstens 60 Zutaten. `unit` nur aus `UNITS` in `repo.ts`
   (wie `UNITS` in `web/src/types.ts`), **kein „Stück“**: Gezähltes hat `unit = null`. `raw` ist die Originalzeile und bleibt
   immer erhalten, bei Handeingabe wird sie aus Menge/Einheit/Name gebildet. Die Rezeptspalten kommen nie mit dem Katalog
-  (`DISH_COLS` in `repo.ts`, kein `SELECT *` auf `dish`). Im UI öffnet „Rezept“ im Bearbeiten-Blatt ein eigenes Blatt
-  (Ansicht und Editor in `RecipeSheet.svelte`).
+  (`DISH_COLS` in `repo.ts`, kein `SELECT *` auf `dish`). Im UI ist `RecipeSheet.svelte` die
+  **Gericht-Ansicht** (Lesen zuerst): Ein Tipp auf ein Gericht in Liste oder Katalog öffnet sie (`openRecipe(dishId, entryId)`),
+  nicht mehr das Bearbeiten-Blatt. Sie zeigt Bild, Portionen, Kategorien, Link, Listen-Notiz, Notiz, Zutaten und Zubereitung,
+  unten „Jetzt kochen“ (nur wenn das Gericht in der aktuellen Liste steht, `openCook(entryId)` startet bei ihm),
+  „Gericht bearbeiten“ (`DishSheet`) und „Rezept bearbeiten“ (Editor im selben Blatt). Rezept aus Link holen, Zutaten
+  erkennen und vereinheitlichen stehen nur im Editor; ohne Rezept bietet die Ansicht „Rezept aus Link holen“ an.
   **Rezept beim Anlegen:** `POST /api/dishes` nimmt optional `recipe` (`recipeBody`, nur dort: nicht in `PATCH` und nicht
   beim Listeneintrag, dort fällt das Feld weg). `createDish` schreibt Gericht und Rezept in **einer** Transaktion
   (`writeRecipe` ohne eigene Transaktion, wie `insertDish`): ein ungültiges Rezept oder ein vergebener Titel hinterlässt
@@ -319,7 +323,7 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   Companion-App ungeprüft). Eingabeprobleme eines Formulars bleiben inline über „Speichern“.
 - **Zeilen in der Liste bleiben schlank** (auf 360 px Breite ist es sonst zu eng): Checkbox, Vorschaubild, Titel mit Notiz und
   Kategorien darunter, am Ende nur ein Link-Symbol ohne Domainnamen. Keine weiteren Buttons in der Zeile, Bearbeiten läuft
-  über Tippen auf den Titel. Lange Wörter im Titel brechen um (`overflow-wrap: anywhere`).
+  über Tippen auf den Titel (Gericht-Ansicht, darin „Gericht bearbeiten“). Lange Wörter im Titel brechen um (`overflow-wrap: anywhere`).
 - **Kategorien** sind frei wählbare Tags pro Gericht (höchstens 10, je höchstens 30 Zeichen). Es gibt keine Tag-Tabelle: Die
   Liste der Kategorien ist die Menge der verwendeten Werte, eine Kategorie verschwindet mit ihrem letzten Gericht. Groß-/
   Kleinschreibung ist egal, die zuerst verwendete Schreibweise gilt (`setTags` in `repo.ts`). Ein Update ersetzt die Tags,
@@ -670,7 +674,7 @@ raten (`async_update_reload_and_abort`, `HassioServiceInfo`, `StaticPathConfig`,
 - Sheets nutzen das native `<dialog>`. Kein `alert()`/`confirm()` (in der HA-Companion-App unzuverlässig), stattdessen
   zweistufige Bestätigung im UI.
 - **Zurück-Taste:** Ein offenes Blatt belegt einen History-Eintrag (`pushSheetEntry`/`closeSheet` in `store.svelte.ts`), damit
-  „Zurück“ das Blatt schließt statt die App zu verlassen. Blätter nur über `openDishSheet`/`openPeriods`/`openCook`/`openSplit`/`openRename` öffnen
+  „Zurück“ das Blatt schließt statt die App zu verlassen. Blätter nur über `openDishSheet`/`openRecipe`/`openPeriods`/`openCook`/`openSplit`/`openRename` öffnen
   und über `closeSheet` schließen, nie `app.sheet` direkt setzen. Getestet im Browser mit der App in einem iframe, in der
   HA-Companion-App auf dem Handy noch nicht.
 - **APIs und Schnittstellen vor der Nutzung gegen die aktuelle Dokumentation prüfen** (HA-Add-on-Konfiguration, Hono,
