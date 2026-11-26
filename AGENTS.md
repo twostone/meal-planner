@@ -312,7 +312,7 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   verschwindet mit dem Eintrag. Setzen/Löschen per `PATCH /api/entries/:id` (`note`: Text, `""` oder `null` löscht, fehlt =
   unverändert); das Blatt schickt das nur, wenn sich die Notiz geändert hat.
 - **Aufbau der Oberfläche:** Kopfzeile mit Listenname (öffnet das Zeitraum-Blatt) und „Kochen“, darunter eine Fortschrittszeile
-  mit dünnem Balken; „Liste | Katalog | Zutaten“ ist eine Tab-Leiste am unteren Rand (Schwebeknopf und Hinzufügen-Leiste sitzen darüber).
+  mit Ring (`ListView`); „Liste | Katalog | Zutaten“ ist eine Tab-Leiste mit Symbolen am unteren Rand (Schwebeknopf und Hinzufügen-Leiste sitzen darüber).
   Das Bearbeiten-Blatt ist in Gruppen gegliedert (Titel/Link, Rezept-Karte, Notizen, Kategorien), „Speichern“ klebt unten,
   Entfernen/Löschen stehen als leise Textknöpfe darunter. Im Kochmodus klebt „Fertig“ unten.
   **Meldungen** sind ein Toast oben (`Toast.svelte`, `app.toast` mit `showError`/`showInfo`/`clearToast` in
@@ -321,8 +321,9 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   `<dialog>` im Top Layer und würde den Toast der Shell verdecken, deshalb zeigt `Sheet.svelte` ihn selbst; die Shell
   nur ohne Blatt und im Kochmodus (kein Dialog, Toast liegt per `z-index` darüber). Keine Popover-API (in der
   Companion-App ungeprüft). Eingabeprobleme eines Formulars bleiben inline über „Speichern“.
-- **Zeilen in der Liste bleiben schlank** (auf 360 px Breite ist es sonst zu eng): Checkbox, Vorschaubild, Titel mit Notiz und
-  Kategorien darunter, am Ende nur ein Link-Symbol ohne Domainnamen. Keine weiteren Buttons in der Zeile, Bearbeiten läuft
+- **Zeilen in der Liste bleiben schlank** (auf 360 px Breite ist es sonst zu eng): Vorschaubild (56 px), Titel mit Notiz und
+  Kategorien als Pills darunter, dann ein Link-Symbol ohne Domainnamen und am Ende der runde Abhak-Kreis (Daumennähe).
+  Zeilen und Formulargruppen sind Karten mit `--card-shadow` statt Rahmen. Keine weiteren Buttons in der Zeile, Bearbeiten läuft
   über Tippen auf den Titel (Gericht-Ansicht, darin „Gericht bearbeiten“). Lange Wörter im Titel brechen um (`overflow-wrap: anywhere`).
 - **Kategorien** sind frei wählbare Tags pro Gericht (höchstens 10, je höchstens 30 Zeichen). Es gibt keine Tag-Tabelle: Die
   Liste der Kategorien ist die Menge der verwendeten Werte, eine Kategorie verschwindet mit ihrem letzten Gericht. Groß-/
