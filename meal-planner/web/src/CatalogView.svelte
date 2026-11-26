@@ -103,7 +103,7 @@
             {/if}
             <button type="button" class="title" onclick={() => openRecipe(d.id)}>
               <span>{d.title}</span>
-              {#if d.tags.length}<small class="tags-line">{d.tags.join(" · ")}</small>{/if}
+              {#if d.tags.length}<small class="tag-pills">{#each d.tags as t (t)}<span class="pill">{t}</span>{/each}</small>{/if}
             </button>
             {#if d.url}
               <a class="icon-link" href={d.url} target="_blank" rel="noopener noreferrer" aria-label="Rezept-Link von {d.title} öffnen">
