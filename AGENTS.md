@@ -512,7 +512,8 @@ custom_components/meal_planner/
   sensor.py         Vier Entitäten (aktuelle/nächste Liste, offen, erledigt), CoordinatorEntity
   manifest.json
   strings.json / translations/
-  www/meal-planner-card.js   Lovelace-Karte (reine Anzeige) mit visuellem Editor und Picker-Vorschau
+  www/meal-planner-card.js   Lovelace-Karte (reine Anzeige) mit visuellem Editor und Picker-Vorschau; Variante „Liste“
+                             (Standard) und `compact: true`, Farben nur aus den HA-Theme-Variablen
   brand/              icon.png (256×256) und icon@2x.png (512×512): Icon der Integration. Quelle ist
                       meal-planner/web/public/favicon.svg, die PNGs sind daraus abgeleitet. HA ab 2026.3
                       nutzt sie lokal, die HACS-Validierung („brands") verlangt sie

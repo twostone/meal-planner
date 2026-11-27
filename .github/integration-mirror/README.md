@@ -84,6 +84,7 @@ next_entity: sensor.meal_planner_next_list   # optional, das ist der Standard
 title: Essensplanung                          # optional
 show_next: true                               # optional: nächste Liste anzeigen
 show_done: true                               # optional: gekochte Gerichte anzeigen
+compact: false                                # optional: kompakt, nur offene Gerichte als Chips
 app_url: /<slug>               # optional: überschreibt den automatischen Link
 ```
 
@@ -94,8 +95,10 @@ wenn `app_url` gesetzt ist.
 Die Karte lässt sich auch ohne YAML im Dashboard-Editor konfigurieren; im „Karte hinzufügen“-Dialog
 erscheint sie mit Vorschau (mit Beispieldaten, solange die Sensoren noch fehlen).
 
-Zeigt Titel, Notiz, Kategorien, Link sowie offen/erledigt der aktuellen Liste und darunter die nächste Liste an. Hat eine
-Liste einen Namen, steht er vor dem Zeitraum. Reine Anzeige (kein Abhaken aus der Karte heraus) und ohne Vorschaubilder.
+Zeigt oben einen Fortschrittsring (gekocht von gesamt), darunter Titel, Notiz, Kategorien, Link sowie offen/gekocht der
+aktuellen Liste und am Ende die nächste Liste als eine Zeile (Zeitraum, Anzahl der Gerichte). Hat eine Liste einen Namen,
+steht er vor dem Zeitraum. Mit `compact: true` zeigt sie nur den Ring, wie viele Gerichte offen sind, und die offenen
+Gerichte als Chips, gut für schmale Spalten. Die Farben kommen aus dem Home-Assistant-Design (hell wie dunkel). Reine Anzeige (kein Abhaken aus der Karte heraus) und ohne Vorschaubilder.
 
 ## Entwicklung
 
