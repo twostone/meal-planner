@@ -14,6 +14,7 @@ class MealPlannerCard extends HTMLElement {
       title: "Essensplanung",
       show_next: true,
       show_done: true,
+      compact: false,
       ...config,
     };
     if (this._root) this._render();
@@ -37,7 +38,7 @@ class MealPlannerCard extends HTMLElement {
   }
 
   getCardSize() {
-    return 5;
+    return this._config?.compact ? 2 : 5;
   }
 
   _render() {
@@ -50,77 +51,33 @@ class MealPlannerCard extends HTMLElement {
     if (!this._root) {
       this.attachShadow({ mode: "open" });
       this._root = this.shadowRoot;
-      this._root.innerHTML = `
-        <style>
-          ha-card { padding: 16px; }
-          .header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0 0 4px; }
-          h2 { margin: 0; font-size: 1.1em; }
-          a.app { flex: none; color: var(--primary-color); font-size: 0.9em; text-decoration: none; }
-          .range { color: var(--secondary-text-color); font-size: 0.9em; margin-bottom: 12px; }
-          .range b { color: var(--primary-text-color); font-weight: 500; }
-          .group-title { font-size: 0.85em; color: var(--secondary-text-color); margin: 12px 0 4px; text-transform: uppercase; }
-          ul { list-style: none; margin: 0; padding: 0; }
-          li { display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; border-top: 1px solid var(--divider-color); }
-          li:first-child { border-top: none; }
-          .dot { flex: none; width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; }
-          .dot.open { border: 2px solid var(--secondary-text-color); }
-          .dot.done { background: var(--primary-color); }
-          .body { min-width: 0; flex: 1; }
-          .title { overflow-wrap: anywhere; }
-          .done .title { text-decoration: line-through; color: var(--secondary-text-color); }
-          .note { color: var(--secondary-text-color); font-size: 0.9em; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-          .tags { color: var(--secondary-text-color); font-size: 0.85em; }
-          a.link { flex: none; color: var(--secondary-text-color); text-decoration: none; margin-top: 3px; }
-          .empty { color: var(--secondary-text-color); }
-        </style>
-        <ha-card><div class="content"></div></ha-card>
-      `;
+      this._root.innerHTML = `<style>${STYLE}</style><ha-card><div class="content"></div></ha-card>`;
     }
 
     const content = this._root.querySelector(".content");
     if (!state) {
-      content.innerHTML = `<div class="empty">Entität ${this._config.entity} nicht gefunden.</div>`;
+      content.innerHTML = `<div class="empty">Entität ${escapeHtml(this._config.entity)} nicht gefunden.</div>`;
       return;
     }
-    // planTitle: the optional name of the list (not the card's own `title`).
-    const { start_date, end_date, entries, title: planTitle } = state.attributes;
     // Link to the add-on's UI (Ingress path): from the sensor (known through discovery), the YAML `app_url`
     // overrides it. Plain navigation, no write-back.
     const appUrl = this._config.app_url || state.attributes.app_url;
-    const appLink = appUrl ? `<a class="app" href="${escapeAttr(appUrl)}" title="Oberfläche der App öffnen">App öffnen ↗</a>` : "";
-    let html = `<div class="header"><h2>${escapeHtml(this._config.title)}</h2>${appLink}</div>`;
-    if (!start_date) {
-      html += `<div class="empty">Keine aktuelle Liste.</div>`;
-    } else {
-      const list = Array.isArray(entries) ? entries : [];
-      const open = list.filter((e) => !e.done);
-      const done = list.filter((e) => e.done);
-      html += `<div class="range">${planTitle ? `<b>${escapeHtml(planTitle)}</b> · ` : ""}${escapeHtml(start_date)} – ${escapeHtml(end_date)}</div>`;
-      if (!list.length) html += `<div class="empty">Noch keine Gerichte.</div>`;
-      if (open.length) html += `<div class="group-title">Offen</div>${renderList(open)}`;
-      if (done.length && this._config.show_done) html += `<div class="group-title">Gekocht</div>${renderList(done)}`;
-    }
-    // The next list is optional: hidden when its entity is missing or there is none.
     const next = demo ? DEMO.next : this._hass.states[this._config.next_entity];
-    if (this._config.show_next && next && next.attributes.start_date) {
-      const { start_date: ns, end_date: ne, entries: nextEntries, title: nextTitle } = next.attributes;
-      const name = nextTitle ? `${escapeHtml(nextTitle)} · ` : "";
-      html += `<div class="group-title">Nächste Liste · ${name}${escapeHtml(ns)} – ${escapeHtml(ne)}</div>`;
-      html += Array.isArray(nextEntries) && nextEntries.length
-        ? renderList(nextEntries)
-        : `<div class="empty">Noch keine Gerichte.</div>`;
-    }
-    content.innerHTML = html;
+    const showNext = this._config.show_next && next?.attributes.start_date;
+    content.innerHTML = this._config.compact
+      ? renderCompact(state.attributes, appUrl)
+      : renderFull(this._config, state.attributes, appUrl, showNext ? next.attributes : null);
   }
 }
 
 const DEMO = {
   current: {
     attributes: {
+      title: "Woche 40",
       start_date: "2026-09-28",
       end_date: "2026-10-04",
       entries: [
-        { title: "Spaghetti Bolognese", note: "Mit frischem Basilikum", tags: ["Pasta"], done: false },
+        { title: "Spaghetti Bolognese", note: "Mit frischem Basilikum", tags: ["Pasta"], url: "https://example.com/rezept", done: false },
         { title: "Gemüsecurry", tags: ["Vegetarisch"], done: false },
         { title: "Pizza", done: true },
       ],
@@ -142,6 +99,7 @@ const EDITOR_SCHEMA = [
   { name: "app_url", selector: { text: {} } },
   { name: "show_next", selector: { boolean: {} } },
   { name: "show_done", selector: { boolean: {} } },
+  { name: "compact", selector: { boolean: {} } },
 ];
 const EDITOR_LABELS = {
   title: "Titel",
@@ -150,6 +108,7 @@ const EDITOR_LABELS = {
   app_url: "Link zur App-Oberfläche (optional, sonst automatisch)",
   show_next: "Nächste Liste anzeigen",
   show_done: "Gekochte Gerichte anzeigen",
+  compact: "Kompakt (nur offene Gerichte als Chips)",
 };
 
 class MealPlannerCardEditor extends HTMLElement {
@@ -184,9 +143,71 @@ class MealPlannerCardEditor extends HTMLElement {
       next_entity: "sensor.meal_planner_next_list",
       show_next: true,
       show_done: true,
+      compact: false,
       ...this._config,
     };
   }
+}
+
+// Variant A: header with progress ring, open and cooked dishes, the next list as one line.
+function renderFull(config, plan, appUrl, nextPlan) {
+  const list = Array.isArray(plan.entries) ? plan.entries : [];
+  const open = list.filter((e) => !e.done);
+  const done = list.filter((e) => e.done);
+  const sub = plan.start_date ? planLabel(plan) : "Keine aktuelle Liste";
+  let html = header(escapeHtml(config.title), sub, plan.start_date ? ring(done.length, list.length) : "", appUrl);
+  if (plan.start_date && !list.length) html += `<div class="empty">Noch keine Gerichte.</div>`;
+  if (open.length) html += `<div class="group-title">Offen</div>${renderList(open)}`;
+  if (done.length && config.show_done) html += `<div class="group-title">Gekocht</div>${renderList(done)}`;
+  if (nextPlan) {
+    const n = Array.isArray(nextPlan.entries) ? nextPlan.entries.length : 0;
+    html += `<div class="next"><span>Nächste: ${planLabel(nextPlan)}</span><span>${n} ${n === 1 ? "Gericht" : "Gerichte"}</span></div>`;
+  }
+  return html;
+}
+
+// Variant B (`compact: true`): ring, how many are open, the open dishes as chips.
+function renderCompact(plan, appUrl) {
+  if (!plan.start_date) return header("Essensplanung", "Keine aktuelle Liste", "", appUrl);
+  const list = Array.isArray(plan.entries) ? plan.entries : [];
+  const open = list.filter((e) => !e.done);
+  const title = !list.length ? "Noch keine Gerichte" : open.length ? `${open.length} ${open.length === 1 ? "Gericht" : "Gerichte"} offen` : "Alles gekocht";
+  const chips = open.length ? `<div class="chips">${open.map((e) => `<span class="chip">${escapeHtml(e.title)}</span>`).join("")}</div>` : "";
+  return header(title, planLabel(plan), ring(list.length - open.length, list.length), appUrl) + chips;
+}
+
+function header(title, sub, ringHtml, appUrl) {
+  const appLink = appUrl ? `<a class="app" href="${escapeAttr(appUrl)}" title="Oberfläche der App öffnen">App öffnen ↗</a>` : "";
+  return `<div class="header">${ringHtml}<div class="head-text"><div class="title">${title}</div><div class="sub">${sub}</div></div>${appLink}</div>`;
+}
+
+const RING_RADIUS = 18;
+const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
+
+function ring(doneCount, total) {
+  const ratio = total ? doneCount / total : 0;
+  return `<div class="ring" role="img" aria-label="${doneCount} von ${total} gekocht">
+    <svg viewBox="0 0 44 44" aria-hidden="true"><circle class="track" cx="22" cy="22" r="${RING_RADIUS}"></circle>
+    <circle class="value" cx="22" cy="22" r="${RING_RADIUS}" stroke-dasharray="${RING_LENGTH}" stroke-dashoffset="${RING_LENGTH * (1 - ratio)}"></circle></svg>
+    <span>${doneCount}/${total}</span></div>`;
+}
+
+// "Woche 47 · Sa 21. Nov – Fr 27. Nov": the list's name (when it has one) before its period.
+function planLabel(plan) {
+  const range = `${fmtDay(plan.start_date)} – ${fmtDay(plan.end_date)}`;
+  return plan.title ? `${escapeHtml(plan.title)} · ${range}` : range;
+}
+
+// Same short German date as the app ("Sa 21. Nov", meal-planner/web/src/dates.ts), so card and app read alike.
+const WEEKDAYS = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+const MONTHS = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
+
+// ISO day (YYYY-MM-DD) as a short German date; anything unexpected is shown as it came.
+function fmtDay(iso) {
+  const d = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return escapeHtml(String(iso));
+  // Non-breaking spaces: a narrow card may wrap between two dates, never inside one.
+  return `${WEEKDAYS[d.getUTCDay()]}\u00a0${d.getUTCDate()}.\u00a0${MONTHS[d.getUTCMonth()]}`;
 }
 
 function renderList(items) {
@@ -194,19 +215,52 @@ function renderList(items) {
 }
 
 function renderEntry(entry) {
-  const tags = Array.isArray(entry.tags) && entry.tags.length ? escapeHtml(entry.tags.join(" · ")) : "";
+  const tags = Array.isArray(entry.tags) ? entry.tags : [];
   return `
     <li class="${entry.done ? "done" : ""}">
-      <span class="dot ${entry.done ? "done" : "open"}"></span>
+      <span class="dot"></span>
       <div class="body">
-        <div class="title">${escapeHtml(entry.title)}</div>
+        <div class="name">${escapeHtml(entry.title)}</div>
         ${entry.note ? `<div class="note">${escapeHtml(entry.note)}</div>` : ""}
-        ${tags ? `<div class="tags">${tags}</div>` : ""}
+        ${tags.length ? `<div class="tags">${tags.map((t) => `<span>${escapeHtml(t)}</span>`).join("")}</div>` : ""}
       </div>
-      ${entry.url ? `<a class="link" href="${escapeAttr(entry.url)}" target="_blank" rel="noopener noreferrer" title="Rezept öffnen">🔗</a>` : ""}
+      ${entry.url ? `<a class="link" href="${escapeAttr(entry.url)}" target="_blank" rel="noopener noreferrer" title="Rezept öffnen" aria-label="Rezept öffnen">🔗</a>` : ""}
     </li>
   `;
 }
+
+// Only Home Assistant's theme variables, so the card follows every dashboard theme (light or dark).
+const STYLE = `
+  ha-card { padding: 16px; }
+  .header { display: flex; align-items: center; gap: 12px; }
+  .head-text { flex: 1; min-width: 0; }
+  .title { font-size: 1.15em; font-weight: 500; color: var(--primary-text-color); }
+  .sub { color: var(--secondary-text-color); font-size: 0.9em; }
+  a.app { flex: none; align-self: flex-start; color: var(--primary-color); font-size: 0.9em; text-decoration: none; }
+  .ring { position: relative; flex: none; width: 44px; height: 44px; }
+  .ring svg { width: 44px; height: 44px; transform: rotate(-90deg); }
+  .ring circle { fill: none; stroke-width: 4; }
+  .ring .track { stroke: var(--divider-color); }
+  .ring .value { stroke: var(--primary-color); stroke-linecap: round; }
+  .ring span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 0.75em; font-weight: 600; color: var(--primary-text-color); }
+  .group-title { font-size: 0.75em; font-weight: 600; letter-spacing: 0.06em; color: var(--secondary-text-color); margin: 16px 0 4px; text-transform: uppercase; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-top: 1px solid var(--divider-color); }
+  li:first-child { border-top: none; }
+  .dot { flex: none; width: 14px; height: 14px; margin-top: 3px; border-radius: 50%; border: 2px solid var(--secondary-text-color); box-sizing: border-box; }
+  .done .dot { background: var(--primary-color); border-color: var(--primary-color); }
+  .body { min-width: 0; flex: 1; }
+  .name { overflow-wrap: anywhere; color: var(--primary-text-color); }
+  .done .name { text-decoration: line-through; color: var(--secondary-text-color); }
+  .note { color: var(--secondary-text-color); font-size: 0.9em; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .tags span { font-size: 0.75em; padding: 1px 8px; border-radius: 999px; background: var(--secondary-background-color); color: var(--secondary-text-color); }
+  a.link { flex: none; color: var(--secondary-text-color); text-decoration: none; margin-top: 1px; }
+  .next { display: flex; justify-content: space-between; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--divider-color); color: var(--secondary-text-color); font-size: 0.9em; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .chip { font-size: 0.9em; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--divider-color); color: var(--primary-text-color); overflow-wrap: anywhere; }
+  .empty { color: var(--secondary-text-color); margin-top: 12px; }
+`;
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
