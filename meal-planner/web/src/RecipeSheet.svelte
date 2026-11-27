@@ -26,6 +26,8 @@
   let sourceHint = $state("");
   let ai = $state<AiStatus>({ ai: false, reason: null, image: false });
   let drafting = $state(false);
+  // What "Zutaten erkennen" sends: the saved original text, editable for this one request only (never saved).
+  let aiText = $derived(recipe?.source_text ?? "");
   // "Zutaten vereinheitlichen": suggestions of the AI for the saved lines, each can be left out (null = none asked for)
   let changes = $state<IngredientChange[] | null>(null);
   let keptPos = $state<number[]>([]);
@@ -61,11 +63,12 @@
   }
 
   async function recognize() {
+    if (!aiText.trim() || drafting) return;
     drafting = true;
     sourceHint = "";
     clearToast();
     try {
-      startEdit(await api.draftRecipe(dishId));
+      startEdit(await api.draftRecipeFromText(aiText));
     } catch (err) {
       showError(err);
     } finally {
@@ -234,7 +237,11 @@
 </Sheet>
 
 {#snippet recognizeButton()}
-  <button type="button" class="btn primary wide" disabled={drafting} onclick={recognize}>
+  <details class="source">
+    <summary>Text vor dem Erkennen bearbeiten</summary>
+    <textarea rows="8" maxlength="10000" aria-label="Text für die KI" bind:value={() => aiText, (v) => (aiText = v)}></textarea>
+  </details>
+  <button type="button" class="btn primary wide" disabled={drafting || !aiText.trim()} onclick={recognize}>
     {drafting ? "Erkenne Zutaten …" : "Zutaten erkennen"}
   </button>
   <small class="field-hint">Der Text wird an den KI-Dienst von Home Assistant geschickt. Du prüfst das Ergebnis, bevor es gespeichert wird.</small>

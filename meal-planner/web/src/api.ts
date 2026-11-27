@@ -108,9 +108,7 @@ export const fetchSource = (dishId: number) => request<Recipe | { reason: string
 
 // Is an AI task entity set up in Home Assistant? Decides whether "Zutaten erkennen" is offered.
 export const getRecipeStatus = () => request<AiStatus>("GET", "api/recipe/status");
-// Splits the saved original text into a draft (nothing is stored). Takes a few seconds.
-export const draftRecipe = (dishId: number) => request<RecipeDraft>("POST", `api/dishes/${dishId}/recipe/draft`);
-// A draft from the link's text before the dish exists (create sheet). Stores nothing.
+// Splits a text (the original text, possibly edited in the sheet) into a draft. Stores nothing, takes a few seconds.
 export const draftRecipeFromText = (text: string) => request<RecipeDraft>("POST", "api/recipe/draft", { text });
 export const normalizeRecipe = (dishId: number) =>
   request<{ changes: IngredientChange[] }>("POST", `api/dishes/${dishId}/recipe/normalize`);

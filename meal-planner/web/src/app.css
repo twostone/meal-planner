@@ -1115,6 +1115,9 @@ details.source {
   border-radius: 14px;
   background: var(--green-soft);
 }
+details.source textarea {
+  margin-top: 8px;
+}
 details.source summary {
   min-height: 24px;
   font-weight: 600;
