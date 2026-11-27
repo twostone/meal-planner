@@ -37,3 +37,24 @@ function initial(name: string): string {
   const first = name.trim().charAt(0).normalize("NFD").replace(/\p{M}/gu, "").toLocaleUpperCase("de");
   return /\p{L}/u.test(first) ? first : NOT_A_LETTER;
 }
+
+// How many finished lists the period sheet shows before "Ältere Listen"; the rest stays one tap away.
+export const RECENT_PAST_PLANS = 2;
+
+// Splits the plans (newest first, as the server sends them) for the period sheet: current and future lists, the most
+// recent finished ones and the selected one stay visible; older finished lists go behind a toggle. Order is kept.
+export function splitPlans<T extends { id: number; end_date: string }>(
+  plans: T[],
+  today: string,
+  selectedId: number | null,
+): { recent: T[]; older: T[] } {
+  const recent: T[] = [];
+  const older: T[] = [];
+  let past = 0;
+  for (const p of plans) {
+    const isPast = p.end_date < today;
+    if (!isPast || past++ < RECENT_PAST_PLANS || p.id === selectedId) recent.push(p);
+    else older.push(p);
+  }
+  return { recent, older };
+}
