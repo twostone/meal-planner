@@ -50,7 +50,7 @@ meal-planner/            das Add-on (Docker-Build-Kontext)
     units.ts                englische Einheiten (cup, oz, …) in g/ml/EL/TL umrechnen, Dichte je Zutat (rein)
     ingredient-normalize.ts Rezept vereinheitlichen: KI-Antwort prüfen, Einheit aus der Notiz lösen (rein)
     ingredient-split.ts     Sammelzeile („Salz & Pfeffer“) in einzelne Zutaten aufteilen: Vorschlag und Zeilen (rein)
-    text.ts                 clip (Kürzen ohne halbes Zeichen) und toJson (JSON für Home Assistant)
+    text.ts                 clip (Kürzen ohne halbes Zeichen), toJson (JSON für Home Assistant), stripEmoji (vor der KI)
     options.ts              App-Optionen aus /data/options.json lesen (log_level, ai_entity_*)
     log.ts                  Logger: eine logfmt-Zeile pro Ereignis, Stufe aus der App-Option `log_level`
     ha-discovery.ts         Meldung von Host, Port und Token per Supervisor-Discovery
