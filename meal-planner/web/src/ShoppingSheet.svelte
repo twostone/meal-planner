@@ -124,7 +124,7 @@
 
   {#if data}
     {#if withRecipe.length}
-      <div class="chips" role="group" aria-label="Gerichte für die Einkaufsliste">
+      <div class="chips scroll-chips" role="group" aria-label="Gerichte für die Einkaufsliste">
         {#each withRecipe as e (e.entry_id)}
           <button type="button" class="tagchip" aria-pressed={chosen?.includes(e.entry_id) ?? false} onclick={() => toggleEntry(e.entry_id)}>
             {e.title}

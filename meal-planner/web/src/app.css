@@ -1176,8 +1176,9 @@ details.source summary {
   max-width: 70vw;
   padding: 0 14px;
   border-radius: 22px;
-  border: 1px solid var(--field);
+  border: none;
   background: var(--surface);
+  box-shadow: var(--card-shadow);
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1210,15 +1211,19 @@ details.source summary {
 }
 .cook-progress {
   margin-left: auto;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--muted);
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--green-soft);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--green);
+  font-variant-numeric: tabular-nums;
 }
 .cook-footer {
   flex: none;
   padding: 10px 16px calc(12px + env(safe-area-inset-bottom));
   background: var(--bg);
-  border-top: 1px solid var(--line);
+  box-shadow: 0 -1px 0 var(--line);
 }
 .cook-footer .cook-finished {
   margin: 0;
@@ -1240,9 +1245,12 @@ details.source summary {
   overflow-wrap: anywhere;
 }
 .cook-body h3 {
-  margin: 12px 0 0;
-  font-family: var(--display);
-  font-size: 18px;
+  margin: 16px 2px 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 .cook-body h4 {
   margin: 8px 0 0;
@@ -1258,11 +1266,17 @@ details.source summary {
 .cook-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0 14px;
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--card-shadow);
+}
+.cook-list li + li {
+  border-top: 1px solid var(--line);
 }
 .tick {
   width: 100%;
-  min-height: 44px;
+  min-height: 52px;
   padding: 6px 0;
   border: none;
   background: transparent;
@@ -1278,8 +1292,12 @@ details.source summary {
 }
 .tick-text {
   min-width: 0;
-  padding-top: 9px;
+  padding: 9px 0 6px;
+  line-height: 1.4;
   overflow-wrap: anywhere;
+}
+.tick-text b {
+  color: var(--green);
 }
 .tick[aria-pressed="true"] .box {
   background: var(--green);
@@ -1343,6 +1361,33 @@ a.btn {
 }
 .shop-items[aria-busy="true"] {
   opacity: 0.6;
+}
+.rows.shop-items {
+  gap: 0;
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--card-shadow);
+  overflow: hidden;
+}
+.shop-items .row {
+  border-radius: 0;
+  box-shadow: none;
+}
+.shop-items li + li .row {
+  border-top: 1px solid var(--line);
+}
+.shop-item.off .shop-text {
+  opacity: 0.7;
+}
+.scroll-chips {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  margin: 0 -16px;
+  padding: 2px 16px 4px;
+  scrollbar-width: none;
+}
+.scroll-chips .tagchip {
+  flex: none;
 }
 
 /* ingredient catalog */
@@ -1533,4 +1578,8 @@ main .row > .check:last-child {
 }
 .row.done .tag-pills .pill {
   background: var(--surface);
+}
+/* inside a form group (unifying a recipe) the list is a card in a card: a line instead of a second shadow */
+.form-group .rows.shop-items {
+  box-shadow: 0 0 0 1px var(--line);
 }
