@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.22.0](https://github.com/twostone/meal-planner/compare/v0.21.0...v0.22.0) (2026-11-27)
+
+
+### Neu
+
+* **liste:** nicht gekochte Gerichte in eine andere Liste verschieben ([#97](https://github.com/twostone/meal-planner/issues/97)) ([782e265](https://github.com/twostone/meal-planner/commit/782e2650a6deb3696f1175cdbff98d3281200a68))
+* **rezept:** Text vor dem Erkennen bearbeiten ([#105](https://github.com/twostone/meal-planner/issues/105)) ([412fd74](https://github.com/twostone/meal-planner/commit/412fd747f3c6b2c52d257750c3ae6fad9da7b59b))
+* **ui:** Dunkelmodus mit Schalter Automatisch/Hell/Dunkel ([#98](https://github.com/twostone/meal-planner/issues/98)) ([db9dfb4](https://github.com/twostone/meal-planner/commit/db9dfb4aa0af3fc2652d981f68622fc6faffb6a6))
+* **ui:** Gericht-Ansicht statt Umweg über das Bearbeiten-Blatt ([#99](https://github.com/twostone/meal-planner/issues/99)) ([eb70f0e](https://github.com/twostone/meal-planner/commit/eb70f0eb0c46a404813e3c9cbb48c5de01568311))
+* **ui:** moderne Optik für Liste, Katalog und Blätter ([#103](https://github.com/twostone/meal-planner/issues/103)) ([a55a56d](https://github.com/twostone/meal-planner/commit/a55a56df01479e8efe1c861046eef92c70e9e1e3))
+
+
+### Behoben
+
+* **rezept:** Emojis vor der KI entfernen, Rezept vollständig auf Deutsch ([#104](https://github.com/twostone/meal-planner/issues/104)) ([03e7520](https://github.com/twostone/meal-planner/commit/03e7520a13b66214db7ca90917bcf923f741a326))
+* **ui:** Schatten und abgedunkelter Hintergrund im hellen Modus ([#102](https://github.com/twostone/meal-planner/issues/102)) ([86f8eb4](https://github.com/twostone/meal-planner/commit/86f8eb486c11ad45378292be8de56932dafc790a))
+
 ## [0.21.0](https://github.com/twostone/meal-planner/compare/v0.20.0...v0.21.0) (2026-11-21)
 
 
