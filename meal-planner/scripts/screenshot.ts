@@ -345,6 +345,18 @@ const SHOTS: Shot[] = [
     },
   },
   {
+    // Before "Zutaten erkennen" the link's text can be edited for this one request.
+    name: "dish-new-ai-edit",
+    run: async (page) => {
+      await fakeLinkWithRecipe(page);
+      await page.getByLabel("Gericht oder Link hinzufügen").fill("https://example.org/ofengemuese");
+      await page.getByRole("button", { name: "Link speichern und Gericht benennen" }).click();
+      await page.getByText("Rezept (optional)").click();
+      await page.getByText("Text vor dem Erkennen bearbeiten").click();
+      await page.getByLabel("Text für die KI").fill("500 g Kartoffeln\n2 rote Zwiebeln");
+    },
+  },
+  {
     // Saved from the list without a list entry: an info says where the dish went.
     name: "toast-info",
     run: async (page) => {

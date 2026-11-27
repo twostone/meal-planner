@@ -82,7 +82,7 @@ npm run check                     # svelte-check Frontend
 npm run build                     # Frontend nach dist/ (wird vom Server ausgeliefert)
 DB_PATH=./data/dev.db PORT=8099 npm start
 npm run dev:web                   # Vite-Dev-Server, /api geht per Proxy an :8099
-npm run screenshot [-- [--dark] list periods catalog ingredients ingredient-dishes ingredient-category ingredient-split ingredient-rename dish dish-new dish-move periods-move recipe cook shopping shopping-pantry toast-error] # nach npm run build: PNGs bei 390 px nach screenshots/
+npm run screenshot [-- [--dark] list periods catalog ingredients ingredient-dishes ingredient-category ingredient-split ingredient-rename dish dish-new dish-new-ai dish-new-ai-edit dish-move periods-move recipe cook shopping shopping-pantry toast-error] # nach npm run build: PNGs bei 390 px nach screenshots/
 ```
 
 Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (genau das prüft auch die CI). Bei Änderungen an
@@ -132,10 +132,8 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   nichts. Im Anlegen-Blatt steht der Editor (`RecipeEditor.svelte`, Felder ohne `<form>`; Prüfung in `collectRecipe`,
   `recipe-form.ts`, dieselbe wie im Rezept-Blatt) eingeklappt unter „Rezept (optional)“; ein Eingabefehler blockiert das
   Speichern und klappt ihn auf. Gespeicherte Gerichte bearbeitet man weiter nur über das Rezept-Blatt.
-  **Entwurf ohne Gericht:** `POST /api/recipe/draft {text}` (1–10 000 Zeichen) macht dasselbe wie die Route am Gericht, aber
-  aus dem Text der Vorschau (`sourceText`), bevor es ein Gericht gibt. Beide Routen teilen Zähler und Fehlerbehandlung
-  (`draft` in `app.ts`). Im Anlegen-Blatt nur auf Knopfdruck „Zutaten erkennen“ (nie automatisch nach der Vorschau);
-  vorhandene Eingaben ersetzt ein Entwurf erst nach zweitem Tippen.
+  **Entwurf im Anlegen-Blatt:** aus dem Text der Vorschau (`sourceText`), bevor es ein Gericht gibt, nur auf Knopfdruck
+  „Zutaten erkennen“ (nie automatisch nach der Vorschau); vorhandene Eingaben ersetzt ein Entwurf erst nach zweitem Tippen.
   **Originaltext (Stufe 2):** `dish.source_text` (höchstens 10 000 Zeichen) und `source_truncated` sichern das Rezept so, wie es
   am Link steht, ohne LLM und ohne Deutung. Die Vorschau (`extractSource` in `preview.ts`, `sourceText`/`sourceTruncated` in
   `POST /api/preview`) liefert schema.org-Zutatenzeilen, Leerzeile, Schritte, sonst die Instagram-Caption. Ein neues Gericht
@@ -143,8 +141,11 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   `POST /api/dishes/:id/source` (Link neu abrufen; ohne Fund `{reason}` und nichts ändert sich; im UI „Rezept aus Link holen“
   mit zweiter Bestätigung, wenn schon ein Text da ist). Er kommt mit `GET /api/dishes/:id/recipe`, nie mit dem Katalog, und
   `PUT …/recipe` lässt ihn unberührt.
-  **Zutaten erkennen (Stufe 3):** `POST /api/dishes/:id/recipe/draft` schickt `source_text` über `ha-ai.ts` an die bevorzugte
-  AI-Task-Entität von HA und liefert einen **Entwurf** (wird nie gespeichert). Die LLM-Antwort gilt als Nutzereingabe
+  **Zutaten erkennen (Stufe 3):** `POST /api/recipe/draft {text}` (1–10 000 Zeichen) schickt den Text über `ha-ai.ts` an die
+  bevorzugte AI-Task-Entität von HA und liefert einen **Entwurf** (wird nie gespeichert). Den Text schickt das Blatt (Anlegen-
+  und Rezept-Blatt gleich): den Originaltext, den man unter „Text vor dem Erkennen bearbeiten“ nur für diesen Aufruf ändern
+  kann (`aiText`, ein überschreibbares `$derived`, nie gespeichert; abgeglichen wird gegen den gesendeten Text). Die frühere
+  Route am Gericht (`/api/dishes/:id/recipe/draft`) ist dafür entfallen. Die LLM-Antwort gilt als Nutzereingabe
   (`buildDraft` in `recipe-draft.ts`): Schema, Grenzen, Einheitenliste (Unbekanntes -> `unit` null, Rest in `note`),
   Aufräumen (Nummerierung der Schritte, `:` am Abschnittsende). Abgleich mit der Quelle (ohne Leerzeichen, Aufzählungszeichen,
   Emojis, Doppelpunkte, Groß-/Kleinschreibung bleibt): `raw` und `section_raw` (die Zwischenüberschrift im Original, `section` ist übersetzt) müssen wörtlich im Text stehen, sonst

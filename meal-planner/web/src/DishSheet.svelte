@@ -63,6 +63,8 @@
   let imageHint = $state("");
   // Recipe text found at the link. Only a new dish takes it along; for a saved one there is "Rezept aus Link holen".
   let sourceText = $state<string | null>(null);
+  // What "Zutaten erkennen" sends: the link's text, editable for this one request only (never saved, reset by a new preview).
+  let aiText = $derived(sourceText ?? "");
   let sourceTruncated = $state(false);
 
   const creating = start.dishId === null;
@@ -76,13 +78,13 @@
   const planLabel = $derived(app.plan ? (app.plan.title ?? fmtRange(app.plan.start_date, app.plan.end_date)) : "");
 
   async function recognize() {
-    if (!sourceText || drafting) return;
+    if (!aiText.trim() || drafting) return;
     if (hasInput(recipeForm) && !confirmDraft) return void (confirmDraft = true);
     confirmDraft = false;
     drafting = true;
     clearToast();
     try {
-      const draft = await api.draftRecipeFromText(sourceText);
+      const draft = await api.draftRecipeFromText(aiText);
       if (!alive) return;
       recipeForm = formFrom(draft, true);
       recipeOpen = true;
@@ -331,7 +333,11 @@
       <details class="form-group more" bind:open={recipeOpen}>
         <summary>Rezept (optional)</summary>
         {#if sourceText && recipeAi}
-          <button type="button" class="btn primary wide" disabled={drafting} onclick={recognize}>
+          <details class="source">
+            <summary>Text vor dem Erkennen bearbeiten</summary>
+            <textarea rows="8" maxlength="10000" aria-label="Text für die KI" bind:value={() => aiText, (v) => (aiText = v)}></textarea>
+          </details>
+          <button type="button" class="btn primary wide" disabled={drafting || !aiText.trim()} onclick={recognize}>
             {drafting ? "Erkenne Zutaten …" : confirmDraft ? "Eingaben ersetzen?" : "Zutaten erkennen"}
             <small class="ai-tag">KI</small>
           </button>

@@ -233,7 +233,7 @@ test("GET /api/recipe/status: disabled without AI, otherwise what the AI reports
   assert.deepEqual((await setup(fakeAi(async () => ({}), false))("GET", "/api/recipe/status")).json, { ai: false, reason: "no_entity", image: false });
 });
 
-test("POST …/recipe/draft: builds a checked draft from the source text and stores nothing", async () => {
+test("POST /api/recipe/draft: checks the draft against the text it was given and stores nothing", async () => {
   const seen: string[] = [];
   const known: string[][] = [];
   const call = setup(
@@ -243,38 +243,17 @@ test("POST …/recipe/draft: builds a checked draft from the source text and sto
       return { servings: 4, servings_quote: "für 4", ingredients: JSON.stringify([{ section: null, amount: 2, amount_max: null, unit: "EL", name: "Öl", note: null, raw: "2 EL Öl" }, { section: null, amount: 1, unit: null, name: "Ei", raw: "1 Ei erfunden" }]), instructions: "1. Braten" };
     }),
   );
-  const id = (await call("POST", "/api/dishes", { title: "A", source_text: "Rezept für 4\n2 EL Öl\nBraten" })).json.id;
-  const r = await call("POST", `/api/dishes/${id}/recipe/draft`);
+  // the user edited the source text in the sheet: the edited text is what goes to the AI and what is checked
+  const r = await call("POST", "/api/recipe/draft", { text: "Rezept für 4\n2 EL Öl\nBraten" });
   assert.equal(r.status, 200);
   assert.deepEqual(seen, ["Rezept für 4\n2 EL Öl\nBraten"]);
   assert.deepEqual(known, [[]], "no ingredients stored yet");
   assert.deepEqual(r.json.ingredients.map((i: any) => [i.name, i.verified]), [["Öl", true], ["Ei", false]]);
   assert.equal(r.json.servings, 4);
   assert.equal(r.json.instructions, "Braten");
-  const stored = (await call("GET", `/api/dishes/${id}/recipe`)).json;
-  assert.deepEqual([stored.servings, stored.ingredients.length, stored.instructions], [null, 0, null]);
-});
-
-test("POST …/recipe/draft: no source text 400, unknown dish 404, no AI configured 404, AI failures 502", async () => {
-  let fail: unknown = new AiError("timeout");
-  const call = setup(fakeAi(async () => { throw fail; }));
-  const bare = (await call("POST", "/api/dishes", { title: "A" })).json.id;
-  assert.equal((await call("POST", `/api/dishes/${bare}/recipe/draft`)).status, 400);
-  assert.equal((await call("POST", "/api/dishes/99/recipe/draft")).status, 404);
-  const id = (await call("POST", "/api/dishes", { title: "B", source_text: "Text" })).json.id;
-  const timeout = await call("POST", `/api/dishes/${id}/recipe/draft`);
-  assert.deepEqual([timeout.status, timeout.json.reason], [502, "timeout"]);
-  fail = new AiError("unreachable");
-  assert.equal((await call("POST", `/api/dishes/${id}/recipe/draft`)).json.reason, "unreachable");
-  // answer that is not JSON for the ingredients
-  const broken = setup(fakeAi(async () => ({ ingredients: "nope" })));
-  const bid = (await broken("POST", "/api/dishes", { title: "C", source_text: "Text" })).json.id;
-  const b = await broken("POST", `/api/dishes/${bid}/recipe/draft`);
+  // an answer that is not JSON for the ingredients
+  const b = await setup(fakeAi(async () => ({ ingredients: "nope" })))("POST", "/api/recipe/draft", { text: "Text" });
   assert.deepEqual([b.status, b.json.reason], [502, "bad_response"]);
-  // without an AI the route does not exist
-  const none = setup();
-  const nid = (await none("POST", "/api/dishes", { title: "D", source_text: "Text" })).json.id;
-  assert.equal((await none("POST", `/api/dishes/${nid}/recipe/draft`)).status, 404);
 });
 
 test("POST /api/recipe/draft: a draft from text without a dish; empty 400, failures 502, parallel limit 429, no AI 404", async () => {
@@ -290,12 +269,10 @@ test("POST /api/recipe/draft: a draft from text without a dish; empty 400, failu
   const f = await failing("POST", "/api/recipe/draft", { text: "Text" });
   assert.deepEqual([f.status, f.json.reason], [502, "timeout"]);
 
-  // the limit is shared with the route for a saved dish
   let release!: () => void;
   const gate = new Promise<void>((done) => (release = done));
   const slow = setup(fakeAi(async () => (await gate, { ingredients: "[]" })));
-  const id = (await slow("POST", "/api/dishes", { title: "A", source_text: "Text" })).json.id;
-  const pending = [slow("POST", `/api/dishes/${id}/recipe/draft`), slow("POST", "/api/recipe/draft", { text: "1" })];
+  const pending = [slow("POST", "/api/recipe/draft", { text: "0" }), slow("POST", "/api/recipe/draft", { text: "1" })];
   assert.equal((await slow("POST", "/api/recipe/draft", { text: "2" })).status, 429);
   release();
   assert.deepEqual((await Promise.all(pending)).map((x) => x.status), [200, 200]);
