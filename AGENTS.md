@@ -94,6 +94,9 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   optional `title`), `plan_entry` (Gericht in Zeitraum, `done`, `note`), `setting` (Schlüssel/Wert, Schlüssel nur aus
   `SettingKey` in `repo.ts`), `ingredient` und `ingredient_category` (Zutatenkatalog, siehe dort). Bewusst **keine Tageszuordnung** und keine manuelle
   Reihenfolge per Drag.
+- **Zeitraum-Blatt:** oben „Neuer Zeitraum“, darunter die Listen (neueste zuerst). Sichtbar sind künftige, die aktuelle,
+  die letzten `RECENT_PAST_PLANS` (2) vergangenen und immer die gewählte Liste; ältere stehen eingeklappt unter
+  „Ältere Listen (n)“ (`splitPlans` in `web/src/util.ts`). Darunter Verschieben und Darstellung.
 - **Liste bearbeiten:** Name und Zeitraum einer Liste ändert `PATCH /api/plans/:id` (`updatePlan` in `repo.ts`), im UI per
   Stift-Symbol im Zeitraum-Blatt. `title`: höchstens 100 Zeichen, `""`/`null` löscht den Namen, fehlt es, bleibt er. Ohne
   Namen gilt der Datumsbereich als Anzeigename. `start_date` und `end_date` gibt es nur zusammen (sonst 400), Ende nicht vor
