@@ -33,7 +33,7 @@ test("a faithful answer is fully verified; bullets and spacing in the source do 
       ingredients: JSON.stringify([
         ing({ raw: "• 400 g Hähnchenbrust" }),
         ing({ amount: 1, amount_max: 2, unit: "Zehe", name: "Knoblauch", raw: "1-2 Zehen Knoblauch" }),
-        ing({ section: "Außerdem:", amount: 2, unit: "EL", name: "Olivenöl", raw: "2 EL Olivenöl" }),
+        ing({ section: "Außerdem:", section_raw: "Außerdem:", amount: 2, unit: "EL", name: "Olivenöl", raw: "2 EL Olivenöl" }),
       ]),
     }),
     SOURCE,
@@ -54,10 +54,21 @@ test("invented servings are dropped: no quote, a quote that is not in the text, 
 
 test("a distorted line or section is marked unverified, the rest stays verified", () => {
   const d = buildDraft(
-    raw({ ingredients: JSON.stringify([ing(), ing({ section: "Auflerdin", name: "Olivenöl", raw: "2 EL Olivenöl" }), ing({ raw: "300 g Hähnchenbrust" })]) }),
+    raw({ ingredients: JSON.stringify([ing(), ing({ section: "Außerdem", section_raw: "Auflerdin", name: "Olivenöl", raw: "2 EL Olivenöl" }), ing({ raw: "300 g Hähnchenbrust" })]) }),
     SOURCE,
   );
   assert.deepEqual(d.ingredients.map((i) => i.verified), [true, false, false]);
+});
+
+test("a translated section is checked by its original heading; without one it is unverified", () => {
+  const source = "For the sauce 🍅:\n2 tbsp olive oil 🫒";
+  const line = { amount: 2, unit: "tbsp", name: "Olivenöl", raw: "2 tbsp olive oil" };
+  const d = buildDraft(
+    raw({ servings_quote: "", ingredients: JSON.stringify([ing({ ...line, section: "Für die Soße", section_raw: "For the sauce" }), ing({ ...line, section: "Für die Soße" })]) }),
+    source,
+  );
+  assert.equal(d.ingredients[0]!.section, "Für die Soße", "the German heading is shown");
+  assert.deepEqual(d.ingredients.map((i) => i.verified), [true, false]);
 });
 
 test("units: only the fixed list (case-insensitive); anything else goes into the note", () => {
