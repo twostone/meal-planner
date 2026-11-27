@@ -151,11 +151,11 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   AI-Task-Entität von HA und liefert einen **Entwurf** (wird nie gespeichert). Die LLM-Antwort gilt als Nutzereingabe
   (`buildDraft` in `recipe-draft.ts`): Schema, Grenzen, Einheitenliste (Unbekanntes -> `unit` null, Rest in `note`),
   Aufräumen (Nummerierung der Schritte, `:` am Abschnittsende). Abgleich mit der Quelle (ohne Leerzeichen, Aufzählungszeichen,
-  Emojis, Doppelpunkte, Groß-/Kleinschreibung bleibt): `raw` und `section` müssen wörtlich im Text stehen, sonst
+  Emojis, Doppelpunkte, Groß-/Kleinschreibung bleibt): `raw` und `section_raw` (die Zwischenüberschrift im Original, `section` ist übersetzt) müssen wörtlich im Text stehen, sonst
   `verified: false` (im Editor rot markiert, bis man die Zeile ändert); `servings` gilt nur mit `servings_quote`, die im Text
   steht, und mit mindestens einer Zutat. Weggelassene Zeilen lassen sich nicht automatisch prüfen: Der Editor zeigt den
   Originaltext im Entwurf aufgeklappt. `GET /api/recipe/status` (`{ai, reason}`: `disabled`, `no_entity`, `unreachable`)
-  steuert, ob die UI den Knopf zeigt. Ohne Token ist `ai` nicht gesetzt: die Entwurfsroute gibt es dann nicht. Ablauf: 30 s
+  steuert, ob die UI den Knopf zeigt. Ohne Token ist `ai` nicht gesetzt: die Entwurfsroute gibt es dann nicht. Ablauf: 45 s
   Zeitlimit, kein Wiederholen, höchstens 2 parallele Entwürfe, Fehler -> 502 `ai failed` und im UI „Von Hand eintragen“.
   Das LLM hat keine Tools. Der Text geht an den in HA eingerichteten (evtl. Cloud-)Dienst: im README vermerkt.
   **Entität je Aufgabe:** Die HA-Voreinstellung gilt für alle `generate_data`-Aufrufe, nicht pro `task_name`. Die optionalen
@@ -180,7 +180,7 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   vorhandenen Zutaten). `POST /api/dishes/:id/recipe/normalize` (schreibt nichts, höchstens 2 gleichzeitig, sonst 429; ohne
   Zutaten 400; Fehler 502) schickt die Zeilen des Rezepts (`aiItems`: `{i, name, plural, note, prep}`, `i` = Position) und
   die bekannten Namen an den KI-Task `meal_planner_normalize` (`normalize` in `ha-ai.ts`, Entität `ai_entity_recipe`,
-  30 s). `buildChanges` (`ingredient-normalize.ts`) prüft die Antwort wie Nutzereingabe (Längen, Typen, unbekannte/doppelte
+  45 s). `buildChanges` (`ingredient-normalize.ts`) prüft die Antwort wie Nutzereingabe (Längen, Typen, unbekannte/doppelte
   `i` fallen weg, unveränderte Zeilen entfallen, eine weggelassene Zubereitung bleibt). Eine englische Einheit am Anfang der
   Notiz (so hat `buildDraft` sie früher gespeichert: „cups, gesiebt“, `splitUnitNote`) wird vorher abgetrennt und ist allein
   schon eine Änderung (`unit`). Das Rezeptblatt zeigt je Zeile „nachher“ und „vorher“, abwählbar, „übernehmen“ zweistufig.
@@ -364,8 +364,10 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   guter Titel verdichtet, er steht selten wörtlich im Text. Geschützt ist man dadurch, dass der Titel nur als Chip erscheint und
   man ihn selbst wählt. **Sprache:** nur der von `languageName()` (`Intl.DisplayNames`) erzeugte Name gelangt in den Prompt, nie
   der Code vom Client; als `lang` gilt nur ein schlichter Sprachcode, sonst Deutsch. Die Titel folgen der Browsersprache, nicht
-  der HA-Sprache (`/api/config` liefert laut Doku kein `language`-Feld, nicht am System geprüft). Die Rezepterkennung bleibt
-  im Wortlaut der Quelle und wird nicht übersetzt (der Abgleich von `raw` und `section` braucht das). Höchstens 2 parallele
+  der HA-Sprache (`/api/config` liefert laut Doku kein `language`-Feld, nicht am System geprüft). Die Rezepterkennung liefert
+  Zutaten, Abschnitte und Schritte auf Deutsch (englische Quellen werden übersetzt); nur `raw` und `section_raw` bleiben im
+  Original, weil der Abgleich sie braucht. Vor dem Senden entfernt `stripEmoji` (`text.ts`) Emojis aus Text und Titel: auf
+  Verdacht, weil ein Cloud-Modell bei Emoji-reichen Captions abbrach, die Ursache ist ohne Log nicht belegt. Höchstens 2 parallele
   Anfragen (sonst 429). **Datenschutz:** Anders als „Zutaten erkennen“ läuft das automatisch: Jede Vorschau schickt Seitentitel
   und Text (höchstens 10 000 Zeichen) an den in HA eingerichteten (evtl. Cloud-)Dienst: im README vermerkt.
 - **Bilder** lädt der Server einmal herunter und speichert sie unter `/data/images/<hash>.<ext>` (max. 3 MB, kein SVG,

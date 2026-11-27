@@ -75,6 +75,19 @@ test("generate: the names in use go into the prompt before the text, none withou
   }
 });
 
+test("generate and titles: emojis are removed from the text before it goes to the model", async () => {
+  const f = await fakeSupervisor(() => ({ json: { service_response: { data: { ingredients: "[]", titles: "" } } } }));
+  try {
+    const ai = createHaAi("tok", PREFERRED_AI_ENTITIES, { baseUrl: f.base });
+    await ai.generate("2️⃣ Eier 🥚🥚", []);
+    assert.ok((f.seen[0]!.body.instructions as string).endsWith("Text:\n2 Eier"));
+    await ai.titles({ title: "Rührei 🍳", text: "Eier 🔥", lang: "de" });
+    assert.doesNotMatch(f.seen[1]!.body.instructions as string, /\p{Extended_Pictographic}/u);
+  } finally {
+    f.close();
+  }
+});
+
 test("knownNamesPrompt: at most MAX_KNOWN_NAMES names; the prompt allows the English units", () => {
   const names = Array.from({ length: MAX_KNOWN_NAMES + 5 }, (_, i) => `Z${i}`);
   const p = knownNamesPrompt(names);
