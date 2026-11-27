@@ -318,7 +318,8 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
 - **Aufbau der Oberfläche:** Kopfzeile mit Listenname (öffnet das Zeitraum-Blatt) und „Kochen“, darunter eine Fortschrittszeile
   mit Ring (`ListView`); „Liste | Katalog | Zutaten“ ist eine Tab-Leiste mit Symbolen am unteren Rand (Schwebeknopf und Hinzufügen-Leiste sitzen darüber).
   Das Bearbeiten-Blatt ist in Gruppen gegliedert (Titel/Link, Rezept-Karte, Notizen, Kategorien), „Speichern“ klebt unten,
-  Entfernen/Löschen stehen als leise Textknöpfe darunter. Im Kochmodus klebt „Fertig“ unten.
+  Entfernen/Löschen stehen als leise Textknöpfe darunter. Im Kochmodus klebt „Fertig“ unten; Zutaten und Schritte stehen dort
+  je in einer Karte mit Trennlinien, ebenso die Artikel der Einkaufsliste (eine Karte statt einer pro Artikel).
   **Meldungen** sind ein Toast oben (`Toast.svelte`, `app.toast` mit `showError`/`showInfo`/`clearToast` in
   `store.svelte.ts`, nie `app.toast` direkt setzen): Fehler bleiben bis „OK“, Infos verschwinden nach `INFO_TOAST_MS`.
   Oben, weil unten Hinzufügen-Leiste, klebendes „Speichern“ und die Tastatur liegen. Ein offenes Blatt ist ein modales
