@@ -9,6 +9,7 @@
   import IngredientsView from "./IngredientsView.svelte";
   import Icon from "./Icon.svelte";
   import ListView from "./ListView.svelte";
+  import ImportSheet from "./ImportSheet.svelte";
   import PeriodSheet from "./PeriodSheet.svelte";
   import RecipeSheet from "./RecipeSheet.svelte";
   import ShoppingSheet from "./ShoppingSheet.svelte";
@@ -89,6 +90,8 @@
     <IngredientRenameSheet ingredientKey={app.sheet.ingredientKey} />
   {:else if app.sheet.kind === "periods"}
     <PeriodSheet />
+  {:else if app.sheet.kind === "import"}
+    <ImportSheet file={app.sheet.file} />
   {/if}
   <!-- Sheets show the toast themselves; cook mode is no dialog, so the shell's toast lies above it. -->
   {#if app.sheet.kind === "none" || app.sheet.kind === "cook"}

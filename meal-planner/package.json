@@ -14,7 +14,8 @@
     "build": "vite build",
     "dev:web": "vite",
     "check": "svelte-check --tsconfig ./web/tsconfig.json",
-    "screenshot": "tsx scripts/screenshot.ts"
+    "screenshot": "tsx scripts/screenshot.ts",
+    "schema": "tsx scripts/export-schema.ts"
   },
   "keywords": [],
   "author": "",

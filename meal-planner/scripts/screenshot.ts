@@ -174,6 +174,30 @@ const SHOTS: Shot[] = [
   { name: "catalog", run: (page) => page.getByRole("button", { name: "Katalog" }).click() },
   { name: "ingredients", run: (page) => page.getByRole("button", { name: "Zutaten", exact: true }).click() },
   {
+    // Picking dishes to share: a checkbox per row, the share button where "Neues Gericht" was.
+    name: "catalog-select",
+    run: async (page) => {
+      await page.getByRole("button", { name: "Katalog" }).click();
+      await page.getByRole("button", { name: "Teilen …" }).click();
+      await page.getByLabel("Spaghetti Carbonara zum Teilen auswählen").check();
+    },
+  },
+  {
+    // The import preview of a share file: one dish exists already (choice), one is new (ticked).
+    name: "import",
+    run: async (page) => {
+      await page.getByRole("button", { name: "Katalog" }).click();
+      const dish = (title: string) => ({ title, url: "https://example.org/rezept", tags: ["Pasta"], recipe: null });
+      const file = { format: "essensplanung-dishes", version: 1, dishes: [dish("Spaghetti Carbonara"), dish("Linsensuppe")] };
+      await page.locator('input[type="file"][accept^="application/json"]').setInputFiles({
+        name: "essensplanung.json",
+        mimeType: "application/json",
+        buffer: Buffer.from(JSON.stringify(file)),
+      });
+      await page.getByLabel("Was tun mit Spaghetti Carbonara?").selectOption("new");
+    },
+  },
+  {
     // Filtered by a category: the switch for the whole category, its ingredients ticked and fixed.
     name: "ingredient-category",
     run: async (page) => {

@@ -119,3 +119,10 @@ export type RenamePreview = {
   dishes: { id: number; title: string }[];
   notes: string[];
 };
+
+// A share file of dishes between two installations (format of POST api/dishes/export, see docs/dish-export.schema.json).
+// The frontend only passes it on: the server checks it.
+export type ShareFile = { format: string; version: number; dishes: unknown[] };
+export type ImportPreview = { dishes: { index: number; title: string; ingredients: number; exists: { id: number; title: string } | null }[] };
+export type ImportAction = { index: number; action: "new" | "replace"; title?: string };
+export type ImportResult = { created: number; replaced: number; skipped: number; needs_image: { id: number; url: string }[] };

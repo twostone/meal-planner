@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { imageSrc, listDishesWithIngredient, listIngredientNames } from "./api";
+  import { exportDishes, imageSrc, listDishesWithIngredient, listIngredientNames } from "./api";
   import Icon from "./Icon.svelte";
-  import { addDishToPlan, app, openDishSheet, openRecipe } from "./store.svelte";
+  import { addDishToPlan, app, openDishSheet, openImport, openRecipe, showError } from "./store.svelte";
   import { groupByInitial, sameTag } from "./util";
 
   let s = $state("");
@@ -59,6 +59,71 @@
       .filter((d) => !activeFilter || d.tags.some((t) => sameTag(t, activeFilter)));
     return groupByInitial(shown, (d) => d.title);
   });
+
+  // Sharing: pick dishes, then hand the file to the system share menu (phone: straight into a messenger) or download it.
+  let selecting = $state(false);
+  let selected = $state(new Set<number>());
+  let withNotes = $state(true);
+  let sharing = $state(false);
+  const shownIds = $derived(groups.flatMap((g) => g.items.map((d) => d.id)));
+  const allShownSelected = $derived(shownIds.length > 0 && shownIds.every((id) => selected.has(id)));
+
+  function toggle(id: number) {
+    const next = new Set(selected);
+    if (!next.delete(id)) next.add(id);
+    selected = next;
+  }
+  // "Alle" follows the search and the category chip, so a whole category is one tap.
+  function toggleAllShown() {
+    const next = new Set(selected);
+    for (const id of shownIds) allShownSelected ? next.delete(id) : next.add(id);
+    selected = next;
+  }
+  function stopSelecting() {
+    selecting = false;
+    selected = new Set();
+  }
+
+  async function share() {
+    if (selected.size === 0 || sharing) return;
+    sharing = true;
+    try {
+      const data = await exportDishes([...selected], withNotes);
+      const file = new File([JSON.stringify(data, null, 2)], `essensplanung-${new Date().toISOString().slice(0, 10)}.json`, { type: "application/json" });
+      if (navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file] });
+        } catch (e) {
+          if (!(e instanceof DOMException && e.name === "AbortError")) throw e; // the user closed the share menu
+          return;
+        }
+      } else download(file);
+      stopSelecting();
+    } catch (e) {
+      showError(e);
+    } finally {
+      sharing = false;
+    }
+  }
+  function download(file: File) {
+    const href = URL.createObjectURL(file);
+    const a = Object.assign(document.createElement("a"), { href, download: file.name });
+    a.click();
+    URL.revokeObjectURL(href);
+  }
+
+  // The file is only parsed here; the server checks its content in the import sheet.
+  async function pickImport(e: Event & { currentTarget: HTMLInputElement }) {
+    const input = e.currentTarget;
+    const picked = input.files?.[0];
+    input.value = ""; // choosing the same file again must fire `change` again
+    if (!picked) return;
+    try {
+      openImport(JSON.parse(await picked.text()));
+    } catch {
+      showError("Diese Datei ist keine Rezept-Datei.");
+    }
+  }
 </script>
 
 <main>
@@ -86,8 +151,34 @@
     </div>
   {/if}
 
+  {#if selecting}
+    <div class="share-bar">
+      <button type="button" class="btn outline" disabled={shownIds.length === 0} onclick={toggleAllShown}>
+        {allShownSelected ? "Keine" : `Alle (${shownIds.length})`}
+      </button>
+      <label class="check-row">
+        <input type="checkbox" bind:checked={withNotes} />
+        <span>Notizen mitschicken</span>
+      </label>
+    </div>
+  {:else if app.dishes.length > 0}
+    <div class="share-bar">
+      <button type="button" class="btn ghost" onclick={() => (selecting = true)}>Teilen …</button>
+      <label class="btn ghost">
+        <input type="file" accept="application/json,.json" class="visually-hidden" onchange={pickImport} />
+        Importieren …
+      </label>
+    </div>
+  {/if}
+
   {#if app.dishes.length === 0}
     <p class="empty">Der Katalog ist noch leer. Lege mit „Neues Gericht“ eins an oder trage eins in eine Liste ein.</p>
+    <p class="empty">
+      <label class="btn outline">
+        <input type="file" accept="application/json,.json" class="visually-hidden" onchange={pickImport} />
+        Gerichte aus einer Datei importieren
+      </label>
+    </p>
   {:else if groups.length === 0}
     <p class="empty">Nichts gefunden.</p>
   {/if}
@@ -101,16 +192,22 @@
             {#if d.image}
               <img class="thumb" src={imageSrc(d.image)} alt="" loading="lazy" decoding="async" />
             {/if}
-            <button type="button" class="title" onclick={() => openRecipe(d.id)}>
+            <button type="button" class="title" onclick={() => (selecting ? toggle(d.id) : openRecipe(d.id))}>
               <span>{d.title}</span>
               {#if d.tags.length}<small class="tag-pills">{#each d.tags as t (t)}<span class="pill">{t}</span>{/each}</small>{/if}
             </button>
-            {#if d.url}
+            {#if selecting}
+              <label class="pick">
+                <input type="checkbox" checked={selected.has(d.id)} aria-label="{d.title} zum Teilen auswählen" onchange={() => toggle(d.id)} />
+              </label>
+            {:else if d.url}
               <a class="icon-link" href={d.url} target="_blank" rel="noopener noreferrer" aria-label="Rezept-Link von {d.title} öffnen">
                 <Icon name="link" size={16} />
               </a>
             {/if}
-            {#if inPlan.has(d.id)}
+            {#if selecting}
+              <!-- no list actions while picking dishes to share -->
+            {:else if inPlan.has(d.id)}
               <span class="in-plan"><Icon name="check" size={16} />In Liste</span>
             {:else}
               <button
@@ -130,6 +227,15 @@
   {/each}
 </main>
 
-<button type="button" class="fab" onclick={() => openDishSheet({ tags: activeFilter ? [activeFilter] : [] })}>
-  <Icon name="plus" />Neues Gericht
-</button>
+{#if selecting}
+  <div class="share-actions">
+    <button type="button" class="btn outline" onclick={stopSelecting}>Abbrechen</button>
+    <button type="button" class="btn primary" disabled={selected.size === 0 || sharing} onclick={share}>
+      {sharing ? "Bereite vor …" : selected.size === 1 ? "1 Gericht teilen" : `${selected.size} Gerichte teilen`}
+    </button>
+  </div>
+{:else}
+  <button type="button" class="fab" onclick={() => openDishSheet({ tags: activeFilter ? [activeFilter] : [] })}>
+    <Icon name="plus" />Neues Gericht
+  </button>
+{/if}
