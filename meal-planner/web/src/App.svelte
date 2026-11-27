@@ -19,6 +19,12 @@
     init();
   });
 
+  const TABS = [
+    { view: "list", label: "Liste", icon: "list" },
+    { view: "catalog", label: "Katalog", icon: "book" },
+    { view: "ingredients", label: "Zutaten", icon: "leaf" },
+  ] as const;
+
   // A plan is shown by its name when it has one, else by its date range.
   const planLabel = $derived(app.plan ? (app.plan.title ?? fmtRange(app.plan.start_date, app.plan.end_date)) : null);
 </script>
@@ -37,7 +43,7 @@
               <Icon name="cart" />
             </button>
           {/if}
-          <button type="button" class="btn primary" onclick={openCook}>Kochen</button>
+          <button type="button" class="btn primary" onclick={() => openCook()}>Kochen</button>
         {/if}
       </div>
     {:else if app.view === "ingredients"}
@@ -61,23 +67,20 @@
   {/if}
 
   <nav class="tabbar" aria-label="Ansicht">
-    <button type="button" aria-current={app.view === "list" ? "page" : undefined} onclick={() => (app.view = "list")}>
-      Liste
-    </button>
-    <button type="button" aria-current={app.view === "catalog" ? "page" : undefined} onclick={() => (app.view = "catalog")}>
-      Katalog
-    </button>
-    <button type="button" aria-current={app.view === "ingredients" ? "page" : undefined} onclick={() => (app.view = "ingredients")}>
-      Zutaten
-    </button>
+    {#each TABS as t (t.view)}
+      <button type="button" aria-current={app.view === t.view ? "page" : undefined} onclick={() => (app.view = t.view)}>
+        <span class="tab-icon"><Icon name={t.icon} size={22} /></span>
+        {t.label}
+      </button>
+    {/each}
   </nav>
 
   {#if app.sheet.kind === "dish"}
     <DishSheet sheet={app.sheet} />
   {:else if app.sheet.kind === "recipe"}
-    <RecipeSheet dishId={app.sheet.dishId} />
+    <RecipeSheet dishId={app.sheet.dishId} entryId={app.sheet.entryId} />
   {:else if app.sheet.kind === "cook"}
-    <CookView />
+    <CookView startEntryId={app.sheet.entryId} />
   {:else if app.sheet.kind === "shopping"}
     <ShoppingSheet />
   {:else if app.sheet.kind === "split"}

@@ -8,7 +8,7 @@
   --ink: #1e2a22;
   --muted: #4a5a50;
   --line: #dce4d7;
-  --field: #c9d4c4;
+  --field: #a3b39e;
   --green: #2f6b4f;
   --on-green: #ffffff;
   --green-soft: #e6ede1;
@@ -19,9 +19,10 @@
   --error-bg: #fce8e6;
   --error-ink: #7a1a14;
   --warn-bg: #fff3d6;
-  --shadow: var(--shadow);
-  --shadow-soft: var(--shadow-soft);
-  --backdrop: var(--backdrop);
+  --shadow: rgba(30, 42, 34, 0.22);
+  --shadow-soft: rgba(30, 42, 34, 0.14);
+  --backdrop: rgba(30, 42, 34, 0.45);
+  --card-shadow: 0 1px 2px rgba(30, 42, 34, 0.06), 0 4px 14px rgba(30, 42, 34, 0.06);
   --display: "Bricolage Grotesque Variable", system-ui, sans-serif;
   font-family: "Figtree Variable", system-ui, sans-serif;
   color-scheme: light;
@@ -34,7 +35,7 @@
     --ink: #e8eee9;
     --muted: #9daaa2;
     --line: #2b342f;
-    --field: #3d4842;
+    --field: #5a6760;
     --green: #7cc49a;
     --on-green: #0d1a12;
     --green-soft: #1e3127;
@@ -47,6 +48,7 @@
     --shadow: rgba(0, 0, 0, 0.5);
     --shadow-soft: rgba(0, 0, 0, 0.4);
     --backdrop: rgba(0, 0, 0, 0.6);
+    --card-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05);
     color-scheme: dark;
   }
 }
@@ -57,7 +59,7 @@
   --ink: #e8eee9;
   --muted: #9daaa2;
   --line: #2b342f;
-  --field: #3d4842;
+  --field: #5a6760;
   --green: #7cc49a;
   --on-green: #0d1a12;
   --green-soft: #1e3127;
@@ -70,6 +72,7 @@
   --shadow: rgba(0, 0, 0, 0.5);
   --shadow-soft: rgba(0, 0, 0, 0.4);
   --backdrop: rgba(0, 0, 0, 0.6);
+  --card-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05);
   color-scheme: dark;
 }
 
@@ -173,19 +176,32 @@ h1 {
 }
 .tabbar button {
   flex: 1;
-  height: 52px;
+  min-height: 60px;
+  padding: 6px 0 4px;
   border: none;
   background: transparent;
-  font-size: 15px;
-  font-weight: 500;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+  font-weight: 600;
   color: var(--muted);
-  border-top: 3px solid transparent;
-  margin-top: -1px;
+}
+.tab-icon {
+  width: 56px;
+  height: 30px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .tabbar button[aria-current="page"] {
+  color: var(--ink);
+}
+.tabbar button[aria-current="page"] .tab-icon {
+  background: var(--green-soft);
   color: var(--green);
-  font-weight: 700;
-  border-top-color: var(--green);
 }
 
 main {
@@ -237,32 +253,44 @@ main {
 }
 
 /* progress line */
+.progress-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+}
 .progress-line p {
-  margin: 0 0 6px;
+  margin: 0;
   font-size: 14px;
   color: var(--muted);
+}
+.ring {
+  flex: none;
+  transform: rotate(-90deg); /* the stroke starts at the top */
+}
+.ring circle {
+  fill: none;
+  stroke-width: 5;
+}
+.ring-track {
+  stroke: var(--green-soft);
+}
+.ring-value {
+  stroke: var(--green);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.3s;
 }
 .progress-line strong {
   color: var(--ink);
 }
-.bar {
-  height: 6px;
-  border-radius: 3px;
-  background: var(--green-soft);
-  overflow: hidden;
-}
-.bar span {
-  display: block;
-  height: 100%;
-  border-radius: 3px;
-  background: var(--green);
-}
 
 /* rows */
 .label {
-  margin: 16px 0 6px;
-  font-size: 13px;
-  font-weight: 600;
+  margin: 18px 2px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--muted);
 }
 .rows {
@@ -271,26 +299,30 @@ main {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 .row {
-  min-height: 56px;
+  min-height: 60px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 0 12px 0 4px;
+  border: none;
+  border-radius: 18px;
+  box-shadow: var(--card-shadow);
+  padding: 6px 12px 6px 4px;
 }
 .row.done {
   background: var(--green-soft);
-  border-color: transparent;
+  box-shadow: none;
 }
 .row.done .title {
-  text-decoration: line-through;
   color: var(--muted);
   font-weight: 500;
+}
+/* only the name: a line-through cannot be undone further down, and the pills below should stay readable */
+.row.done .title > span:first-child {
+  text-decoration: line-through;
 }
 .check {
   width: 44px;
@@ -303,9 +335,9 @@ main {
   justify-content: center;
 }
 .box {
-  width: 24px;
-  height: 24px;
-  border-radius: 8px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
   border: 2px solid var(--box);
   display: flex;
   align-items: center;
@@ -549,7 +581,6 @@ label {
   color: var(--green);
 }
 .group .row {
-  padding-left: 14px;
   padding-right: 4px;
 }
 .icon-link {
@@ -609,7 +640,7 @@ dialog::backdrop {
 }
 .sheet {
   background: var(--bg);
-  border-radius: 20px 20px 0 0;
+  border-radius: 24px 24px 0 0;
   padding: 20px 16px calc(24px + env(safe-area-inset-bottom));
   max-height: 85dvh;
   overflow-y: auto;
@@ -680,9 +711,6 @@ dialog::backdrop {
 .row.done .thumb {
   opacity: 0.6;
 }
-.group .row .thumb {
-  margin-right: -2px;
-}
 .preview {
   width: 100%;
   height: 160px;
@@ -705,10 +733,10 @@ dialog::backdrop {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 14px;
-  border-radius: 16px;
+  padding: 16px;
+  border-radius: 20px;
   background: var(--surface);
-  border: 1px solid var(--line);
+  box-shadow: var(--card-shadow);
 }
 .title-row {
   display: flex;
@@ -1420,4 +1448,89 @@ a.btn {
   color: var(--ink);
   font-weight: 700;
   box-shadow: 0 1px 3px var(--shadow-soft);
+}
+
+/* read view of a dish (RecipeSheet) */
+.dish-hero {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-radius: 18px;
+  background: var(--green-soft);
+}
+.dish-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center; /* the link pill is a 44 px tap target; the others keep their height */
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--green-soft);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+a.pill.link {
+  min-height: 44px; /* a tap target, unlike the other pills */
+  color: var(--green);
+  text-decoration: none;
+}
+.list-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--warn-bg);
+  font-size: 15px;
+}
+.list-note small {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.dish-note {
+  margin: 0;
+  color: var(--muted);
+}
+.dish-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* list and catalog rows: picture first, tick at the thumb's end of the row */
+main .row {
+  padding-left: 6px;
+}
+main .row > .title:first-child {
+  padding-left: 8px;
+}
+main .row > .thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: 13px;
+}
+main .row > .check:last-child {
+  margin-right: -8px;
+}
+.tag-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.tag-pills .pill {
+  padding: 1px 8px;
+  font-size: 12px;
+  background: var(--hover);
+  color: var(--muted);
+}
+.row.done .tag-pills .pill {
+  background: var(--surface);
 }

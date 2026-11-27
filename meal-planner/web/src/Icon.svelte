@@ -1,5 +1,5 @@
 <script lang="ts">
-  let { name, size = 20 }: { name: "check" | "plus" | "link" | "chevron-down" | "search" | "trash" | "pencil" | "cart"; size?: number } = $props();
+  let { name, size = 20 }: { name: "check" | "plus" | "link" | "chevron-down" | "search" | "trash" | "pencil" | "cart" | "list" | "book" | "leaf"; size?: number } = $props();
 </script>
 
 <svg
@@ -31,6 +31,17 @@
     <path d="M3 4h2.5l2.2 10.5h10.6L20.5 7H6.6" />
     <circle cx="9.5" cy="19" r="1.4" />
     <circle cx="17" cy="19" r="1.4" />
+  {:else if name === "list"}
+    <path d="M9 6h11M9 12h11M9 18h11" />
+    <circle cx="4.5" cy="6" r="1" />
+    <circle cx="4.5" cy="12" r="1" />
+    <circle cx="4.5" cy="18" r="1" />
+  {:else if name === "book"}
+    <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5z" />
+    <path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5a1.5 1.5 0 0 0 1.5-1.5z" />
+  {:else if name === "leaf"}
+    <path d="M5 19c0-8 5-13 14-14-1 9-6 14-14 14z" />
+    <path d="M5 19l7-7" />
   {:else if name === "pencil"}
     <path d="M4 20h4L19 9l-4-4L4 16v4z" />
     <path d="M13.5 6.5l4 4" />

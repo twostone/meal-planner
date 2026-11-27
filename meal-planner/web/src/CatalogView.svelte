@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { imageSrc, listDishesWithIngredient, listIngredientNames } from "./api";
   import Icon from "./Icon.svelte";
-  import { addDishToPlan, app, openDishSheet } from "./store.svelte";
+  import { addDishToPlan, app, openDishSheet, openRecipe } from "./store.svelte";
   import { groupByInitial, sameTag } from "./util";
 
   let s = $state("");
@@ -101,9 +101,9 @@
             {#if d.image}
               <img class="thumb" src={imageSrc(d.image)} alt="" loading="lazy" decoding="async" />
             {/if}
-            <button type="button" class="title" onclick={() => openDishSheet({ dishId: d.id })}>
+            <button type="button" class="title" onclick={() => openRecipe(d.id)}>
               <span>{d.title}</span>
-              {#if d.tags.length}<small class="tags-line">{d.tags.join(" · ")}</small>{/if}
+              {#if d.tags.length}<small class="tag-pills">{#each d.tags as t (t)}<span class="pill">{t}</span>{/each}</small>{/if}
             </button>
             {#if d.url}
               <a class="icon-link" href={d.url} target="_blank" rel="noopener noreferrer" aria-label="Rezept-Link von {d.title} öffnen">

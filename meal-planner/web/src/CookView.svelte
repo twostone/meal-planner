@@ -6,6 +6,8 @@
   import { app, closeSheet, finishEntry, showError } from "./store.svelte";
   import type { CookEntry, Ingredient } from "./types";
 
+  let { startEntryId }: { startEntryId: number | null } = $props();
+
   const POLL_MS = 4000;
   const planId = app.plan?.id ?? 0;
 
@@ -56,6 +58,8 @@
       // Open dishes first, finished ones at the back (once, so the tabs do not jump while cooking).
       entries = [...r.entries.filter((e) => !e.done), ...r.entries.filter((e) => e.done)];
       checked = ticksOf(entries);
+      // Opened from a dish ("Jetzt kochen"): start at that dish.
+      active = Math.max(0, entries.findIndex((e) => e.entry_id === startEntryId));
     } catch {
       failed = true;
     }

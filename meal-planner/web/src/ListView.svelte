@@ -5,6 +5,7 @@
     addDishToPlan,
     app,
     openDishSheet,
+    openRecipe,
     openPeriods,
     toggleDone,
   } from "./store.svelte";
@@ -16,6 +17,8 @@
   const open = $derived(entries.filter((e) => !e.done));
   const done = $derived(entries.filter((e) => e.done));
   const ratio = $derived(entries.length ? done.length / entries.length : 0);
+  const RING_RADIUS = 18;
+  const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
 
   const query = $derived(q.trim());
   const inPlan = $derived(new Set(entries.map((e) => e.dish_id)));
@@ -55,6 +58,12 @@
     </div>
   {:else}
     <section class="progress-line" aria-label="Fortschritt">
+      {#if entries.length}
+        <svg class="ring" width="44" height="44" viewBox="0 0 44 44" aria-hidden="true">
+          <circle cx="22" cy="22" r={RING_RADIUS} class="ring-track" />
+          <circle cx="22" cy="22" r={RING_RADIUS} class="ring-value" stroke-dasharray={RING_LENGTH} stroke-dashoffset={RING_LENGTH * (1 - ratio)} />
+        </svg>
+      {/if}
       <p>
         {#if entries.length === 0}
           Noch nichts geplant. Unten ein Gericht eintippen.
@@ -64,33 +73,21 @@
           <strong>{open.length} noch offen</strong> · {done.length} von {entries.length} gekocht
         {/if}
       </p>
-      {#if entries.length}
-        <div class="bar" aria-hidden="true"><span style="width: {ratio * 100}%"></span></div>
-      {/if}
     </section>
 
     {#snippet row(e: (typeof entries)[number])}
       <li class="row" class:done={e.done}>
-        <button
-          type="button"
-          class="check"
-          aria-label={e.done ? `${e.dish.title} als offen markieren` : `${e.dish.title} als gekocht markieren`}
-          aria-pressed={e.done}
-          onclick={() => toggleDone(e)}
-        >
-          <span class="box">{#if e.done}<Icon name="check" size={16} />{/if}</span>
-        </button>
         {#if e.dish.image}
           <img class="thumb" src={imageSrc(e.dish.image)} alt="" loading="lazy" decoding="async" />
         {/if}
         <button
           type="button"
           class="title"
-          onclick={() => openDishSheet({ dishId: e.dish_id, entryId: e.id })}
+          onclick={() => openRecipe(e.dish_id, e.id)}
         >
           <span>{e.dish.title}</span>
           {#if e.note}<small class="entry-note">{e.note}</small>{/if}
-          {#if e.dish.tags.length}<small class="tags-line">{e.dish.tags.join(" · ")}</small>{/if}
+          {#if e.dish.tags.length}<small class="tag-pills">{#each e.dish.tags as t (t)}<span class="pill">{t}</span>{/each}</small>{/if}
         </button>
         {#if e.dish.url}
           <a
@@ -103,6 +100,15 @@
             <Icon name="link" size={16} />
           </a>
         {/if}
+        <button
+          type="button"
+          class="check"
+          aria-label={e.done ? `${e.dish.title} als offen markieren` : `${e.dish.title} als gekocht markieren`}
+          aria-pressed={e.done}
+          onclick={() => toggleDone(e)}
+        >
+          <span class="box">{#if e.done}<Icon name="check" size={16} />{/if}</span>
+        </button>
       </li>
     {/snippet}
 
