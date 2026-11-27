@@ -5,12 +5,13 @@ import { FOREIGN_UNITS } from "./units.ts";
 import { logger } from "./log.ts";
 import { CORE_DIRECT_URL, errorBody, isAbort, request, SUPERVISOR_CORE_URL } from "./ha-core.ts";
 import type { AiEntities } from "./options.ts";
-import { clip, toJson } from "./text.ts";
+import { clip, stripEmoji, toJson } from "./text.ts";
 
 const log = logger("ha-ai");
 
 const STATUS_TIMEOUT_MS = 5000;
-export const GENERATE_TIMEOUT_MS = 30_000;
+// Translating an English recipe makes the answer longer; 30 s was already close (25 s seen without translation).
+export const GENERATE_TIMEOUT_MS = 45_000;
 // Title suggestions are a convenience next to the preview, so they get less time than a recipe draft.
 export const TITLES_TIMEOUT_MS = 15_000;
 // Image models take noticeably longer than text: up to a minute is normal.
@@ -52,6 +53,8 @@ export function languageName(lang: string): string {
 export const PROMPT = `Zerlege das folgende Rezept (meist eine Instagram-Caption) in strukturierte Daten.
 Regeln:
 - Nur übernehmen, was im Text steht. Nichts erfinden, nichts ergänzen.
+- Sprache: name, plural, note, prep, section und instructions immer auf Deutsch. Englische oder andere Texte übersetzen.
+  Nur raw und section_raw bleiben im Originalwortlaut.
 - servings nur, wenn eine Portionszahl im Text steht. servings_quote ist dann die exakte Textstelle, sonst beides leer.
 - Einheit nur aus dieser Liste: ${[...UNITS, ...FOREIGN_UNITS].join(", ")}.
   Englische Einheiten (cup, tbsp, tsp, oz, fl oz, lb) unverändert angeben, nicht selbst umrechnen.
@@ -64,13 +67,14 @@ Regeln:
   Beispiel: "2 rote Zwiebeln, gewürfelt" -> name "Zwiebel", plural "Zwiebeln", note "rot", prep "gewürfelt".
 - Ignorieren: Hashtags (auch ohne #), Emojis, Werbung, Nährwerte, Hinweise zum Video.
 - ingredients ist ein JSON-Array von Objekten
-  {"section": string|null, "amount": number|null, "amount_max": number|null,
+  {"section": string|null, "section_raw": string|null, "amount": number|null, "amount_max": number|null,
    "unit": string|null, "name": string, "plural": string|null, "note": string|null, "prep": string|null, "raw": string}.
-  "raw" ist die Originalzeile unverändert, "section" die Zwischenüberschrift unverändert.
+  "raw" ist die Originalzeile unverändert, "section" die Zwischenüberschrift auf Deutsch,
+  "section_raw" dieselbe Zwischenüberschrift unverändert im Originalwortlaut.
   Jede Zutatenzeile übernehmen. Nennt eine Zeile mehrere Zutaten ("Salz & Pfeffer", "Salz, Pfeffer und Oregano"),
   jede Zutat einzeln angeben, alle mit derselben Originalzeile als raw; amount und unit dann null, außer die Menge
   gehört eindeutig zu einer Zutat. "oder" nennt Alternativen ("Butter oder Margarine"): nicht aufteilen.
-- instructions: ein Schritt pro Zeile, Wortlaut möglichst erhalten. Lücken nicht füllen.`;
+- instructions: ein Schritt pro Zeile, auf Deutsch, inhaltlich vollständig. Nichts ergänzen, Lücken nicht füllen.`;
 
 // How many known ingredient names go into the prompt, and how long that list may get at most.
 export const MAX_KNOWN_NAMES = 300;
@@ -284,7 +288,7 @@ export function createHaAi(
     },
 
     async generate(text, knownNames) {
-      const instructions = `${PROMPT}${knownNamesPrompt(knownNames)}\n\nText:\n${text}`;
+      const instructions = `${PROMPT}${knownNamesPrompt(knownNames)}\n\nText:\n${stripEmoji(text)}`;
       return (await run("meal_planner_recipe", entities.recipe, instructions, STRUCTURE, timeoutMs)) as RawDraft;
     },
 
@@ -294,7 +298,7 @@ export function createHaAi(
     },
 
     async titles({ title, text, lang }) {
-      const instructions = `${titlesPrompt(languageName(lang))}\n\nTitel der Seite:\n${title}\n\nText:\n${text}`;
+      const instructions = `${titlesPrompt(languageName(lang))}\n\nTitel der Seite:\n${stripEmoji(title)}\n\nText:\n${stripEmoji(text)}`;
       return (await run("meal_planner_title", entities.titles, instructions, TITLES_STRUCTURE, titlesTimeoutMs)).titles;
     },
 

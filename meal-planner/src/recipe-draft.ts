@@ -15,7 +15,8 @@ export type DraftIngredient = {
   note: string | null;
   prep: string | null;
   raw: string;
-  // raw and section are found word for word in the source text. false = the model changed or made up the line.
+  // raw and the original section heading are found word for word in the source text. false = the model changed or
+  // made up the line.
   verified: boolean;
 };
 export type RecipeDraft = { servings: number | null; instructions: string | null; ingredients: DraftIngredient[] };
@@ -90,6 +91,8 @@ export function buildDraft(raw: RawDraft, source: string): RecipeDraft {
     const name = str(o.name, 80);
     if (!name) continue;
     const section = str(typeof o.section === "string" ? o.section.replace(/:\s*$/, "") : o.section, 80);
+    // `section` is translated to German; the check needs the heading as it stands in the source.
+    const sectionRaw = str(o.section_raw, 200);
     const rawLine = str(o.raw, 200) ?? name;
     let amount = num(o.amount);
     let amountMax = num(o.amount_max);
@@ -116,7 +119,7 @@ export function buildDraft(raw: RawDraft, source: string): RecipeDraft {
       note,
       prep: str(o.prep, 200),
       raw: rawLine,
-      verified: found(rawLine) && (section === null || found(section)),
+      verified: found(rawLine) && (section === null || found(sectionRaw)),
     });
   }
 

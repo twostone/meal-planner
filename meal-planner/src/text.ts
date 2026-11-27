@@ -15,3 +15,11 @@ export function clip(s: string, max: number): string {
 export function toJson(value: unknown): string {
   return JSON.stringify(value, (_key, v) => (typeof v === "string" ? v.toWellFormed() : v));
 }
+
+// Emojis, variation selectors, zero-width joiners and keycap marks ("1️⃣" -> "1"), then the spaces they leave.
+// Removed before a text goes to the model: they cost many tokens and some services break off on emoji-heavy captions.
+// shortcut: the cause on the affected system is not proven (no log yet), drop this if the logs show another reason.
+const EMOJI = /\p{Extended_Pictographic}|[\uFE0F\u200D\u20E3]/gu;
+export function stripEmoji(s: string): string {
+  return s.replace(EMOJI, "").replace(/[^\S\n]{2,}/g, " ").replace(/[^\S\n]+$/gm, "");
+}

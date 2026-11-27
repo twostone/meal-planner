@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { clip, toJson } from "../src/text.ts";
+import { clip, stripEmoji, toJson } from "../src/text.ts";
 
 test("clip: never leaves half a character at the end", () => {
   const s = "ab😀cd"; // the emoji is two UTF-16 units
@@ -18,4 +18,10 @@ test("toJson: lone surrogates become U+FFFD before serializing, everything else 
   assert.deepEqual(JSON.parse(out), { a: "x�y", list: ["�"], n: 1, ok: "Käse 😀", nested: { s: null } });
   // plain JSON.stringify is the problem this avoids
   assert.match(JSON.stringify({ a: "x\ud83dy" }), /\\ud83d/);
+});
+
+test("stripEmoji: removes emojis with keycaps, joiners and selectors, keeps lines and text", () => {
+  assert.equal(stripEmoji("1️⃣ Zwiebel 🧅 schneiden"), "1 Zwiebel schneiden");
+  assert.equal(stripEmoji("Familie 👨‍👩‍👧 ❤️ essen 🔥🔥\n\n• 2 Eier 🥚"), "Familie essen\n\n• 2 Eier");
+  assert.equal(stripEmoji("Käse & Brot: 200 g"), "Käse & Brot: 200 g", "plain text stays");
 });
