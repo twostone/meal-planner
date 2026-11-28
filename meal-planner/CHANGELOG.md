@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.23.0](https://github.com/twostone/meal-planner/compare/v0.22.0...v0.23.0) (2026-11-28)
+
+
+### Neu
+
+* **katalog:** Gerichte als Datei teilen und importieren ([#112](https://github.com/twostone/meal-planner/issues/112)) ([bac3aa5](https://github.com/twostone/meal-planner/commit/bac3aa59887ace595c55bfbc7507819cd637a6e2))
+* **liste:** Zeitraum-Blatt kompakt, „Neuer Zeitraum“ oben ([#108](https://github.com/twostone/meal-planner/issues/108)) ([79efc8d](https://github.com/twostone/meal-planner/commit/79efc8d41d1e0a47b561e9461ff77e97dc5b1d79))
+* **ui:** moderne Optik für Kochmodus und Einkaufsliste ([#107](https://github.com/twostone/meal-planner/issues/107)) ([2fee5a8](https://github.com/twostone/meal-planner/commit/2fee5a84a06e08d6ecb5697d0a2a58bd5a9a2252))
+
+
+### Behoben
+
+* **rezept:** Zutatengruppen von WP Recipe Maker übernehmen ([#113](https://github.com/twostone/meal-planner/issues/113)) ([ac5b8a9](https://github.com/twostone/meal-planner/commit/ac5b8a90db366f5907335ed83cdca3922a0b53bd))
+
 ## [0.22.0](https://github.com/twostone/meal-planner/compare/v0.21.0...v0.22.0) (2026-11-27)
 
 
