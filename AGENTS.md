@@ -37,7 +37,7 @@ meal-planner/            das Add-on (Docker-Build-Kontext)
                            Browser nach einem Update die alte index.html und lädt nicht mehr)
     net-guard.ts           Adress-Sperre (SSRF)
     safe-fetch.ts          der einzige Weg, fremde URLs abzurufen
-    preview.ts             Titel und Bild aus HTML (og:-Tags, schema.org-Rezept)
+    preview.ts             Titel und Bild aus HTML (og:-Tags, schema.org-Rezept, Zutatengruppen von WP Recipe Maker)
     title-suggest.ts       Titelvorschläge aus Captions (Regeln) und Bereinigung der KI-Titel
     images.ts              Bildspeicher (/data/images, Dateiname = Hash), MAX_IMAGE_BYTES
     ha-api.ts, ha-state.ts  Zweiter Listener (Token) und Zustand für die HA-Integration
