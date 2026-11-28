@@ -316,11 +316,16 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   Hand ändern; `dish-share-schema.test.ts` schlägt fehl, wenn die Datei nicht zum Code passt. Regeln, die zod nur in Code
   prüft (`http(s)`, `amount_max >= amount`), stehen nicht im Schema.
   **Routen:** `POST /api/dishes/export {ids, notes}` (`notes: false` -> `note: null`), `POST /api/dishes/import/preview`
-  (Body = Datei, schreibt nichts; je Gericht `exists` über `findDishByTitle`, ohne Groß-/Kleinschreibung), `POST
+  (Body = Datei, schreibt nichts; je Gericht `exists` und `title_taken`), `POST
   /api/dishes/import {file, tags, actions: [{index, action: "new"|"replace", title?}]}`; Gerichte ohne Aktion werden
-  übersprungen. `importDishes` (`repo.ts`) ist **eine Transaktion**: ein vergebener Titel bei `new` -> 409, nichts
-  geschrieben. **Ersetzen** übernimmt Link, Notiz, Originaltext und Rezept nur, wenn die Datei sie hat (Leeres löscht
-  nichts), **vereinigt** die Kategorien (nur mit `tags: true`), behält das Bild; `writeRecipe` löscht wie immer die
+  übersprungen. **Abgleich über den Link** (28.11.2026: gleiche Titel bedeuten zwischen zwei Haushalten oft verschiedene
+  Rezepte): `findMatch` (`repo.ts`) sucht ein Gericht mit gleichem `linkKey` (ohne `#Anker`, `/` am Ende und
+  Tracking-Parameter `TRACKING_PARAMS`/`utm_*`, übrige Parameter sortiert; Vergleich in JS, erstes nach ID), nur ohne Link
+  über den Titel (`findDishByTitle`, ohne Groß-/Kleinschreibung). Kein Treffer, aber der Titel ist vergeben ->
+  `title_taken`: das Blatt legt es neu an, vorbelegt als „<Titel> (n)“ (die Titel bleiben in der DB eindeutig).
+  `importDishes` (`repo.ts`) ist **eine Transaktion**: ein vergebener Titel bei `new` -> 409, nichts
+  geschrieben. **Ersetzen** trifft das Gericht aus `findMatch` (kein Treffer -> 404) und behält dessen Titel und Link;
+  Notiz, Originaltext und Rezept übernimmt es nur, wenn die Datei sie hat (Leeres löscht nichts), **vereinigt** die Kategorien (nur mit `tags: true`), behält das Bild; `writeRecipe` löscht wie immer die
   Kochmodus-Haken. Antwort `{created, replaced, skipped, needs_image: [{id, url}]}`: Gerichte mit Link und ohne Bild.
   Kein HA-Event (Katalog-Änderungen feuern nichts), kein MCP-Tool, Zutatennamen 1:1 (Aufräumen über Umbenennen).
   **UI:** Im Katalog „Teilen …“ (Auswahlmodus: Haken je Zeile, „Alle (n)“ wählt die angezeigten, also Suche und

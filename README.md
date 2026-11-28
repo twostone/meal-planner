@@ -53,8 +53,9 @@ dieselbe Liste.
   „Knoblauch“), werden beide zusammengeführt.
 - Rezepte teilen: Im Katalog wählt man unter „Teilen …“ Gerichte aus (oder mit „Alle“ eine ganze Kategorie) und schickt
   sie als Datei weiter, auf dem Handy über das Teilen-Menü (z. B. in einen Messenger), sonst als Download. Eine andere
-  Installation dieser App liest die Datei unter „Importieren …“ ein. Die Vorschau zeigt, was es dort schon gibt: überspringen,
-  ersetzen oder unter anderem Titel anlegen. Mit gehen Titel, Link, Kategorien, Notiz (abwählbar), Originaltext und Rezept,
+  Installation dieser App liest die Datei unter „Importieren …“ ein. Die Vorschau zeigt, was es dort schon gibt (gleicher Link,
+  bei Gerichten ohne Link gleicher Titel): überspringen, ersetzen oder unter anderem Titel anlegen. Ein gleicher Titel mit
+  anderem Link ist ein anderes Rezept und kommt als „Titel (2)“ dazu. Mit gehen Titel, Link, Kategorien, Notiz (abwählbar), Originaltext und Rezept,
   kein Bild: Die Bilder holt die empfangende App danach selbst von den Links. Es ist eine Kopie, kein gemeinsamer Katalog;
   spätere Änderungen wandern nicht von selbst. Das Dateiformat beschreibt [`docs/dish-export.schema.json`](docs/dish-export.schema.json)
   (JSON Schema). Beide Seiten brauchen eine App-Version mit dieser Funktion; eine Datei aus einer neueren Version lehnt eine

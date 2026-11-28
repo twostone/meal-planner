@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createApp } from "../src/app.ts";
 import { openDb } from "../src/db.ts";
-import { createRepo } from "../src/repo.ts";
+import { createRepo, linkKey } from "../src/repo.ts";
 
 function setup() {
   const db = openDb(":memory:");
@@ -80,18 +80,38 @@ test("export without notes leaves them out", async () => {
   assert.equal((await exportAll(a.call, false)).json.dishes[0].note, null);
 });
 
-test("preview reports existing titles regardless of case and writes nothing", async () => {
+test("linkKey ignores fragment, trailing slash, host case, tracking parameters and parameter order", () => {
+  assert.equal(linkKey("https://WWW.Example.org/reel/ABC/?igsh=xyz#top"), linkKey("https://www.example.org/reel/ABC"));
+  assert.equal(linkKey("https://x.de/r?id=1&utm_source=wa&fbclid=1"), linkKey("https://x.de/r?id=1"));
+  assert.equal(linkKey("https://x.de/r?b=2&id=1"), linkKey("https://x.de/r?id=1&b=2"));
+  assert.notEqual(linkKey("https://x.de/r?id=1"), linkKey("https://x.de/r?id=2"));
+});
+
+test("preview matches by link, without a link by title (any case), and writes nothing", async () => {
   const { call } = setup();
-  const own = (await call("POST", "/api/dishes", { title: "CURRY" })).json;
-  const r = await call("POST", "/api/dishes/import/preview", file([shared(), shared({ title: "Neu" })]));
-  assert.deepEqual(r.json.dishes[0].exists, { id: own.id, title: "CURRY" });
-  assert.equal(r.json.dishes[1].exists, null);
-  assert.equal((await call("GET", "/api/dishes")).json.length, 1);
+  const own = (await call("POST", "/api/dishes", { title: "Mein Curry", url: "https://Example.org/curry/" })).json;
+  const plain = (await call("POST", "/api/dishes", { title: "BROT" })).json;
+  await call("POST", "/api/dishes", { title: "Suppe", url: "https://example.org/suppe" });
+  const r = await call(
+    "POST",
+    "/api/dishes/import/preview",
+    file([shared({ url: "https://example.org/curry?igsh=abc" }), shared({ title: "Brot", url: null }), shared({ title: "Suppe", url: "https://other.org/suppe" }), shared({ title: "Neu", url: "https://example.org/neu" })]),
+  );
+  assert.deepEqual(
+    r.json.dishes.map((d: any) => [d.exists, d.title_taken]),
+    [
+      [{ id: own.id, title: "Mein Curry" }, false],
+      [{ id: plain.id, title: "BROT" }, false],
+      [null, true], // same title, another link: another recipe
+      [null, false],
+    ],
+  );
+  assert.equal((await call("GET", "/api/dishes")).json.length, 3);
 });
 
 test("replace merges tags, keeps the own image, an own note when the file has none, plan entries; clears cook ticks", async () => {
   const { call, db } = setup();
-  const own = (await call("POST", "/api/dishes", { title: "Curry", note: "meine Notiz", tags: ["Schnell"], recipe })).json;
+  const own = (await call("POST", "/api/dishes", { title: "Unser Curry", url: "https://example.org/curry/", note: "meine Notiz", tags: ["Schnell"], recipe })).json;
   db.prepare("UPDATE dish SET image = 'abc.jpg' WHERE id = ?").run(own.id);
   const p = (await call("POST", "/api/plans", { start_date: "2026-11-28", end_date: "2026-12-04" })).json;
   const e = (await call("POST", `/api/plans/${p.id}/entries`, { dish_id: own.id })).json;
@@ -103,7 +123,8 @@ test("replace merges tags, keeps the own image, an own note when the file has no
   assert.equal(r.json.replaced, 1);
   assert.deepEqual(r.json.needs_image, []);
   const d = (await call("GET", "/api/dishes?q=Curry")).json[0];
-  assert.deepEqual([d.note, d.image, d.url, d.tags], ["meine Notiz", "abc.jpg", "https://example.org/curry", ["Asiatisch", "Schnell"]]);
+  // matched by the link: the own title and link stay
+  assert.deepEqual([d.title, d.note, d.image, d.url, d.tags], ["Unser Curry", "meine Notiz", "abc.jpg", "https://example.org/curry/", ["Asiatisch", "Schnell"]]);
   const rec = (await call("GET", `/api/dishes/${own.id}/recipe`)).json;
   assert.deepEqual([rec.servings, rec.ingredients[0].name], [2, "Lauch"]);
   const plan = (await call("GET", `/api/plans/${p.id}`)).json;
@@ -113,11 +134,19 @@ test("replace merges tags, keeps the own image, an own note when the file has no
 
 test("tags: false imports no tags and leaves own ones on replace", async () => {
   const { call } = setup();
-  await call("POST", "/api/dishes", { title: "Curry", tags: ["Schnell"] });
+  await call("POST", "/api/dishes", { title: "Curry", url: "https://example.org/curry", tags: ["Schnell"] });
   const actions = [{ index: 0, action: "replace" }, { index: 1, action: "new" }];
-  await call("POST", "/api/dishes/import", { file: file([shared(), shared({ title: "Neu" })]), tags: false, actions });
+  await call("POST", "/api/dishes/import", { file: file([shared(), shared({ title: "Neu", url: "https://example.org/neu" })]), tags: false, actions });
   const all = (await call("GET", "/api/dishes")).json;
   assert.deepEqual(all.map((d: any) => [d.title, d.tags]), [["Curry", ["Schnell"]], ["Neu", []]]);
+});
+
+test("replace without a matching dish (other link) -> 404, nothing written", async () => {
+  const { call } = setup();
+  await call("POST", "/api/dishes", { title: "Curry", url: "https://other.org/curry", note: "alt" });
+  const r = await call("POST", "/api/dishes/import", { file: file([shared()]), tags: true, actions: [{ index: 0, action: "replace" }] });
+  assert.equal(r.status, 404);
+  assert.equal((await call("GET", "/api/dishes")).json[0].note, "alt");
 });
 
 test("new under another title; a taken title rolls back the whole import (409)", async () => {

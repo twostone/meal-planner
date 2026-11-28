@@ -125,6 +125,25 @@ export type ImportItem = { dish: SharedDish; action: "new" | "replace"; title?: 
 // needs_image: dishes with a link and no image; the import sheet fetches their pictures afterwards.
 export type ImportResult = { created: number; replaced: number; needs_image: { id: number; url: string }[] };
 
+// Query parameters that only track who shared a link; they must not make the same page look like another one.
+const TRACKING_PARAMS = new Set(["igsh", "igshid", "fbclid", "gclid", "si"]);
+const TRACKING_PREFIX = "utm_";
+
+// The form two links are compared in: no fragment, no trailing slash, no tracking parameters, the rest sorted (the
+// host is lower case already by URL). Other parameters count: some sites keep the recipe id in the query.
+export function linkKey(url: string): string {
+  let u: URL;
+  try {
+    u = new URL(url.trim());
+  } catch {
+    return url.trim();
+  }
+  const params = [...u.searchParams].filter(([k]) => !TRACKING_PARAMS.has(k.toLowerCase()) && !k.toLowerCase().startsWith(TRACKING_PREFIX));
+  params.sort(([a, x], [b, y]) => (a === b ? x.localeCompare(y) : a.localeCompare(b)));
+  const query = new URLSearchParams(params).toString();
+  return `${u.protocol}//${u.host}${u.pathname.replace(/\/+$/, "")}${query ? `?${query}` : ""}`;
+}
+
 export class NotFoundError extends Error {}
 export class ConflictError extends Error {}
 // A request the data model cannot carry out as asked (answered with 400), e.g. renaming to the same name.
@@ -229,6 +248,14 @@ export function createRepo(db: DatabaseSync) {
 
   // Titles are unique regardless of case (ASCII only: SQLite's NOCASE).
   const findDishByTitle = (title: string) => one<DishRow>(`SELECT ${DISH_COLS} FROM dish WHERE title = ? COLLATE NOCASE`, title.trim());
+
+  // An imported dish is the same as one in the catalog when it has the same link (compared by linkKey), or, without a
+  // link, the same title. Titles alone say little: two households may call different recipes "Curry".
+  function findMatch(dish: { title: string; url: string | null }): DishRow | undefined {
+    if (!dish.url) return findDishByTitle(dish.title);
+    const key = linkKey(dish.url);
+    return all<DishRow>(`SELECT ${DISH_COLS} FROM dish WHERE url IS NOT NULL ORDER BY id`).find((d) => linkKey(d.url!) === key);
+  }
 
   function getDish(id: number): Dish {
     const d = one<DishRow>(`SELECT ${DISH_COLS} FROM dish WHERE id = ?`, id);
@@ -594,6 +621,7 @@ export function createRepo(db: DatabaseSync) {
     getEntry,
 
     findDishByTitle,
+    findMatch,
 
     // Dishes as written to a share file: everything but the image (another instance has no use for a file name).
     exportDishes(ids: number[], withNotes: boolean): SharedDish[] {
@@ -613,8 +641,9 @@ export function createRepo(db: DatabaseSync) {
       });
     },
 
-    // All or nothing in one transaction. "replace" keeps the own image, and keeps an own link, note, source text or
-    // recipe where the file has none; tags are merged. A title that exists for "new" -> ConflictError, nothing written.
+    // All or nothing in one transaction. "replace" updates the dish findMatch finds; it keeps its own title, link and
+    // image, and an own note, source text or recipe where the file has none; tags are merged.
+    // A title that exists for "new" -> ConflictError, nothing written.
     importDishes(items: ImportItem[], withTags: boolean): ImportResult {
       return transaction(db, () => {
         const result: ImportResult = { created: 0, replaced: 0, needs_image: [] };
@@ -627,9 +656,9 @@ export function createRepo(db: DatabaseSync) {
             result.created++;
             continue;
           }
-          const existing = findDishByTitle(dish.title);
+          const existing = findMatch(dish);
           if (!existing) throw new NotFoundError("dish");
-          db.prepare("UPDATE dish SET url = COALESCE(?, url), note = COALESCE(?, note) WHERE id = ?").run(dish.url, dish.note, existing.id);
+          if (dish.note) db.prepare("UPDATE dish SET note = ? WHERE id = ?").run(dish.note, existing.id);
           if (dish.source_text) self.setSource(existing.id, dish.source_text, dish.source_truncated);
           if (tags.length) setTags(existing.id, [...getDish(existing.id).tags, ...tags]);
           if (dish.recipe) writeRecipe(existing.id, dish.recipe);

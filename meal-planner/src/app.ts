@@ -365,12 +365,14 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
   });
   app.post("/api/dishes/import/preview", shareLimit, zValidator("json", shareFile, shareCheck([])), (c) => {
     const dishes = c.req.valid("json").dishes.map((d, index) => {
-      const existing = repo.findDishByTitle(d.title);
+      const existing = repo.findMatch({ title: d.title, url: d.url ?? null });
       return {
         index,
         title: d.title,
         ingredients: d.recipe?.ingredients.length ?? 0,
         exists: existing ? { id: existing.id, title: existing.title } : null,
+        // Another recipe has this title already: it can only come in under another one.
+        title_taken: !existing && !!repo.findDishByTitle(d.title),
       };
     });
     return c.json({ dishes });

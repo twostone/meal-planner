@@ -8,7 +8,8 @@
   let { file }: { file: unknown } = $props();
 
   type Choice = "skip" | "replace" | "new";
-  type Row = ImportPreview["dishes"][number] & { choice: Choice; title: string; error: string | null };
+  // title: the one to create the dish under (editable); fileTitle: as it stands in the file.
+  type Row = ImportPreview["dishes"][number] & { choice: Choice; fileTitle: string; error: string | null };
 
   let rows = $state<Row[] | null>(null);
   let withTags = $state(true);
@@ -34,9 +35,10 @@
       const preview = await api.previewImport(file);
       const taken = new Set([...app.dishes.map((d) => keyOf(d.title)), ...preview.dishes.map((d) => keyOf(d.title))]);
       rows = preview.dishes.map((d) => {
-        const title = d.exists ? freeTitle(d.title, taken) : d.title;
+        // A match keeps its title only for "skip"/"replace"; a taken title (other recipe, other link) needs another one.
+        const title = d.exists || d.title_taken ? freeTitle(d.title, taken) : d.title;
         taken.add(keyOf(title));
-        return { ...d, choice: d.exists ? "skip" : "new", title, error: null };
+        return { ...d, choice: d.exists ? "skip" : "new", title, fileTitle: d.title, error: null };
       });
     } catch (e) {
       showError(e);
@@ -118,7 +120,10 @@
           {#if r.exists}
             <div class="import-head">
               <strong>{r.exists.title}</strong>
-              <small>Gibt es schon · {r.ingredients === 1 ? "1 Zutat" : `${r.ingredients} Zutaten`}</small>
+              <small>
+                {keyOf(r.exists.title) === keyOf(r.fileTitle) ? "Gibt es schon" : `Gibt es schon als „${r.exists.title}“ (gleicher Link)`}
+                · {r.ingredients === 1 ? "1 Zutat" : `${r.ingredients} Zutaten`}
+              </small>
             </div>
             <label class="import-choice">
               <span class="visually-hidden">Was tun mit {r.exists.title}?</span>
@@ -134,14 +139,21 @@
                 <input type="text" maxlength="200" autocomplete="off" bind:value={r.title} oninput={edit} />
               </label>
             {:else if r.choice === "replace"}
-              <p class="field-hint">Rezept, Link und Originaltext kommen aus der Datei, dein Bild bleibt, Kategorien kommen dazu.</p>
+              <p class="field-hint">Rezept und Originaltext kommen aus der Datei. Dein Titel, Link und Bild bleiben, Kategorien kommen dazu.</p>
             {/if}
           {:else}
             <label class="check-row">
               <input type="checkbox" checked={r.choice === "new"} onchange={(e) => ((r.choice = e.currentTarget.checked ? "new" : "skip"), edit())} />
-              <span>{r.title}</span>
+              <span>{r.title_taken ? "Neues Gericht" : r.title}</span>
               <small>{r.ingredients === 1 ? "1 Zutat" : `${r.ingredients} Zutaten`}</small>
             </label>
+            {#if r.title_taken && r.choice === "new"}
+              <label>
+                Titel
+                <input type="text" maxlength="200" autocomplete="off" bind:value={r.title} oninput={edit} />
+              </label>
+              <p class="field-hint">Ein anderes Rezept mit diesem Titel gibt es schon (anderer Link).</p>
+            {/if}
           {/if}
           {#if r.error}<p class="field-hint error">{r.error}</p>{/if}
         </li>
