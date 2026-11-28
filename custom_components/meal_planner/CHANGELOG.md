@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/twostone/meal-planner/compare/integration-v1.3.1...integration-v1.4.0) (2026-11-28)
+
+
+### Neu
+
+* **karte:** neue Optik mit Fortschrittsring, kompakte Variante ([#110](https://github.com/twostone/meal-planner/issues/110)) ([1c0894c](https://github.com/twostone/meal-planner/commit/1c0894cb071b3df213444de002babb96f1d21fd6))
+
 ## [1.3.1](https://github.com/twostone/meal-planner/compare/integration-v1.3.0...integration-v1.3.1) (2026-10-13)
 
 
