@@ -141,17 +141,42 @@ function recipeSteps(v: unknown, depth = 0): string[] {
   return [];
 }
 
+// schema.org has no ingredient groups, so WP Recipe Maker keeps its headings ("Für den Teig:") in the HTML only.
+// Returns one entry per group in page order: its heading (null if none) and how many ingredients it holds.
+// shortcut: WP Recipe Maker markup only, add other recipe plugins when a page needs them.
+const WPRM_INGREDIENTS =
+  /class="wprm-recipe-ingredient-group"|class="[^"]*\bwprm-recipe-ingredient-group-name\b[^"]*"[^>]*>([^<]*)<|<li\b[^>]*\bclass="wprm-recipe-ingredient["\s]/g;
+function ingredientGroups(html: string): { name: string | null; count: number }[] {
+  const groups: { name: string | null; count: number }[] = [];
+  for (const m of html.matchAll(WPRM_INGREDIENTS)) {
+    if (m[0].startsWith("<li")) {
+      if (groups.length === 0) groups.push({ name: null, count: 0 });
+      groups.at(-1)!.count++;
+    } else if (m[1] === undefined) groups.push({ name: null, count: 0 });
+    else if (groups.length > 0) groups.at(-1)!.name = oneLine(m[1]) || null;
+  }
+  return groups;
+}
+
+// The headings go in front of their lines, but only when the groups hold exactly the JSON-LD lines; on any doubt
+// (a second recipe on the page, other markup) the list stays flat.
+function withGroupHeadings(ingredients: string[], groups: { name: string | null; count: number }[]): string[] {
+  if (!groups.some((g) => g.name) || groups.reduce((n, g) => n + g.count, 0) !== ingredients.length) return ingredients;
+  let i = 0;
+  return groups.flatMap((g) => [...(g.name ? [g.name] : []), ...ingredients.slice(i, (i += g.count))]);
+}
+
 // The recipe as plain text, so it survives the page: ingredient lines, a blank line, the steps.
 // Sources: a schema.org recipe, else an Instagram caption (og:title is `<Name> auf Instagram: "<caption>"`,
 // the closing quote is missing when Instagram cut the caption). No LLM, nothing is interpreted.
-function extractSource(recipe: Record<string, unknown> | null, ogTitle: string | undefined): Source | null {
+function extractSource(recipe: Record<string, unknown> | null, ogTitle: string | undefined, html: string): Source | null {
   let text = "";
   let truncated = false;
   if (recipe) {
     const raw = recipe.recipeIngredient ?? recipe.recipeIngredients;
     const ingredients = (Array.isArray(raw) ? raw : []).filter((x): x is string => typeof x === "string").map(oneLine).filter(Boolean);
     const steps = recipeSteps(recipe.recipeInstructions);
-    text = [ingredients.join("\n"), steps.join("\n")].filter(Boolean).join("\n\n");
+    text = [withGroupHeadings(ingredients, ingredientGroups(html)).join("\n"), steps.join("\n")].filter(Boolean).join("\n\n");
   }
   if (!text && ogTitle) {
     const decoded = decodeEntities(ogTitle).replace(/\r\n?/g, "\n");
@@ -205,7 +230,7 @@ function analyze(html: string, base: URL): Parsed & { titleSuggestions: string[]
       firstImage(recipe?.image),
     base,
   );
-  return { title, imageUrl, titleSuggestions, source: extractSource(recipe, meta.get("og:title")) };
+  return { title, imageUrl, titleSuggestions, source: extractSource(recipe, meta.get("og:title"), html) };
 }
 
 export function parsePreview(html: string, base: URL): Parsed {

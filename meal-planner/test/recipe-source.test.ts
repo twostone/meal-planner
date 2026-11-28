@@ -57,6 +57,20 @@ test("source: schema.org recipe gives ingredient lines, a blank line, then the s
   assert.equal((await preview(ld({}) + og('Kim auf Instagram: &quot;Eier braten&quot;'))).sourceText, "Eier braten");
 });
 
+test("source: WP Recipe Maker ingredient groups put their headings in front of the JSON-LD lines", async () => {
+  const ld = `<script type="application/ld+json">${JSON.stringify({ "@type": "Recipe", name: "Boller", recipeIngredient: ["500 g Mehl", "1 Ei", "3 Eigelb", "70 g Butter"] })}</script>`;
+  const li = (t: string) => `<li class="wprm-recipe-ingredient" style="x"><span class="wprm-recipe-ingredient-name">${t}</span></li>`;
+  const group = (name: string | null, items: string[]) =>
+    `<div class="wprm-recipe-ingredient-group">${name === null ? "" : `<div class="wprm-recipe-group-name wprm-recipe-ingredient-group-name wprm-block-text-bold">${name}</div>`}<ul class="wprm-recipe-ingredients">${items.map(li).join("")}</ul></div>`;
+  // the cook-mode copy of the list uses other classes and must not count twice
+  const cookMode = `<div class="wprm-cook-mode-ingredient-group"><div class="wprm-cook-mode-ingredient-group-name">Teig:</div><li class="wprm-cook-mode-ingredient">Mehl</li></div>`;
+  const html = ld + group(null, ["Mehl", "Ei"]) + group("F&uuml;r den Pudding:", ["Eigelb"]) + group("Au&szlig;erdem:", ["Butter"]) + cookMode;
+  assert.equal((await preview(html)).sourceText, "500 g Mehl\n1 Ei\nFür den Pudding:\n3 Eigelb\nAußerdem:\n70 g Butter");
+  // groups that do not hold exactly the JSON-LD lines: the list stays flat
+  const mismatch = ld + group("Teig:", ["Mehl", "Ei"]) + group("Pudding:", ["Eigelb"]);
+  assert.equal((await preview(mismatch)).sourceText, "500 g Mehl\n1 Ei\n3 Eigelb\n70 g Butter");
+});
+
 test("source: very long texts are cut and marked", async () => {
   const r = await preview(og(`Kim auf Instagram: &quot;${"a ".repeat(MAX_SOURCE_CHARS)}&quot;`));
   assert.equal(r.sourceText!.length, MAX_SOURCE_CHARS);
