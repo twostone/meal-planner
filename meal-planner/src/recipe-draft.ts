@@ -1,4 +1,4 @@
-import { UNITS } from "./repo.ts";
+import { STEP_HEADING, UNITS } from "./repo.ts";
 import { clip } from "./text.ts";
 import { convert, foreignUnit } from "./units.ts";
 
@@ -51,11 +51,18 @@ const UNIT_BY_LOWER = new Map(UNITS.map((u) => [u.toLowerCase(), u]));
 // "1. Zwiebel schneiden", "1️⃣ Zwiebel", "- Zwiebel" -> "Zwiebel schneiden"
 const STEP_PREFIX = /^\s*(?:\d{1,2}\s*[.)]|\d️?⃣|[•\-–*])\s*/u;
 
+// "##Für den Teig:" -> "## Für den Teig"; a heading without text is dropped.
+const heading = (l: string) => {
+  const name = l.replace(STEP_HEADING, "").replace(/:\s*$/, "").trim();
+  return name ? `## ${name}` : "";
+};
+
 function cleanInstructions(v: unknown): string | null {
   if (typeof v !== "string") return null;
   const lines = v
     .split(/\r?\n/)
-    .map((l) => l.replace(STEP_PREFIX, "").replace(/\s+/g, " ").trim())
+    .map((l) => l.replace(/\s+/g, " ").trim())
+    .map((l) => (STEP_HEADING.test(l) ? heading(l) : l.replace(STEP_PREFIX, "").trim()))
     .filter(Boolean);
   const text = clip(lines.join("\n"), MAX_INSTRUCTIONS).trim();
   return text || null;

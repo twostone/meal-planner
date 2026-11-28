@@ -51,7 +51,21 @@ export function groupBySection(list: Ingredient[]): { section: string | null; it
   return out;
 }
 
-// The steps of a recipe: non-empty lines. The server splits the same way (stepLines in repo.ts), so the step
-// numbers ticked in cook mode agree on both sides.
-export const stepLines = (instructions: string | null): string[] =>
-  (instructions ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
+const STEP_HEADING = /^##\s*/;
+
+// The steps of a recipe in sections: a line "## Heading" starts one and is no step. idx counts the steps across all
+// sections, the same way the server does (stepLines in repo.ts), so the steps ticked in cook mode agree on both sides.
+export function stepGroups(instructions: string | null): { section: string | null; steps: { text: string; idx: number }[] }[] {
+  const out: { section: string | null; steps: { text: string; idx: number }[] }[] = [];
+  let idx = 0;
+  for (const line of (instructions ?? "").split("\n").map((l) => l.trim()).filter(Boolean)) {
+    if (STEP_HEADING.test(line)) out.push({ section: line.replace(STEP_HEADING, "") || null, steps: [] });
+    else {
+      if (out.length === 0) out.push({ section: null, steps: [] });
+      out.at(-1)!.steps.push({ text: line, idx: idx++ });
+    }
+  }
+  return out;
+}
+
+export const stepLines = (instructions: string | null): string[] => stepGroups(instructions).flatMap((g) => g.steps.map((s) => s.text));

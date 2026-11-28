@@ -74,7 +74,9 @@ Regeln:
   Jede Zutatenzeile übernehmen. Nennt eine Zeile mehrere Zutaten ("Salz & Pfeffer", "Salz, Pfeffer und Oregano"),
   jede Zutat einzeln angeben, alle mit derselben Originalzeile als raw; amount und unit dann null, außer die Menge
   gehört eindeutig zu einer Zutat. "oder" nennt Alternativen ("Butter oder Margarine"): nicht aufteilen.
-- instructions: ein Schritt pro Zeile, auf Deutsch, inhaltlich vollständig. Nichts ergänzen, Lücken nicht füllen.`;
+- instructions: ein Schritt pro Zeile, auf Deutsch, inhaltlich vollständig. Nichts ergänzen, Lücken nicht füllen.
+  Hat die Zubereitung Zwischenüberschriften ("Für den Teig:"), jede als eigene Zeile "## Überschrift" vor ihre Schritte,
+  auf Deutsch und ohne Doppelpunkt. Keine Überschriften erfinden.`;
 
 // How many known ingredient names go into the prompt, and how long that list may get at most.
 export const MAX_KNOWN_NAMES = 300;

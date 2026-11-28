@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fmtAmount, groupBySection, ingredientText, parseAmount, stepLines } from "../web/src/recipe.ts";
+import { fmtAmount, groupBySection, ingredientText, parseAmount, stepGroups, stepLines } from "../web/src/recipe.ts";
 
 test("parseAmount: comma, dot, range, empty, garbage", () => {
   assert.deepEqual(parseAmount("1,5"), { amount: 1.5, amount_max: null });
@@ -23,6 +23,18 @@ test("groupBySection groups neighbours with the same section", () => {
   const mk = (section: string | null, name: string) => ({ section, amount: null, amount_max: null, unit: null, name, note: null, raw: name });
   const g = groupBySection([mk(null, "a"), mk(null, "b"), mk("Dip", "c"), mk(null, "d")]);
   assert.deepEqual(g.map((x) => [x.section, x.items.map((i) => i.name)]), [[null, ["a", "b"]], ["Dip", ["c"]], [null, ["d"]]]);
+});
+
+test("stepGroups: a line '## Heading' starts a section and is no step; idx counts steps across sections", () => {
+  const text = "Ofen an.\n## Teig\nKneten.\n  ##Füllung  \nRühren.\nFüllen.\n## \nBacken.";
+  assert.deepEqual(stepGroups(text), [
+    { section: null, steps: [{ text: "Ofen an.", idx: 0 }] },
+    { section: "Teig", steps: [{ text: "Kneten.", idx: 1 }] },
+    { section: "Füllung", steps: [{ text: "Rühren.", idx: 2 }, { text: "Füllen.", idx: 3 }] },
+    { section: null, steps: [{ text: "Backen.", idx: 4 }] },
+  ]);
+  assert.deepEqual(stepLines(text), ["Ofen an.", "Kneten.", "Rühren.", "Füllen.", "Backen."]);
+  assert.deepEqual(stepGroups("## Nur Überschrift"), [{ section: "Nur Überschrift", steps: [] }]);
 });
 
 test("stepLines: non-empty trimmed lines (the server splits the same way)", () => {

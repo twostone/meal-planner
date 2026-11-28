@@ -52,7 +52,7 @@
 
 <label>
   Zubereitung
-  <textarea rows="6" maxlength="10000" bind:value={form.instructions} placeholder="Ein Schritt pro Zeile"></textarea>
+  <textarea rows="6" maxlength="10000" bind:value={form.instructions} placeholder="Ein Schritt pro Zeile, Abschnitt mit ## Überschrift"></textarea>
 </label>
 {#if sourceText}
   <details class="source" open={form.draft}>

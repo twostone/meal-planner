@@ -122,7 +122,7 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   „Offene Gerichte verschieben (n)“ für die angezeigte Liste, mit den Titeln vor dem Bestätigen. Bewusst nicht:
   automatisches Verschieben, einzelne Gerichte beim Sammelverschieben abwählen, neue Liste beim Verschieben anlegen.
 - **Rezept** (Plan: `docs/plan-rezepte.md`, Stufe 1 bis 3, 5 und 7 gebaut): gehört zum Gericht, nicht zum Listeneintrag. `dish.servings`
-  (1–50) und `dish.instructions` (ein Schritt pro Zeile, höchstens 10 000 Zeichen) plus `dish_ingredient` (Reihenfolge `pos`,
+  (1–50) und `dish.instructions` (ein Schritt pro Zeile, eine Zeile `## Überschrift` beginnt einen Abschnitt und zählt nicht als Schritt, höchstens 10 000 Zeichen) plus `dish_ingredient` (Reihenfolge `pos`,
   `section`, `amount`/`amount_max`, `unit`, `name`, `plural`, `note`, `prep`, `raw`). `name` ist die Grundform (Singular),
   `plural` die Mehrzahl (höchstens 80 Zeichen, fehlt im PUT = keine). `note` ist die **Sorte** (kaufrelevant: rot,
   TK, Macadamia), `prep` die **Zubereitung** (gewürfelt, zimmerwarm, für den Einkauf egal); beide höchstens 200 Zeichen,
@@ -157,7 +157,9 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   kann (`aiText`, ein überschreibbares `$derived`, nie gespeichert; abgeglichen wird gegen den gesendeten Text). Die frühere
   Route am Gericht (`/api/dishes/:id/recipe/draft`) ist dafür entfallen. Die LLM-Antwort gilt als Nutzereingabe
   (`buildDraft` in `recipe-draft.ts`): Schema, Grenzen, Einheitenliste (Unbekanntes -> `unit` null, Rest in `note`),
-  Aufräumen (Nummerierung der Schritte, `:` am Abschnittsende). Abgleich mit der Quelle (ohne Leerzeichen, Aufzählungszeichen,
+  Aufräumen (Nummerierung der Schritte, `:` am Abschnittsende; Zwischenüberschriften der Zubereitung gibt das Modell als
+  `## Überschrift` zurück, `buildDraft` streicht den Doppelpunkt). Das MCP-Tool liefert und nimmt die Überschriften als
+  Einträge `## …` in `steps`, damit `get_recipe` -> `set_recipe` sie behält. Abgleich mit der Quelle (ohne Leerzeichen, Aufzählungszeichen,
   Emojis, Doppelpunkte, Groß-/Kleinschreibung bleibt): `raw` und `section_raw` (die Zwischenüberschrift im Original, `section` ist übersetzt) müssen wörtlich im Text stehen, sonst
   `verified: false` (im Editor rot markiert, bis man die Zeile ändert); `servings` gilt nur mit `servings_quote`, die im Text
   steht, und mit mindestens einer Zutat. Weggelassene Zeilen lassen sich nicht automatisch prüfen: Der Editor zeigt den
@@ -215,8 +217,8 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   Kochmodus). Keine größere Schrift, kein Sammelreiter, keine Timer. `GET /api/plans/:id/cook` liefert beim Öffnen alle Rezepte
   samt Haken und Listen-Notiz in einem Abruf (Wechsel zwischen Reitern lädt nichts). **Haken sind zwischen Handys geteilt:**
   Tabelle `cook_check` (`entry_id`, `kind` `ingredient`/`step`, `idx`), gehört zum Listeneintrag, also beginnt jede Liste bei
-  null; Index = Position der Zutat bzw. Nummer des Schritts (nicht leere Zeilen, `stepLines` in `repo.ts` und `recipe.ts`,
-  beide müssen gleich zählen). `PUT /api/entries/:id/checks {kind, idx, checked}` **setzt oder entfernt** (kein Umschalten:
+  null; Index = Position der Zutat bzw. Nummer des Schritts (nicht leere Zeilen ohne `## `-Überschriften, `stepLines` in
+  `repo.ts` und `recipe.ts`, beide müssen gleich zählen; angezeigt wird je Abschnitt ab 1). `PUT /api/entries/:id/checks {kind, idx, checked}` **setzt oder entfernt** (kein Umschalten:
   zwei Handys heben sich so nicht gegenseitig auf; idempotent); ein neuer Haken muss auf eine vorhandene Zutat/einen Schritt
   zeigen (sonst 400), kein HA-Event. `PUT …/recipe` löscht die Haken aller Einträge des Gerichts (die Indizes passten sonst
   nicht mehr). **Abgleich durch Abfragen:** solange der Kochmodus offen und die Seite sichtbar ist, holt jedes Handy alle

@@ -2,7 +2,7 @@
   import { onDestroy, onMount, tick } from "svelte";
   import * as api from "./api";
   import Icon from "./Icon.svelte";
-  import { ingredientExtra, ingredientText, stepLines } from "./recipe";
+  import { ingredientExtra, ingredientText, stepGroups, stepLines } from "./recipe";
   import { app, closeSheet, finishEntry, showError } from "./store.svelte";
   import type { CookEntry, Ingredient } from "./types";
 
@@ -208,17 +208,22 @@
 
         {#if list.length}
           <h3>Zubereitung</h3>
-          <ul class="cook-list">
-            {#each list as s, idx (idx)}
-              {@const on = !!checked[key(e.entry_id, "step", idx)]}
-              <li>
-                <button type="button" class="tick" aria-pressed={on} onclick={() => tickItem(e, "step", idx)}>
-                  <span class="box">{#if on}<Icon name="check" size={16} />{/if}</span>
-                  <span class="tick-text"><b>{idx + 1}.</b> {s}</span>
-                </button>
-              </li>
-            {/each}
-          </ul>
+          {#each stepGroups(r.instructions) as g, gi (gi)}
+            {#if g.section}<h4>{g.section}</h4>{/if}
+            {#if g.steps.length}
+              <ul class="cook-list">
+                {#each g.steps as { text, idx }, si (idx)}
+                  {@const on = !!checked[key(e.entry_id, "step", idx)]}
+                  <li>
+                    <button type="button" class="tick" aria-pressed={on} onclick={() => tickItem(e, "step", idx)}>
+                      <span class="box">{#if on}<Icon name="check" size={16} />{/if}</span>
+                      <span class="tick-text"><b>{si + 1}.</b> {text}</span>
+                    </button>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          {/each}
         {/if}
 
         {#if !r.ingredients.length && !list.length}

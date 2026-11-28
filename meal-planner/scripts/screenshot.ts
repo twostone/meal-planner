@@ -61,7 +61,7 @@ async function seed(base: string): Promise<{ pastaDishId: number }> {
   const pastaDishId = dishes.find((d) => d.title === "Spaghetti Carbonara")!.id;
   await call(base, "PUT", `dishes/${pastaDishId}/recipe`, {
     servings: 4,
-    instructions: "Wasser salzen und die Spaghetti kochen.\nSpeck in einer Pfanne auslassen.\nEier mit Käse verrühren und alles mischen.",
+    instructions: "## Nudeln\nWasser salzen und die Spaghetti kochen.\n## Soße\nSpeck in einer Pfanne auslassen.\nEier mit Käse verrühren und alles mischen.",
     ingredients: [
       { section: null, amount: 400, amount_max: null, unit: "g", name: "Spaghetti", note: null },
       { section: null, amount: 150, amount_max: null, unit: "g", name: "Speck", note: "durchwachsen", prep: "gewürfelt" },
