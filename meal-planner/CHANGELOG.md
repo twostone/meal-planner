@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.24.0](https://github.com/twostone/meal-planner/compare/v0.23.0...v0.24.0) (2026-11-28)
+
+
+### Neu
+
+* **rezept:** Abschnitte in der Zubereitung erkennen und anzeigen ([#114](https://github.com/twostone/meal-planner/issues/114)) ([3e1d746](https://github.com/twostone/meal-planner/commit/3e1d74699a1a88995f26614dbaad8ca0f94dc57b))
+
 ## [0.23.0](https://github.com/twostone/meal-planner/compare/v0.22.0...v0.23.0) (2026-11-28)
 
 
