@@ -98,6 +98,9 @@ test("entries without a name are dropped, text is limited, at most 60 ingredient
 test("steps: numbering, keycap emojis and empty lines are removed", () => {
   const d = buildDraft(raw({ instructions: "1. Zwiebel schneiden\n\n2️⃣ Alles anbraten\n- Servieren\n  \n3) Essen" }), SOURCE);
   assert.equal(d.instructions, "Zwiebel schneiden\nAlles anbraten\nServieren\nEssen");
+  // section headings: "## " kept, colon dropped, empty heading dropped, a step number after it still stripped
+  const h = buildDraft(raw({ instructions: "##Für den Teig:\n1. Kneten\n##   \n## Glasur\n2) Glasieren" }), SOURCE);
+  assert.equal(h.instructions, "## Für den Teig\nKneten\n## Glasur\nGlasieren");
   assert.equal(buildDraft(raw({ instructions: "" }), SOURCE).instructions, null);
   assert.equal(buildDraft(raw({ instructions: undefined }), SOURCE).instructions, null);
 });

@@ -83,9 +83,12 @@ export type CookEntry = {
   checks: Checks;
 };
 
-// The steps of a recipe: non-empty lines. The frontend splits the same way, so step numbers agree.
-export const stepLines = (instructions: string | null): string[] =>
+// The lines of the instructions: non-empty, trimmed. A line "## Heading" starts a section and is no step.
+export const instructionLines = (instructions: string | null): string[] =>
   (instructions ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
+export const STEP_HEADING = /^##\s*/;
+// The steps without the section headings. The frontend splits the same way, so step numbers (cook mode ticks) agree.
+export const stepLines = (instructions: string | null): string[] => instructionLines(instructions).filter((l) => !STEP_HEADING.test(l));
 
 // Plural endings the ingredient search tolerates: "zwiebeln" finds "Zwiebel", "eier" finds "Ei" (-n, -en, -e, -er, -s).
 export const MAX_PLURAL_SUFFIX = 2;

@@ -5,7 +5,7 @@ import { entryEvent, planUpdatedEvent, type HaEventInput, type HaUser } from "./
 import { localToday } from "./ha-state.ts";
 import { logger } from "./log.ts";
 import { MAX_INGREDIENTS } from "./recipe-draft.ts";
-import { ConflictError, NotFoundError, stepLines, UNITS, type Dish, type Entry, type Plan, type Repo } from "./repo.ts";
+import { ConflictError, NotFoundError, instructionLines, UNITS, type Dish, type Entry, type Plan, type Repo } from "./repo.ts";
 
 const log = logger("mcp");
 
@@ -107,7 +107,7 @@ const recipeOut = z.object({
   dish_id: z.number(),
   title: z.string(),
   servings: z.number().nullable(),
-  steps: z.array(z.string()),
+  steps: z.array(z.string()).describe('one step per item; an item "## Heading" starts a section of the steps'),
   ingredients: z.array(ingredientOut),
   source_text: z.string().nullable().optional().describe("the recipe as found at the link, unchanged (only on request)"),
 });
@@ -242,7 +242,7 @@ export function registerTools(server: McpServer, deps: McpDeps, user: HaUser | n
           dish_id,
           title: dish.title,
           servings: r.servings,
-          steps: stepLines(r.instructions),
+          steps: instructionLines(r.instructions),
           ingredients: r.ingredients.map(({ raw: _raw, ...i }) => i),
           ...(include_source ? { source_text: r.source_text } : {}),
         });
@@ -412,7 +412,7 @@ export function registerTools(server: McpServer, deps: McpDeps, user: HaUser | n
       inputSchema: z.object({
         dish_id: z.number().int().positive(),
         servings: z.number().int().nullable().optional().describe("1-50"),
-        steps: z.array(z.string()).default([]).describe("one step per item"),
+        steps: z.array(z.string()).default([]).describe('one step per item; an item "## Heading" starts a section of the steps'),
         ingredients: z.array(ingredientIn).default([]),
       }),
       outputSchema: recipeOut,
@@ -440,7 +440,7 @@ export function registerTools(server: McpServer, deps: McpDeps, user: HaUser | n
           dish_id,
           title: dish.title,
           servings: r.servings,
-          steps: stepLines(r.instructions),
+          steps: instructionLines(r.instructions),
           ingredients: r.ingredients.map(({ raw: _raw, ...i }) => i),
         });
       }),

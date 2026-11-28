@@ -148,7 +148,7 @@ test("recipe: set replaces everything, get returns steps and ingredients, source
   const set = await call(c, "set_recipe", {
     dish_id: dish.id,
     servings: 4,
-    steps: ["Zwiebeln würfeln", " ", "Alles kochen"],
+    steps: ["## Vorbereiten", "Zwiebeln würfeln", " ", "Alles kochen"],
     ingredients: [
       { amount: 2, name: "Zwiebel", plural: "Zwiebeln", note: "rot", prep: "gewürfelt" },
       { amount: 500, unit: "g", name: "Hackfleisch" },
@@ -156,7 +156,8 @@ test("recipe: set replaces everything, get returns steps and ingredients, source
     ],
   });
   assert.equal(set.isError, undefined);
-  assert.deepEqual(set.structuredContent!.steps, ["Zwiebeln würfeln", "Alles kochen"]);
+  // the heading stays in the list, so get -> set keeps the sections
+  assert.deepEqual(set.structuredContent!.steps, ["## Vorbereiten", "Zwiebeln würfeln", "Alles kochen"]);
   assert.equal(repo.getRecipe(dish.id).ingredients[1]!.raw, "500 g Hackfleisch");
 
   const got = (await call(c, "get_recipe", { dish_id: dish.id })).structuredContent!;

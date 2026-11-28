@@ -31,7 +31,8 @@ async function plan() {
   const salat = (await call("POST", `/api/plans/${p.id}/entries`, { title: "Salat" })).json;
   await call("PUT", `/api/dishes/${suppe.dish_id}/recipe`, {
     servings: 4,
-    instructions: "Schneiden.\n\n  Kochen.\nServieren.\n",
+    // the heading is no step: three steps, idx 0..2
+    instructions: "## Vorbereiten\nSchneiden.\n\n  Kochen.\nServieren.\n",
     ingredients: [ing("Möhre"), ing("Zwiebel")],
   });
   await call("PATCH", `/api/entries/${suppe.id}`, { note: "doppelte Portion" });
@@ -42,6 +43,7 @@ const put = (call: Awaited<ReturnType<typeof plan>>["call"], entry: number, kind
 
 test("stepLines: non-empty trimmed lines", () => {
   assert.deepEqual(stepLines("Schneiden.\n\n  Kochen.\nServieren.\n"), ["Schneiden.", "Kochen.", "Servieren."]);
+  assert.deepEqual(stepLines("## Teig\nKneten.\n##Glasur\nGlasieren."), ["Kneten.", "Glasieren."]);
   assert.deepEqual(stepLines(null), []);
 });
 

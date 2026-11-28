@@ -3,7 +3,7 @@
   import * as api from "./api";
   import Icon from "./Icon.svelte";
   import { domain } from "./util";
-  import { groupBySection, ingredientExtra, ingredientText, stepLines } from "./recipe";
+  import { groupBySection, ingredientExtra, ingredientText, stepGroups } from "./recipe";
   import { collectRecipe, formFrom, type RecipeForm } from "./recipe-form";
   import RecipeEditor from "./RecipeEditor.svelte";
   import Sheet from "./Sheet.svelte";
@@ -38,7 +38,7 @@
   // Structured part only: a recipe that has just the original text is still shown, not edited.
   const isEmpty = (r: Recipe) => r.servings === null && !r.instructions && r.ingredients.length === 0;
   const isBlank = (r: Recipe) => isEmpty(r) && !r.source_text;
-  const steps = $derived(stepLines(recipe?.instructions ?? null));
+  const stepSections = $derived(stepGroups(recipe?.instructions ?? null));
 
   onMount(async () => {
     try {
@@ -210,11 +210,16 @@
           </ul>
         {/each}
       {/if}
-      {#if steps.length}
+      {#if stepSections.length}
         <h3>Zubereitung</h3>
-        <ol>
-          {#each steps as s, si (si)}<li>{s}</li>{/each}
-        </ol>
+        {#each stepSections as g, gi (gi)}
+          {#if g.section}<h4>{g.section}</h4>{/if}
+          {#if g.steps.length}
+            <ol>
+              {#each g.steps as s (s.idx)}<li>{s.text}</li>{/each}
+            </ol>
+          {/if}
+        {/each}
       {/if}
       {#if recipe.source_text}
         <details class="source" open={isEmpty(recipe)}>
