@@ -51,6 +51,15 @@ dieselbe Liste.
   einzeln. Eine aufgeklappte Zutat zeigt die Gerichte, die sie verwenden; ein Tipp öffnet das Rezept. Zutaten bekommen bei Bedarf eine Kategorie (z. B. „Gewürz“); eine ganze Kategorie lässt sich als „haben wir
   immer“ markieren. „Umbenennen …“ ändert eine Zutat in allen Rezepten; heißt sie danach wie eine vorhandene („Knoblauchzehe“ ->
   „Knoblauch“), werden beide zusammengeführt.
+- Rezepte teilen: Im Katalog wählt man unter „Teilen …“ Gerichte aus (oder mit „Alle“ eine ganze Kategorie) und schickt
+  sie als Datei weiter, auf dem Handy über das Teilen-Menü (z. B. in einen Messenger), sonst als Download. Eine andere
+  Installation dieser App liest die Datei unter „Importieren …“ ein. Die Vorschau zeigt, was es dort schon gibt (gleicher Link,
+  bei Gerichten ohne Link gleicher Titel): überspringen, ersetzen oder unter anderem Titel anlegen. Ein gleicher Titel mit
+  anderem Link ist ein anderes Rezept und kommt als „Titel (2)“ dazu. Mit gehen Titel, Link, Kategorien, Notiz (abwählbar), Originaltext und Rezept,
+  kein Bild: Die Bilder holt die empfangende App danach selbst von den Links. Es ist eine Kopie, kein gemeinsamer Katalog;
+  spätere Änderungen wandern nicht von selbst. Das Dateiformat beschreibt [`docs/dish-export.schema.json`](docs/dish-export.schema.json)
+  (JSON Schema). Beide Seiten brauchen eine App-Version mit dieser Funktion; eine Datei aus einer neueren Version lehnt eine
+  ältere App ab.
 - Bedienung für das Handy ausgelegt, auch in der Home-Assistant-Companion-App.
 - Optional ein **MCP-Server** für KI-Assistenten (z. B. Claude): Listen lesen und bearbeiten, Gerichte und Rezepte pflegen,
   Anmeldung über Home Assistant. Siehe „MCP-Server (für Claude & Co.)“.
@@ -207,6 +216,9 @@ In der App-Konfiguration stellt `log_level` ein, wie viel geschrieben wird (`deb
   nicht möchte, richtet in Home Assistant keine AI-Task-Entität ein (oder entfernt sie): dann bleiben beide Funktionen aus.
 - Die Einkaufsliste geht nur auf Knopfdruck an die gewählte Todo-Liste in Home Assistant, bei Bring also über dessen
   Cloud-Dienst an Bring.
+- Eine geteilte Rezept-Datei enthält, was man auswählt, samt Notizen zum Gericht, wenn „Notizen mitschicken“ an ist.
+  Beim Import ruft die App die Links der importierten Gerichte ab, um deren Bilder zu holen (wie bei einem selbst
+  eingefügten Link).
 - Es gibt keine Nutzerverwaltung: Alle, die die App in Home Assistant öffnen dürfen, sehen und ändern dieselbe Liste.
 
 ## Entwicklung

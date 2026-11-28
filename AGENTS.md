@@ -61,9 +61,11 @@ meal-planner/            das Add-on (Docker-Build-Kontext)
   web/                   Frontend: Svelte 5 + Vite (Runes, TypeScript)
     src/IngredientsView.svelte  Reiter „Zutaten“ (Zutatenkatalog, Vorrat)
     src/IngredientSplitSheet.svelte, src/IngredientRenameSheet.svelte  Blätter „Zutat aufteilen“ und „Zutat umbenennen“
+    src/ImportSheet.svelte  Blatt „Gerichte importieren“ (Vorschau, Konflikte, danach Bilder von den Links)
     src/RecipeEditor.svelte, src/recipe-form.ts   Rezept-Editor (nur Felder) und seine Prüfung, genutzt von
                            RecipeSheet und vom Anlegen im DishSheet
     public/favicon.svg     Favicon der App, Vorlage für icon.png
+  scripts/export-schema.ts  schreibt docs/dish-export.schema.json aus dem zod-Schema `shareFile` (npm run schema)
   scripts/screenshot.ts  Screenshot-Werkzeug (playwright-core + installiertes Google Chrome oder `CHROME_PATH`, Beispieldaten, Wegwerf-DB)
   test/                  Tests (node:test)
 ```
@@ -80,9 +82,10 @@ npm test                          # alle Tests
 npx tsc --noEmit                  # Typprüfung Backend
 npm run check                     # svelte-check Frontend
 npm run build                     # Frontend nach dist/ (wird vom Server ausgeliefert)
+npm run schema                    # docs/dish-export.schema.json neu erzeugen (nach Änderungen am Teilen-Format)
 DB_PATH=./data/dev.db PORT=8099 npm start
 npm run dev:web                   # Vite-Dev-Server, /api geht per Proxy an :8099
-npm run screenshot [-- [--dark] list periods catalog ingredients ingredient-dishes ingredient-category ingredient-split ingredient-rename dish dish-new dish-new-ai dish-new-ai-edit dish-move periods-move recipe cook shopping shopping-pantry toast-error] # nach npm run build: PNGs bei 390 px nach screenshots/
+npm run screenshot [-- [--dark] list periods catalog ingredients ingredient-dishes ingredient-category ingredient-split ingredient-rename dish dish-new dish-new-ai dish-new-ai-edit dish-move catalog-select import periods-move recipe cook shopping shopping-pantry toast-error] # nach npm run build: PNGs bei 390 px nach screenshots/
 ```
 
 Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (genau das prüft auch die CI). Bei Änderungen an
@@ -301,6 +304,39 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   bleiben, Kochmodus-Haken auch. Katalog: Quellzeile weg, Zielzeile mit Schreibweise und Vorrat gesetzt. Gleiche
   Schreibweise -> 400 `name unchanged` (`InvalidInputError`), andere Schreibweise desselben Namens ist erlaubt. Doppelte
   Zeilen nach dem Zusammenführen (Knoblauchzehe und Knoblauch im selben Rezept) bleiben: Mengen könnten verschieden sein.
+- **Rezepte teilen** (Entscheidungen vom 27.11.2026): Austausch zwischen zwei Installationen **per Datei**, keine
+  Verbindung zwischen den Instanzen und kein neuer Port. Es ist ein Kopieren, kein gemeinsamer Katalog.
+  **Format** `{format: "essensplanung-dishes", version: 1, exported_at, dishes: [{title, url, note, tags, source_text,
+  source_truncated, recipe}]}`; `recipe` wie `recipeBody` oder `null`, **kein Bild** (ein Dateiname nützt der anderen
+  Instanz nichts). Geprüft mit `shareFile` in `app.ts` (aus `dishBody`/`recipeBody`, also dieselben Grenzen und die
+  `http(s)`-Regel), höchstens `MAX_SHARED_DISHES` (500), Body höchstens `MAX_SHARE_BYTES` (25 MB, sonst 413). Die Datei
+  kommt von fremden Instanzen: Vertrauensgrenze. Anderes `format` oder andere `version` -> 400 `unsupported file`
+  (UI: „Bitte die App aktualisieren“), sonst 400 `invalid file`. Das Format nur abwärtskompatibel erweitern.
+  `docs/dish-export.schema.json` ist **erzeugt** (`npm run schema`, `z.toJSONSchema(shareFile, {io: "input"})`), nie von
+  Hand ändern; `dish-share-schema.test.ts` schlägt fehl, wenn die Datei nicht zum Code passt. Regeln, die zod nur in Code
+  prüft (`http(s)`, `amount_max >= amount`), stehen nicht im Schema.
+  **Routen:** `POST /api/dishes/export {ids, notes}` (`notes: false` -> `note: null`), `POST /api/dishes/import/preview`
+  (Body = Datei, schreibt nichts; je Gericht `exists` und `title_taken`), `POST
+  /api/dishes/import {file, tags, actions: [{index, action: "new"|"replace", title?}]}`; Gerichte ohne Aktion werden
+  übersprungen. **Abgleich über den Link** (28.11.2026: gleiche Titel bedeuten zwischen zwei Haushalten oft verschiedene
+  Rezepte): `findMatch` (`repo.ts`) sucht ein Gericht mit gleichem `linkKey` (ohne `#Anker`, `/` am Ende und
+  Tracking-Parameter `TRACKING_PARAMS`/`utm_*`, übrige Parameter sortiert; Vergleich in JS, erstes nach ID), nur ohne Link
+  über den Titel (`findDishByTitle`, ohne Groß-/Kleinschreibung). Kein Treffer, aber der Titel ist vergeben ->
+  `title_taken`: das Blatt legt es neu an, vorbelegt als „<Titel> (n)“ (die Titel bleiben in der DB eindeutig).
+  `importDishes` (`repo.ts`) ist **eine Transaktion**: ein vergebener Titel bei `new` -> 409, nichts
+  geschrieben. **Ersetzen** trifft das Gericht aus `findMatch` (kein Treffer -> 404) und behält dessen Titel und Link;
+  Notiz, Originaltext und Rezept übernimmt es nur, wenn die Datei sie hat (Leeres löscht nichts), **vereinigt** die Kategorien (nur mit `tags: true`), behält das Bild; `writeRecipe` löscht wie immer die
+  Kochmodus-Haken. Antwort `{created, replaced, skipped, needs_image: [{id, url}]}`: Gerichte mit Link und ohne Bild.
+  Kein HA-Event (Katalog-Änderungen feuern nichts), kein MCP-Tool, Zutatennamen 1:1 (Aufräumen über Umbenennen).
+  **UI:** Im Katalog „Teilen …“ (Auswahlmodus: Haken je Zeile, „Alle (n)“ wählt die angezeigten, also Suche und
+  Kategorie-Chip; Schalter „Notizen mitschicken“, an) und „Importieren …“ (verstecktes `<input type="file">`, `JSON.parse`
+  im Browser, dann `ImportSheet`, Sheet-Art `import`, `openImport`). Teilen: `navigator.share({files})`, wenn
+  `navigator.canShare` die Datei nimmt, sonst Download per Blob-URL. Das Blatt zeigt je Gericht ohne Konflikt einen Haken
+  (an), mit Konflikt Überspringen (Standard) / Ersetzen / Unter anderem Titel (vorbelegt „<Titel> (n)“, n = nächste freie
+  Zahl), dazu „Kategorien übernehmen“ (an); mit Ersetzen ist „Importieren“ zweistufig. **Danach holt das Blatt die Bilder**
+  für `needs_image` nacheinander über die vorhandenen Routen `POST api/preview` und `PATCH api/dishes/:id`, Fehler werden
+  übersprungen, Schließen des Blatts beendet das (keine Warteschlange im Server). Bewusst nicht: Synchronisation, Bilder in
+  der Datei, Zutatenkatalog (Vorrat, Kategorien der Zutaten), Herkunfts-Kategorie, Abgleich der Zutatennamen.
 - Ein Gericht kann pro Zeitraum nur einmal vorkommen. Der Titel ist im Katalog eindeutig (ohne Groß-/Kleinschreibung).
   Ein Eintrag per Titel (API) legt das Gericht an oder verwendet ein vorhandenes wieder.
 - **Neues Gericht anlegen:** In der Hinzufügen-Leiste der Liste öffnen ein neuer Name („„X“ neu anlegen …“, Enter) und ein
@@ -330,7 +366,8 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
   Kategorien als Pills darunter, dann ein Link-Symbol ohne Domainnamen und am Ende der runde Abhak-Kreis (Daumennähe).
   Zeilen und Formulargruppen sind Karten mit `--card-shadow` statt Rahmen. Keine weiteren Buttons in der Zeile, Bearbeiten läuft
   über Tippen auf den Titel (Gericht-Ansicht, darin „Gericht bearbeiten“). Lange Wörter im Titel brechen um (`overflow-wrap: anywhere`).
-- **Kategorien** sind frei wählbare Tags pro Gericht (höchstens 10, je höchstens 30 Zeichen). Es gibt keine Tag-Tabelle: Die
+- **Kategorien** sind frei wählbare Tags pro Gericht (beliebig viele, seit 27.11.2026 ohne Obergrenze, damit das
+  Zusammenführen beim Import nie scheitert; je höchstens 30 Zeichen). Es gibt keine Tag-Tabelle: Die
   Liste der Kategorien ist die Menge der verwendeten Werte, eine Kategorie verschwindet mit ihrem letzten Gericht. Groß-/
   Kleinschreibung ist egal, die zuerst verwendete Schreibweise gilt (`setTags` in `repo.ts`). Ein Update ersetzt die Tags,
   fehlt `tags`, bleiben sie unverändert. Im Katalog filtern Chips nach genau einer Kategorie, ein neues Gericht übernimmt
@@ -683,7 +720,7 @@ raten (`async_update_reload_and_abort`, `HassioServiceInfo`, `StaticPathConfig`,
 - Sheets nutzen das native `<dialog>`. Kein `alert()`/`confirm()` (in der HA-Companion-App unzuverlässig), stattdessen
   zweistufige Bestätigung im UI.
 - **Zurück-Taste:** Ein offenes Blatt belegt einen History-Eintrag (`pushSheetEntry`/`closeSheet` in `store.svelte.ts`), damit
-  „Zurück“ das Blatt schließt statt die App zu verlassen. Blätter nur über `openDishSheet`/`openRecipe`/`openPeriods`/`openCook`/`openSplit`/`openRename` öffnen
+  „Zurück“ das Blatt schließt statt die App zu verlassen. Blätter nur über `openDishSheet`/`openRecipe`/`openPeriods`/`openCook`/`openSplit`/`openRename`/`openImport` öffnen
   und über `closeSheet` schließen, nie `app.sheet` direkt setzen. Getestet im Browser mit der App in einem iframe, in der
   HA-Companion-App auf dem Handy noch nicht.
 - **APIs und Schnittstellen vor der Nutzung gegen die aktuelle Dokumentation prüfen** (HA-Add-on-Konfiguration, Hono,
@@ -758,6 +795,9 @@ Rezept-Text einfügen und per KI zerlegen sowie Portionen umrechnen (beides am 1
 - Die Einkaufsliste ist nur gegen eine Fake-Core-API getestet, **nicht gegen Bring in HA**: offen sind die Antwortform von
   `todo.get_items` über die REST-API, ob Bring die `description` als Spezifikation zeigt, `supported_features` der
   Bring-Entitäten und wie lange 20 bis 30 `add_item` nacheinander dauern (Bring aktualisiert nach jedem Artikel).
+- Rezepte teilen ist nur gegen Tests und im Desktop-Chromium (Screenshots) geprüft, **nicht in der Companion-App**:
+  offen sind `navigator.share` mit Datei im Ingress-iframe (Android/iOS), der Download-Rückfall per Blob-URL in der
+  WebView und die Dateiauswahl für den Import.
 - Der Dunkelmodus folgt bei „Automatisch“ dem Gerät bzw. Browser, nicht dem HA-Theme (im Ingress-iframe nicht lesbar); dafür gibt es den Schalter. In der Companion-App nicht geprüft.
 - Der MCP-Server ist nur gegen Tests (Fake-Verifier, nachgebauter HA-WebSocket, SDK-Client) geprüft, **nicht am echten
   System**: offen sind der OAuth-Ablauf von claude.ai und Claude Code gegen Home Assistant, ob `ws://homeassistant:8123` aus

@@ -110,6 +110,40 @@ export type CatalogIngredient = {
 };
 export type IngredientCategory = { key: string; name: string; pantry: boolean; ingredients: number };
 
+// A dish in a share file between two installations (see POST /api/dishes/export and /import).
+export type SharedDish = {
+  title: string;
+  url: string | null;
+  note: string | null;
+  tags: string[];
+  source_text: string | null;
+  source_truncated: boolean;
+  recipe: RecipeInput | null;
+};
+// "new" may carry another title (the file's one is taken); "replace" updates the dish with the file's title.
+export type ImportItem = { dish: SharedDish; action: "new" | "replace"; title?: string };
+// needs_image: dishes with a link and no image; the import sheet fetches their pictures afterwards.
+export type ImportResult = { created: number; replaced: number; needs_image: { id: number; url: string }[] };
+
+// Query parameters that only track who shared a link; they must not make the same page look like another one.
+const TRACKING_PARAMS = new Set(["igsh", "igshid", "fbclid", "gclid", "si"]);
+const TRACKING_PREFIX = "utm_";
+
+// The form two links are compared in: no fragment, no trailing slash, no tracking parameters, the rest sorted (the
+// host is lower case already by URL). Other parameters count: some sites keep the recipe id in the query.
+export function linkKey(url: string): string {
+  let u: URL;
+  try {
+    u = new URL(url.trim());
+  } catch {
+    return url.trim();
+  }
+  const params = [...u.searchParams].filter(([k]) => !TRACKING_PARAMS.has(k.toLowerCase()) && !k.toLowerCase().startsWith(TRACKING_PREFIX));
+  params.sort(([a, x], [b, y]) => (a === b ? x.localeCompare(y) : a.localeCompare(b)));
+  const query = new URLSearchParams(params).toString();
+  return `${u.protocol}//${u.host}${u.pathname.replace(/\/+$/, "")}${query ? `?${query}` : ""}`;
+}
+
 export class NotFoundError extends Error {}
 export class ConflictError extends Error {}
 // A request the data model cannot carry out as asked (answered with 400), e.g. renaming to the same name.
@@ -210,6 +244,17 @@ export function createRepo(db: DatabaseSync) {
     const found = findIngredient(key);
     if (!found) throw new NotFoundError("ingredient");
     return found;
+  }
+
+  // Titles are unique regardless of case (ASCII only: SQLite's NOCASE).
+  const findDishByTitle = (title: string) => one<DishRow>(`SELECT ${DISH_COLS} FROM dish WHERE title = ? COLLATE NOCASE`, title.trim());
+
+  // An imported dish is the same as one in the catalog when it has the same link (compared by linkKey), or, without a
+  // link, the same title. Titles alone say little: two households may call different recipes "Curry".
+  function findMatch(dish: { title: string; url: string | null }): DishRow | undefined {
+    if (!dish.url) return findDishByTitle(dish.title);
+    const key = linkKey(dish.url);
+    return all<DishRow>(`SELECT ${DISH_COLS} FROM dish WHERE url IS NOT NULL ORDER BY id`).find((d) => linkKey(d.url!) === key);
   }
 
   function getDish(id: number): Dish {
@@ -575,6 +620,56 @@ export function createRepo(db: DatabaseSync) {
     getDish,
     getEntry,
 
+    findDishByTitle,
+    findMatch,
+
+    // Dishes as written to a share file: everything but the image (another instance has no use for a file name).
+    exportDishes(ids: number[], withNotes: boolean): SharedDish[] {
+      return ids.map((id) => {
+        const d = getDish(id);
+        const r = self.getRecipe(id);
+        const hasRecipe = r.servings !== null || !!r.instructions || r.ingredients.length > 0;
+        return {
+          title: d.title,
+          url: d.url,
+          note: withNotes ? d.note : null,
+          tags: d.tags,
+          source_text: r.source_text,
+          source_truncated: r.source_truncated,
+          recipe: hasRecipe ? { servings: r.servings, instructions: r.instructions, ingredients: r.ingredients } : null,
+        };
+      });
+    },
+
+    // All or nothing in one transaction. "replace" updates the dish findMatch finds; it keeps its own title, link and
+    // image, and an own note, source text or recipe where the file has none; tags are merged.
+    // A title that exists for "new" -> ConflictError, nothing written.
+    importDishes(items: ImportItem[], withTags: boolean): ImportResult {
+      return transaction(db, () => {
+        const result: ImportResult = { created: 0, replaced: 0, needs_image: [] };
+        for (const { dish, action, title } of items) {
+          const tags = withTags ? dish.tags : [];
+          if (action === "new") {
+            const created = insertDish({ ...dish, title: title ?? dish.title, tags });
+            if (dish.recipe) writeRecipe(created.id, dish.recipe);
+            if (created.url) result.needs_image.push({ id: created.id, url: created.url });
+            result.created++;
+            continue;
+          }
+          const existing = findMatch(dish);
+          if (!existing) throw new NotFoundError("dish");
+          if (dish.note) db.prepare("UPDATE dish SET note = ? WHERE id = ?").run(dish.note, existing.id);
+          if (dish.source_text) self.setSource(existing.id, dish.source_text, dish.source_truncated);
+          if (tags.length) setTags(existing.id, [...getDish(existing.id).tags, ...tags]);
+          if (dish.recipe) writeRecipe(existing.id, dish.recipe);
+          const now = getDish(existing.id);
+          if (!now.image && now.url) result.needs_image.push({ id: now.id, url: now.url });
+          result.replaced++;
+        }
+        return result;
+      });
+    },
+
     // With a recipe both are written in one transaction: a recipe that fails leaves no dish behind.
     createDish(input: DishInput, recipe?: RecipeInput): Dish {
       return transaction(db, () => {
@@ -805,7 +900,7 @@ export function createRepo(db: DatabaseSync) {
         if ("dish_id" in input) {
           dishId = getDish(input.dish_id).id;
         } else {
-          const existing = one<DishRow>(`SELECT ${DISH_COLS} FROM dish WHERE title = ? COLLATE NOCASE`, input.title.trim());
+          const existing = findDishByTitle(input.title);
           if (existing) {
             dishId = existing.id;
             // Fill in a link/note if the catalog entry has none yet.

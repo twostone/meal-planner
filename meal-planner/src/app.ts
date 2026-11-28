@@ -41,8 +41,8 @@ const optional = <T extends z.ZodType<string>>(s: T) =>
 // Only names produced by the image store (content hash + extension) are accepted, never paths.
 const image = z.string().regex(IMAGE_NAME);
 
-// Free-form categories. Duplicates (any case) are merged by the repo, so only size limits are checked here.
-const tags = z.array(z.string().trim().min(1).max(30)).max(10);
+// Free-form categories, as many as wanted. Duplicates (any case) are merged by the repo, so only their length is checked.
+const tags = z.array(z.string().trim().min(1).max(30));
 
 // The ingredient catalog addresses a name by its nameKey, in the body: names hold spaces and umlauts.
 const MAX_INGREDIENT_NAME = 80; // same as dish_ingredient.name in recipeBody
@@ -152,6 +152,41 @@ const shoppingSend = z.object({
 const entryBody = z.union([z.object({ dish_id: id }), dishBody]);
 // A new dish from the sheet can bring its recipe along (only here: PATCH and list entries take none).
 const newDishBody = dishBody.extend({ recipe: recipeBody.optional() });
+// A share file of dishes between two installations. It comes from someone else's instance, so it is checked like any
+// input, with the same schemas as the API. docs/dish-export.schema.json is generated from `shareFile` (npm run schema).
+export const SHARE_FORMAT = "essensplanung-dishes";
+export const SHARE_VERSION = 1;
+const MAX_SHARED_DISHES = 500;
+// Up to 500 dishes with 10 000 characters of source text and instructions each, plus their ingredients.
+const MAX_SHARE_BYTES = 25 * 1024 * 1024;
+const sharedDish = dishBody.omit({ image: true }).extend({ recipe: recipeBody.nullable().optional() });
+export const shareFile = z.object({
+  format: z.literal(SHARE_FORMAT),
+  version: z.literal(SHARE_VERSION),
+  exported_at: z.string().max(40).optional(),
+  dishes: z.array(sharedDish).min(1).max(MAX_SHARED_DISHES),
+});
+// The share file as JSON Schema for other tools (docs/dish-export.schema.json). Rules zod checks in code (http(s) links,
+// amount_max >= amount) are not in it: the app stays the strict check.
+export const shareFileJsonSchema = () =>
+  JSON.stringify(
+    {
+      ...z.toJSONSchema(shareFile, { io: "input" }),
+      title: "Essensplanung: geteilte Gerichte",
+      description: "Datei zum Austausch von Gerichten zwischen zwei Installationen der App Essensplanung.",
+    },
+    null,
+    2,
+  ) + "\n";
+const exportBody = z.object({ ids: z.array(id).min(1).max(MAX_SHARED_DISHES), notes: z.boolean() });
+// index: position in file.dishes; dishes without an action are skipped. "new" may give another title.
+const importBody = z.object({
+  file: shareFile,
+  tags: z.boolean(),
+  actions: z
+    .array(z.object({ index: z.number().int().min(0), action: z.enum(["new", "replace"]), title: title.optional() }))
+    .max(MAX_SHARED_DISHES),
+});
 // Text to make a recipe draft from: the source text of the link or the dish, possibly edited in the sheet.
 const draftBody = z.object({ text: z.string().trim().min(1).max(10000) });
 // note: only for this entry (dish in one plan); "" or null clears it
@@ -310,6 +345,61 @@ export function createApp(repo: Repo, opts: AppOptions = {}) {
     repo.deleteIngredient(c.req.valid("json").key);
     return c.body(null, 204);
   });
+  // Sharing dishes with another installation as a file (see shareFile).
+  const shareLimit = bodyLimit({ maxSize: MAX_SHARE_BYTES, onError: (c) => c.json({ error: "file too large" }, 413) });
+  // A file of another format or a newer version gets its own error, so the UI can ask to update the app.
+  const shareCheck =
+    (fileAt: (string | number)[]) =>
+    (r: { success: boolean; error?: { issues: { path: PropertyKey[] }[] } }, c: Context) => {
+      if (r.success) return;
+      const header = (r.error?.issues ?? []).some(
+        (i) => fileAt.every((p, k) => i.path[k] === p) && ["format", "version"].includes(String(i.path[fileAt.length])),
+      );
+      return c.json({ error: header ? "unsupported file" : "invalid file" }, 400);
+    };
+  app.post("/api/dishes/export", zValidator("json", exportBody), (c) => {
+    const { ids, notes } = c.req.valid("json");
+    const dishes = repo.exportDishes(ids, notes);
+    log.info("dishes_exported", { count: dishes.length });
+    return c.json({ format: SHARE_FORMAT, version: SHARE_VERSION, exported_at: new Date().toISOString(), dishes });
+  });
+  app.post("/api/dishes/import/preview", shareLimit, zValidator("json", shareFile, shareCheck([])), (c) => {
+    const dishes = c.req.valid("json").dishes.map((d, index) => {
+      const existing = repo.findMatch({ title: d.title, url: d.url ?? null });
+      return {
+        index,
+        title: d.title,
+        ingredients: d.recipe?.ingredients.length ?? 0,
+        exists: existing ? { id: existing.id, title: existing.title } : null,
+        // Another recipe has this title already: it can only come in under another one.
+        title_taken: !existing && !!repo.findDishByTitle(d.title),
+      };
+    });
+    return c.json({ dishes });
+  });
+  app.post("/api/dishes/import", shareLimit, zValidator("json", importBody, shareCheck(["file"])), (c) => {
+    const { file, tags, actions } = c.req.valid("json");
+    if (actions.some((a) => a.index >= file.dishes.length)) return c.json({ error: "unknown index" }, 400);
+    if (new Set(actions.map((a) => a.index)).size !== actions.length) return c.json({ error: "duplicate index" }, 400);
+    const items = actions.map(({ index, action, title }) => {
+      const { recipe, ...d } = file.dishes[index]!;
+      const dish = {
+        title: d.title,
+        url: d.url ?? null,
+        note: d.note ?? null,
+        tags: d.tags ?? [],
+        source_text: d.source_text ?? null,
+        source_truncated: d.source_truncated ?? false,
+        recipe: recipe ?? null,
+      };
+      return { dish, action, title };
+    });
+    const result = repo.importDishes(items, tags);
+    const skipped = file.dishes.length - actions.length;
+    log.info("dishes_imported", { created: result.created, replaced: result.replaced, skipped });
+    return c.json({ ...result, skipped });
+  });
+
   app.post("/api/dishes", zValidator("json", newDishBody), async (c) => {
     const { recipe, ...body } = c.req.valid("json");
     if (await imageMissing(body.image)) return c.json({ error: "unknown image" }, 400);

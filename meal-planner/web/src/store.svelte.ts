@@ -16,7 +16,8 @@ export type SheetState =
   | { kind: "shopping" }
   | { kind: "split"; ingredientKey: string }
   | { kind: "rename"; ingredientKey: string }
-  | { kind: "periods" };
+  | { kind: "periods" }
+  | { kind: "import"; file: unknown }; // file: the parsed share file, checked by the server
 
 // A message at the top of the screen: errors stay until dismissed, infos go away on their own.
 export type Toast = { kind: "error" | "info"; text: string };
@@ -170,6 +171,16 @@ export function openRename(ingredientKey: string) {
   pushSheetEntry();
   app.sheet = { kind: "rename", ingredientKey };
 }
+
+// Importing dishes from a share file; the sheet shows the server's preview first.
+export function openImport(file: unknown) {
+  clearToast();
+  pushSheetEntry();
+  app.sheet = { kind: "import", file };
+}
+
+// After an import: the catalog shows the new dishes (and later their pictures).
+export const reloadDishes = () => guard(refreshDishes);
 
 export function openPeriods() {
   clearToast();

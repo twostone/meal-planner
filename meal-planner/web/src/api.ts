@@ -19,6 +19,10 @@ import type {
   SendResult,
   ShoppingList,
   ShoppingStatus,
+  ShareFile,
+  ImportPreview,
+  ImportAction,
+  ImportResult,
 } from "./types";
 
 type MoveResult = { moved: number; merged: number };
@@ -41,6 +45,9 @@ const MESSAGES: Record<string, string> = {
   "ingredient exists": "Diese Zutat gibt es schon.",
   "ingredient in use": "Die Zutat steht noch in einem Rezept und kann nicht gelöscht werden.",
   "not a supported image": "Dieses Bildformat geht nicht. Bitte ein JPEG, PNG oder WebP wählen.",
+  "unsupported file": "Diese Datei stammt von einer neueren App-Version oder ist keine Rezept-Datei. Bitte die App aktualisieren.",
+  "invalid file": "Die Datei ist beschädigt oder unvollständig.",
+  "file too large": "Die Datei ist zu groß.",
 };
 
 // A Blob body (an image) is sent as it is, with its own type; anything else as JSON.
@@ -96,6 +103,10 @@ export const splitIngredient = (key: string, parts: { name: string; note: string
 
 export const createDish = (d: DishInput) => request<Dish>("POST", "api/dishes", d);
 export const updateDish = (id: number, d: DishInput) => request<Dish>("PATCH", `api/dishes/${id}`, d);
+export const exportDishes = (ids: number[], notes: boolean) => request<ShareFile>("POST", "api/dishes/export", { ids, notes });
+export const previewImport = (file: unknown) => request<ImportPreview>("POST", "api/dishes/import/preview", file);
+export const importDishes = (file: unknown, tags: boolean, actions: ImportAction[]) =>
+  request<ImportResult>("POST", "api/dishes/import", { file, tags, actions });
 export const deleteDish = (id: number) => request<void>("DELETE", `api/dishes/${id}`);
 
 export const getRecipe = (dishId: number) => request<Recipe>("GET", `api/dishes/${dishId}/recipe`);

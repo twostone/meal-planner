@@ -61,10 +61,9 @@ test("tags show up on plan entries, also for dishes created by title", async () 
   assert.deepEqual((await call("GET", `/api/plans/${p.id}`)).json.entries[0].dish.tags, ["Snack"]);
 });
 
-test("tag validation: too long, too many, empty", async () => {
+test("tag validation: too long, empty (any number is fine, see dish-share.test.ts)", async () => {
   const call = setup();
   assert.equal((await call("POST", "/api/dishes", { title: "A", tags: ["x".repeat(31)] })).status, 400);
-  assert.equal((await call("POST", "/api/dishes", { title: "A", tags: Array.from({ length: 11 }, (_, i) => `t${i}`) })).status, 400);
   assert.equal((await call("POST", "/api/dishes", { title: "A", tags: ["  "] })).status, 400);
   assert.equal((await call("POST", "/api/dishes", { title: "A", tags: "Snack" })).status, 400);
 });

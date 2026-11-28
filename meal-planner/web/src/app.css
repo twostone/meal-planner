@@ -622,6 +622,47 @@ label {
   box-shadow: 0 6px 18px var(--shadow);
 }
 
+/* sharing dishes from the catalog: actions above the list, a checkbox per row, the share button where the fab was */
+.share-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-bottom: 12px;
+}
+.share-bar .check-row {
+  margin-bottom: 0;
+}
+.pick {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pick input {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--green);
+}
+.share-actions {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: calc(68px + env(safe-area-inset-bottom));
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 28px;
+  background: var(--bg);
+  box-shadow: 0 6px 18px var(--shadow);
+}
+.share-actions .btn.primary {
+  flex: 1;
+}
+
 /* sheets */
 dialog {
   position: fixed;
